@@ -25,7 +25,7 @@ vi.mock('@electron-toolkit/utils', () => ({
   is: isMock
 }))
 
-vi.mock('../../resources/icon.png?asset', () => ({
+vi.mock('../../resources/build/orcinus.png?asset', () => ({
   default: 'classic-icon'
 }))
 
