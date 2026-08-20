@@ -35,9 +35,12 @@ vi.mock('electron', () => ({
 }))
 
 import {
+  addTrustedUIRendererWebContentsId,
   clearTrustedUIRendererWebContentsId,
   getTrustedUIRendererWindow,
+  isTrustedUIRenderer,
   registerUIHandlers,
+  removeTrustedUIRendererWebContentsId,
   sendToTrustedUIRenderer,
   setTrustedUIRendererWebContentsId
 } from './ui'
@@ -299,6 +302,46 @@ describe('UI IPC', () => {
 
     expect(fromWebContentsMock).not.toHaveBeenCalled()
     expect(paste).not.toHaveBeenCalled()
+  })
+
+  it('trusts an additional workspace-window renderer id until it is removed', () => {
+    setTrustedUIRendererWebContentsId(17)
+    addTrustedUIRendererWebContentsId(42)
+    try {
+      expect(isTrustedUIRenderer(makeUIEvent({ id: 42 }).sender as never)).toBe(true)
+      expect(
+        isTrustedUIRenderer(makeUIEvent({ id: 42, getType: () => 'webview' }).sender as never)
+      ).toBe(false)
+      expect(
+        isTrustedUIRenderer(makeUIEvent({ id: 42, isDestroyed: () => true }).sender as never)
+      ).toBe(false)
+      // Primary semantics unchanged alongside additional ids.
+      expect(isTrustedUIRenderer(makeUIEvent({ id: 17 }).sender as never)).toBe(true)
+      expect(isTrustedUIRenderer(makeUIEvent({ id: 43 }).sender as never)).toBe(false)
+    } finally {
+      removeTrustedUIRendererWebContentsId(42)
+    }
+
+    expect(isTrustedUIRenderer(makeUIEvent({ id: 42 }).sender as never)).toBe(false)
+    expect(isTrustedUIRenderer(makeUIEvent({ id: 17 }).sender as never)).toBe(true)
+  })
+
+  it('keeps sendToTrustedUIRenderer targeting only the primary renderer', () => {
+    const primarySend = vi.fn()
+    fromIdMock.mockImplementation((id: number) =>
+      id === 17 ? { id, isDestroyed: () => false, send: primarySend } : undefined
+    )
+    setTrustedUIRendererWebContentsId(17)
+    addTrustedUIRendererWebContentsId(42)
+    try {
+      sendToTrustedUIRenderer('gh:prRefreshEvent', { sequence: 1 })
+    } finally {
+      removeTrustedUIRendererWebContentsId(42)
+    }
+
+    expect(fromIdMock).toHaveBeenCalledOnce()
+    expect(fromIdMock).toHaveBeenCalledWith(17)
+    expect(primarySend).toHaveBeenCalledOnce()
   })
 
   it('allows native paste fallback only from the configured dev renderer origin', () => {

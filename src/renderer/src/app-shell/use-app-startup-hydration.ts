@@ -17,7 +17,9 @@ import {
   timeRendererStartupSyncStep
 } from '../startup/startup-diagnostics'
 import { recoverFromDegradedStartup } from '../startup/startup-degraded-recovery'
-import { restoreSshConnectionsForStartup } from '../startup/startup-ssh-connection-restore'
+import { restoreSessionSshConnectionsAtStartup } from '../startup/startup-ssh-connection-restore'
+import { getWindowBootContext } from '../startup/window-boot-context'
+import { activateAndRevealWorkspace } from '../lib/worktree-activation'
 import { publishTerminalViewAttributesAtAppStart } from '../components/terminal-pane/terminal-appearance'
 import { getSystemPrefersDark } from '../lib/terminal-theme'
 import {
@@ -26,7 +28,6 @@ import {
 } from '../components/terminal/terminal-provider-snapshot-capability'
 import {
   getRepoExecutionHostId,
-  isRuntimeOwnedSshTargetId,
   parseExecutionHostId,
   toRuntimeExecutionHostId,
   type ExecutionHostId
@@ -98,6 +99,9 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
   // Fetch initial data + hydrate GitHub cache from disk
   useEffect(() => {
     let cancelled = false
+    // Workspace windows (opened via workspaceWindow:open) hydrate read-only onto one worktree;
+    // the main window stays the only SSH-reconnect/terminal-restore/persistence owner.
+    const bootContext = getWindowBootContext()
     // Why: declared outside the async block so cleanup can abort it — under StrictMode the first (unmounted) pass would otherwise keep spawning PTYs.
     const abortController = new AbortController()
 
@@ -232,6 +236,16 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
             actions.pruneLastVisitedTimestamps()
             actions.seedActiveWorktreeLastVisitedIfMissing()
           })
+          if (bootContext.role === 'workspace') {
+            // Why: same shared activation path as a sidebar click, so repo/view/tab state land consistently.
+            const activated = activateAndRevealWorkspace(bootContext.worktreeId)
+            if (activated === false) {
+              console.warn(
+                '[startup] Workspace window worktree not found after hydration; keeping default view:',
+                bootContext.worktreeId
+              )
+            }
+          }
           await timeRendererStartupStep('fetch-browser-session-profiles', () =>
             actions.fetchBrowserSessionProfiles()
           )
@@ -240,47 +254,42 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
             onOnboardingLoadedRef.current(onboardingState)
           }
 
-          // Why: re-establish SSH before terminal reconnect so SSH-backed tabs route through pty.attach; passphrase targets defer to tab focus to avoid stacked credential dialogs.
-          // Why: never dial runtime-owned (ephemeral-VM) targets from the renderer — ssh.connect would dispose the runtime layer's live relay session; filter them out here too.
-          const connectionIds = (sessionRead.session.activeConnectionIdsAtShutdown ?? []).filter(
-            (targetId) => !isRuntimeOwnedSshTargetId(targetId)
-          )
-          if (connectionIds.length > 0) {
-            try {
-              await restoreSshConnectionsForStartup({
-                connectionIds,
-                setDeferredSshReconnectTargets: actions.setDeferredSshReconnectTargets,
-                publishSshConnectionState: actions.setSshConnectionState
-              })
-            } catch (err) {
-              console.warn('SSH startup reconnect failed:', err)
-            }
-          } else {
-            logRendererStartupDiagnostic('ssh-reconnect-skipped', { connectionIds: 0 })
-          }
+          // Why: workspace windows own no SSH connections or PTY restore — running either here
+          // would fight the main window over live sessions (stream routing lands in a later phase).
+          if (bootContext.role === 'main') {
+            // Why: re-establish SSH before terminal reconnect so SSH-backed tabs route through pty.attach; passphrase targets defer to tab focus to avoid stacked credential dialogs.
+            await restoreSessionSshConnectionsAtStartup({
+              activeConnectionIdsAtShutdown: sessionRead.session.activeConnectionIdsAtShutdown,
+              setDeferredSshReconnectTargets: actions.setDeferredSshReconnectTargets,
+              publishSshConnectionState: actions.setSshConnectionState
+            })
 
-          // first-window-services-await already fenced worktree hydration; terminal recovery reuses that ready state.
-          await timeRendererStartupStep('recover-legacy-worker-terminals-pre-reconnect', () =>
-            window.api.app.recoverLegacyWorkerTerminalsForRendererStartup()
-          )
-          await timeRendererStartupStep('terminal-provider-snapshot-capabilities', () => {
-            return refreshTerminalProviderSnapshotCapabilities(
-              collectTerminalProviderSnapshotPtyIds(useAppStore.getState())
+            // first-window-services-await already fenced worktree hydration; terminal recovery reuses that ready state.
+            await timeRendererStartupStep('recover-legacy-worker-terminals-pre-reconnect', () =>
+              window.api.app.recoverLegacyWorkerTerminalsForRendererStartup()
             )
-          })
-          reconnectStarted = true
-          await timeRendererStartupStep('reconnect-terminals', () =>
-            actions.reconnectPersistedTerminals(abortController.signal)
-          )
-          await timeRendererStartupStep('recover-legacy-worker-terminals-post-reconnect', () =>
-            window.api.app.recoverLegacyWorkerTerminalsForRendererStartup()
-          )
-          // Why here: reconnect just published restored PTY ids; sweeping them now
-          // re-offers stale Codex panes whose tabs never mount this session.
-          sweepRestoredCodexPanesForStaleAccounts(useAppStore.getState())
+            await timeRendererStartupStep('terminal-provider-snapshot-capabilities', () => {
+              return refreshTerminalProviderSnapshotCapabilities(
+                collectTerminalProviderSnapshotPtyIds(useAppStore.getState())
+              )
+            })
+            reconnectStarted = true
+            await timeRendererStartupStep('reconnect-terminals', () =>
+              actions.reconnectPersistedTerminals(abortController.signal)
+            )
+            await timeRendererStartupStep('recover-legacy-worker-terminals-post-reconnect', () =>
+              window.api.app.recoverLegacyWorkerTerminalsForRendererStartup()
+            )
+            // Why here: reconnect just published restored PTY ids; sweeping them now
+            // re-offers stale Codex panes whose tabs never mount this session.
+            sweepRestoredCodexPanesForStaleAccounts(useAppStore.getState())
+          }
           syncZoomCSSVar()
           // Why (issue #1158): unlock the session writer only after hydration and all dependent steps succeeded, so a mid-startup throw can't serialize partially-mutated state to disk.
-          actions.setHydrationSucceeded(true)
+          // Workspace windows never unlock it — the main window is the only persistence writer.
+          if (bootContext.role === 'main') {
+            actions.setHydrationSucceeded(true)
+          }
           logRendererStartupDiagnostic('startup-hydration-done', {
             durationMs: Math.round(performance.now() - startupStartedAt)
           })

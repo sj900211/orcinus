@@ -2483,6 +2483,12 @@ const api = {
       ipcRenderer.invoke('dashboardPopout:sleepWorkspace', args)
   },
 
+  workspaceWindow: {
+    // Open a standalone workspace window bootstrapped to the worktree, or focus it if already open.
+    open: (worktreeId: string): Promise<void> =>
+      ipcRenderer.invoke('workspaceWindow:open', worktreeId)
+  },
+
   terminalPreview: {
     connect: (
       ptyId: string,

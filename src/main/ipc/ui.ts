@@ -4,6 +4,9 @@ import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
 import { isFeatureInteractionId } from '../../shared/feature-interactions'
 
 let trustedUIRendererWebContentsId: number | null = null
+// Why: workspace windows are equally privileged app UI, but the primary id keeps
+// exclusive ownership of sendToTrustedUIRenderer targeting.
+const additionalTrustedUIRendererWebContentsIds = new Set<number>()
 
 export function setTrustedUIRendererWebContentsId(webContentsId: number | null): void {
   trustedUIRendererWebContentsId = webContentsId
@@ -13,6 +16,14 @@ export function clearTrustedUIRendererWebContentsId(webContentsId: number): void
   if (trustedUIRendererWebContentsId === webContentsId) {
     trustedUIRendererWebContentsId = null
   }
+}
+
+export function addTrustedUIRendererWebContentsId(webContentsId: number): void {
+  additionalTrustedUIRendererWebContentsIds.add(webContentsId)
+}
+
+export function removeTrustedUIRendererWebContentsId(webContentsId: number): void {
+  additionalTrustedUIRendererWebContentsIds.delete(webContentsId)
 }
 
 export function sendToTrustedUIRenderer(
@@ -109,6 +120,9 @@ export function registerUIHandlers(
 export function isTrustedUIRenderer(sender: WebContents): boolean {
   if (sender.isDestroyed() || sender.getType() !== 'window') {
     return false
+  }
+  if (additionalTrustedUIRendererWebContentsIds.has(sender.id)) {
+    return true
   }
   if (trustedUIRendererWebContentsId != null) {
     return sender.id === trustedUIRendererWebContentsId

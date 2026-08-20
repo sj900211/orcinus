@@ -1,8 +1,37 @@
 import type { SshConnectionState } from '../../../shared/ssh-types'
-import { timeRendererStartupStep } from './startup-diagnostics'
+import { isRuntimeOwnedSshTargetId } from '../../../shared/execution-host'
+import { logRendererStartupDiagnostic, timeRendererStartupStep } from './startup-diagnostics'
 import { reconnectSshTargetForRendererStartup } from './ssh-startup-reconnect'
 
 const SSH_RECONNECT_TIMEOUT_MS = 15_000
+
+/**
+ * Startup-chain entry: dials the SSH targets that were live at shutdown. Failures degrade to
+ * deferred reconnect-on-focus rather than aborting the boot chain.
+ */
+export async function restoreSessionSshConnectionsAtStartup(args: {
+  activeConnectionIdsAtShutdown: string[] | undefined
+  setDeferredSshReconnectTargets: (targetIds: string[]) => void
+  publishSshConnectionState: (targetId: string, state: SshConnectionState) => void
+}): Promise<void> {
+  // Why: never dial runtime-owned (ephemeral-VM) targets from the renderer — ssh.connect would dispose the runtime layer's live relay session.
+  const connectionIds = (args.activeConnectionIdsAtShutdown ?? []).filter(
+    (targetId) => !isRuntimeOwnedSshTargetId(targetId)
+  )
+  if (connectionIds.length === 0) {
+    logRendererStartupDiagnostic('ssh-reconnect-skipped', { connectionIds: 0 })
+    return
+  }
+  try {
+    await restoreSshConnectionsForStartup({
+      connectionIds,
+      setDeferredSshReconnectTargets: args.setDeferredSshReconnectTargets,
+      publishSshConnectionState: args.publishSshConnectionState
+    })
+  } catch (err) {
+    console.warn('SSH startup reconnect failed:', err)
+  }
+}
 
 /**
  * Re-establishes the SSH targets that were live at shutdown before terminal reconnect, so

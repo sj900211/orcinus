@@ -16,10 +16,12 @@ vi.mock('../browser/browser-manager', async () =>
 
 import { createMainWindow, loadMainWindow } from './createMainWindow'
 import { ipcMain } from 'electron'
+import { isTrustedUIRenderer } from '../ipc/ui'
 import { resetExpectedTeardownStateForTest } from '../crash-reporting/expected-teardown-state'
 import {
   attachGuestPoliciesMock,
   browserWindowMock,
+  isMock,
   macosTahoeMock,
   openExternalMock,
   powerMonitorOnMock,
@@ -72,6 +74,127 @@ describe('createMainWindow', () => {
 
     expect(browserWindowInstance.loadFile).toHaveBeenCalledTimes(1)
     expect(browserWindowInstance.loadURL).not.toHaveBeenCalled()
+  })
+
+  it('gives workspace windows caller bounds, no persisted-bounds writes, and an additional trusted id', () => {
+    const windowHandlers: Record<string, (...args: any[]) => void> = {}
+    const webContents = {
+      id: 777,
+      getType: () => 'window',
+      getURL: () => 'file:///orca/index.html',
+      isDestroyed: () => false,
+      on: vi.fn(),
+      setZoomLevel: vi.fn(),
+      setBackgroundThrottling: vi.fn(),
+      invalidate: vi.fn(),
+      setWindowOpenHandler: vi.fn(),
+      send: vi.fn(),
+      isDevToolsOpened: vi.fn(),
+      openDevTools: vi.fn(),
+      closeDevTools: vi.fn()
+    }
+    const browserWindowInstance = {
+      webContents,
+      on: vi.fn((event: string, handler: (...args: any[]) => void) => {
+        windowHandlers[event] = handler
+      }),
+      isDestroyed: vi.fn(() => false),
+      isMaximized: vi.fn(() => false),
+      isFullScreen: vi.fn(() => false),
+      getSize: vi.fn(() => [1280, 720]),
+      getBounds: vi.fn(() => ({ x: 132, y: 82, width: 1280, height: 720 })),
+      setSize: vi.fn(),
+      maximize: vi.fn(),
+      show: vi.fn(),
+      loadFile: vi.fn(),
+      loadURL: vi.fn()
+    }
+    browserWindowMock.mockImplementation(function () {
+      return browserWindowInstance
+    })
+    const store = {
+      getUI: vi.fn(() => ({
+        windowBounds: { x: 1, y: 2, width: 900, height: 700 },
+        windowMaximized: true
+      })),
+      getSettings: vi.fn(() => ({ windowBackgroundBlur: false })),
+      updateUI: vi.fn()
+    }
+
+    createMainWindow(store as never, {
+      role: 'workspace',
+      deferLoad: true,
+      initialBounds: { x: 132, y: 82, width: 1280, height: 720 }
+    })
+
+    // Persisted bounds are ignored in favor of the caller's placement.
+    const options = browserWindowMock.mock.calls[0]?.[0]
+    expect(options).toMatchObject({ x: 132, y: 82, width: 1280, height: 720 })
+
+    // Persisted windowMaximized never applies to workspace windows.
+    windowHandlers['ready-to-show']()
+    expect(browserWindowInstance.maximize).not.toHaveBeenCalled()
+    expect(browserWindowInstance.show).toHaveBeenCalledTimes(1)
+
+    // Maximize/unmaximize never write windowBounds/windowMaximized.
+    windowHandlers['maximize']()
+    windowHandlers['unmaximize']()
+    expect(store.updateUI).not.toHaveBeenCalled()
+
+    // The renderer joins the additional trusted set and leaves it on close.
+    expect(isTrustedUIRenderer(webContents as never)).toBe(true)
+    windowHandlers['closed']()
+    expect(isTrustedUIRenderer(webContents as never)).toBe(false)
+  })
+
+  it('appends the boot search to the prod file load and the dev renderer URL', () => {
+    const webContents = {
+      on: vi.fn(),
+      setZoomLevel: vi.fn(),
+      setBackgroundThrottling: vi.fn(),
+      invalidate: vi.fn(),
+      setWindowOpenHandler: vi.fn(),
+      send: vi.fn(),
+      isDevToolsOpened: vi.fn(),
+      openDevTools: vi.fn(),
+      closeDevTools: vi.fn()
+    }
+    const browserWindowInstance = {
+      webContents,
+      on: vi.fn(),
+      isDestroyed: vi.fn(() => false),
+      isMaximized: vi.fn(() => true),
+      isFullScreen: vi.fn(() => false),
+      getSize: vi.fn(() => [1200, 800]),
+      setSize: vi.fn(),
+      maximize: vi.fn(),
+      show: vi.fn(),
+      loadFile: vi.fn(),
+      loadURL: vi.fn()
+    }
+    browserWindowMock.mockImplementation(function () {
+      return browserWindowInstance
+    })
+
+    const win = createMainWindow(null, { deferLoad: true })
+    loadMainWindow(win, { search: 'orca-worktree=wt-1' })
+
+    expect(browserWindowInstance.loadFile).toHaveBeenCalledWith(
+      expect.stringMatching(/renderer[\\/]index\.html$/),
+      { search: 'orca-worktree=wt-1' }
+    )
+
+    try {
+      isMock.dev = true
+      vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
+      loadMainWindow(win, { search: 'orca-worktree=wt-1' })
+      expect(browserWindowInstance.loadURL).toHaveBeenCalledWith(
+        'http://localhost:5173?orca-worktree=wt-1'
+      )
+    } finally {
+      vi.unstubAllEnvs()
+      isMock.dev = false
+    }
   })
 
   it('enables renderer sandboxing and opens external links safely', () => {
