@@ -20,6 +20,7 @@ import {
   createShutdownCheckpointBeforeUnloadHandler,
   createShutdownCheckpointGuard
 } from '../lib/shutdown-checkpoint-guard'
+import { registerSessionCheckpointRequestListener } from '../lib/session-checkpoint-request'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
 import { dispatchWindowCloseRequest } from '../components/window-close-request-coordinator'
 import {
@@ -31,6 +32,55 @@ import type { RemoteWorkspacePatchResult } from '../../../shared/remote-workspac
 
 // Why: bound the resume-record loss window on a hard kill to ~1 min; capture skips unchanged records so per-tick cost is negligible.
 const SLEEPING_AGENT_RESUME_CAPTURE_INTERVAL_MS = 60_000
+
+/**
+ * Serialize the full renderer session (scrollback captures, sleeping-agent
+ * records, host snapshots, active view) and stage it in main synchronously.
+ * Shared by the beforeunload shutdown checkpoint ('quit') and main's on-demand
+ * checkpoint request before a workspace window opens ('periodic').
+ */
+export function stageWorkspaceSessionCheckpoint(captureMode: 'periodic' | 'quit'): void {
+  const shouldCaptureSession = shouldPersistWorkspaceSession(useAppStore.getState())
+  if (shouldCaptureSession) {
+    for (const capture of shutdownBufferCaptures.values()) {
+      try {
+        capture({ includeLocalBuffers: false })
+      } catch {
+        // Don't let one pane's failure block the rest.
+      }
+    }
+    // Why: agent provider session ids live only in agentStatusByPaneKey,
+    // which is in-memory. Capture them into the persisted sleeping-session
+    // map so a daemon/session death while the app is closed can still
+    // cold-restore via the agent's resume command (#5232).
+    useAppStore.getState().captureAllSleepingAgentSessions(captureMode)
+  }
+  // Why: re-read state after capture() calls populated scrollback buffers
+  // into the store via Zustand setters. The earlier read is only for the
+  // gating flags and would miss those updates.
+  const freshState = useAppStore.getState()
+  let sessionSnapshots: ReturnType<typeof buildWorkspaceSessionHostSnapshots> = []
+  try {
+    sessionSnapshots = shouldCaptureSession
+      ? buildWorkspaceSessionHostSnapshots(buildWorkspaceSessionPayload(freshState), freshState)
+      : []
+  } catch (error) {
+    // Why: dirty drafts exist only in the full session snapshot.
+    if (!isIntentionalAppRestartInProgress() || freshState.openFiles.some((file) => file.isDirty)) {
+      throw error
+    }
+    console.error('[app] Full renderer session snapshot failed; using durable session', error)
+    window.api.app.stageBeforeUnloadSync({
+      sessions: [],
+      ui: buildActiveViewUnloadPatch(freshState)
+    })
+    return
+  }
+  window.api.app.stageBeforeUnloadSync({
+    sessions: sessionSnapshots,
+    ui: buildActiveViewUnloadPatch(freshState)
+  })
+}
 
 function applyRemoteWorkspacePatchStatus(
   targetId: string,
@@ -117,51 +167,9 @@ export function useAppSessionPersistence(): void {
     // two firings, PTY exit events can arrive and unmount TerminalPanes,
     // emptying shutdownBufferCaptures. The guard prevents the second call
     // from overwriting the good session data with an empty snapshot.
-    const shutdownCheckpoint = createShutdownCheckpointGuard(() => {
-      const shouldCaptureSession = shouldPersistWorkspaceSession(useAppStore.getState())
-      if (shouldCaptureSession) {
-        for (const capture of shutdownBufferCaptures.values()) {
-          try {
-            capture({ includeLocalBuffers: false })
-          } catch {
-            // Don't let one pane's failure block the rest.
-          }
-        }
-        // Why: agent provider session ids live only in agentStatusByPaneKey,
-        // which is in-memory. Capture them into the persisted sleeping-session
-        // map so a daemon/session death while the app is closed can still
-        // cold-restore via the agent's resume command (#5232).
-        useAppStore.getState().captureAllSleepingAgentSessions('quit')
-      }
-      // Why: re-read state after capture() calls populated scrollback buffers
-      // into the store via Zustand setters. The earlier read is only for the
-      // gating flags and would miss those updates.
-      const freshState = useAppStore.getState()
-      let sessionSnapshots: ReturnType<typeof buildWorkspaceSessionHostSnapshots> = []
-      try {
-        sessionSnapshots = shouldCaptureSession
-          ? buildWorkspaceSessionHostSnapshots(buildWorkspaceSessionPayload(freshState), freshState)
-          : []
-      } catch (error) {
-        // Why: dirty drafts exist only in the full session snapshot.
-        if (
-          !isIntentionalAppRestartInProgress() ||
-          freshState.openFiles.some((file) => file.isDirty)
-        ) {
-          throw error
-        }
-        console.error('[app] Full renderer session snapshot failed; using durable session', error)
-        window.api.app.stageBeforeUnloadSync({
-          sessions: [],
-          ui: buildActiveViewUnloadPatch(freshState)
-        })
-        return
-      }
-      window.api.app.stageBeforeUnloadSync({
-        sessions: sessionSnapshots,
-        ui: buildActiveViewUnloadPatch(freshState)
-      })
-    })
+    const shutdownCheckpoint = createShutdownCheckpointGuard(() =>
+      stageWorkspaceSessionCheckpoint('quit')
+    )
     const persistBeforeUnload = createShutdownCheckpointBeforeUnloadHandler(shutdownCheckpoint)
     window.addEventListener('beforeunload', persistBeforeUnload)
     window.addEventListener(ORCA_APP_RESTART_ABORTED_EVENT, shutdownCheckpoint.reset)
@@ -176,6 +184,13 @@ export function useAppSessionPersistence(): void {
       )
       window.removeEventListener(ORCA_RENDERER_UNLOAD_PREVENTED_EVENT, shutdownCheckpoint.reset)
     }
+  }, [])
+
+  // Why 'periodic': an on-demand checkpoint happens mid-run, so it must not claim quit precedence for sleeping-agent records.
+  useEffect(() => {
+    return registerSessionCheckpointRequestListener(() =>
+      stageWorkspaceSessionCheckpoint('periodic')
+    )
   }, [])
 
   // Why: beforeunload never fires on a hard kill (crash, forced update, TerminateProcess), so periodically capture agent session ids (not scrollback) so live agents keep a resume record.

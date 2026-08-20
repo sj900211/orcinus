@@ -12149,6 +12149,11 @@ export class OrcaRuntimeService {
     return this.ptyOutputSequenceById.get(ptyId) ?? 0
   }
 
+  /** The worktree a PTY is registered under — lets stream routing find its owner window. */
+  getPtyWorktreeId(ptyId: string): string | undefined {
+    return this.ptysById.get(ptyId)?.worktreeId
+  }
+
   private recordAgentPromptLifecycleState(ptyId: string, status: AgentStatus | null): void {
     if (status === 'permission') {
       this.recordAgentPromptPermissionObservation(ptyId)

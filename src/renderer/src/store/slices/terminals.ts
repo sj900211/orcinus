@@ -821,8 +821,10 @@ export type HydrateWorkspaceSessionOptions = {
   runtimeHostIdByWorkspaceSessionKey?: Record<string, ExecutionHostId>
 } & WorkspaceSessionHydrationOptions
 
+// Why optional authority: workspace windows run a worktree-scoped reconnect with no direct-SSH
+// authority in play; only the authority-specific guards key on it.
 export type ReconnectPersistedTerminalsOptions = {
-  directSshAuthority: DirectSshAuthority
+  directSshAuthority?: DirectSshAuthority
   workspaceKeys: readonly string[]
 }
 
@@ -4160,7 +4162,8 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
   reconnectPersistedTerminals: async (signal, options) => {
     if (
       signal?.aborted ||
-      (options && !isCurrentDirectSshAuthority(get(), options.directSshAuthority))
+      (options?.directSshAuthority &&
+        !isCurrentDirectSshAuthority(get(), options.directSshAuthority))
     ) {
       return
     }
@@ -4202,10 +4205,12 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       const worktree = worktreeById.get(worktreeId)
       const repo = worktree ? (repoById.get(worktree.repoId) ?? null) : null
       // Why: only allow deferred reattach when the SSH connection is active; reattaching to a not-yet-connected relay (deferred/passphrase targets) would fail.
-      const sshTargetId = options?.directSshAuthority.targetId ?? repo?.connectionId ?? null
+      const sshTargetId = options?.directSshAuthority?.targetId ?? repo?.connectionId ?? null
       const sshState = sshTargetId ? get().sshConnectionStates.get(sshTargetId) : null
       const sshConnected = sshTargetId != null && sshState?.status === 'connected'
-      const supportsDeferredReattach = options ? sshConnected : !repo?.connectionId || sshConnected
+      const supportsDeferredReattach = options?.directSshAuthority
+        ? sshConnected
+        : !repo?.connectionId || sshConnected
       console.debug(
         `[reconnect-terminals] worktree=${worktreeId} connectionId=${repo?.connectionId} sshStatus=${sshState?.status} supportsDeferredReattach=${supportsDeferredReattach}`
       )
@@ -4226,7 +4231,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         const leafPtyMap = layout?.ptyIdsByLeafId ?? {}
         const pendingPtyId = pendingReconnectPtyIdByTabId[tabId]
         const tabLevelPtyId =
-          options &&
+          options?.directSshAuthority &&
           parseAppSshPtyId(pendingPtyId ?? '')?.connectionId !== options.directSshAuthority.targetId
             ? undefined
             : pendingPtyId
@@ -4279,7 +4284,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       // Why: SSH worktrees aren't in worktreesByRepo at cold start; fall back to the repo id in the composite worktree id so sessions still reach the deferred map.
       const repoId = worktree?.repoId ?? getRepoIdFromWorktreeId(worktreeId)
       const repo = repoId ? (repoById.get(repoId) ?? null) : null
-      const connectionId = options?.directSshAuthority.targetId ?? repo?.connectionId
+      const connectionId = options?.directSshAuthority?.targetId ?? repo?.connectionId
       if (!connectionId) {
         continue
       }
@@ -4299,7 +4304,11 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       const tabs = tabsByWorktree[worktreeId] ?? []
       for (const tab of tabs) {
         const sessionId = pendingReconnectPtyIdByTabId[tab.id]
-        if (sessionId && (!options || parseAppSshPtyId(sessionId)?.connectionId === connectionId)) {
+        if (
+          sessionId &&
+          (!options?.directSshAuthority ||
+            parseAppSshPtyId(sessionId)?.connectionId === connectionId)
+        ) {
           deferredSshSessionIdsByTabId[tab.id] = sessionId
         }
       }
@@ -4307,7 +4316,8 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
 
     if (
       signal?.aborted ||
-      (options && !isCurrentDirectSshAuthority(get(), options.directSshAuthority))
+      (options?.directSshAuthority &&
+        !isCurrentDirectSshAuthority(get(), options.directSshAuthority))
     ) {
       return
     }

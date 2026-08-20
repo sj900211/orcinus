@@ -12,8 +12,10 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import { isWslUncPath } from '../../shared/wsl-paths'
 import {
   isHiddenPtyDeliveryGateEnabled,
-  shouldDropHiddenRendererPtyData
+  shouldDropHiddenRendererPtyData,
+  shouldDropHiddenRendererPtyDataInAnyWindow
 } from '../ipc/pty-hidden-delivery-gate'
+import { resolvePtyOwnerWindow } from '../window/window-affinity-router'
 
 export type TerminalModelQueryAuthoritySettings = Pick<
   GlobalSettings,
@@ -39,11 +41,14 @@ export function shouldModelAnswerHiddenPtyQueries(opts: {
   settings: TerminalModelQueryAuthoritySettings | null | undefined
   hasRemoteViewSubscriber: boolean
 }): boolean {
-  return (
-    isTerminalModelQueryAuthorityEnabled(opts.settings) &&
-    !opts.hasRemoteViewSubscriber &&
-    shouldDropHiddenRendererPtyData(opts.ptyId, opts.settings)
-  )
+  if (!isTerminalModelQueryAuthorityEnabled(opts.settings) || opts.hasRemoteViewSubscriber) {
+    return false
+  }
+  // Why owner window: the reply decision must match the delivery decision, which reads the owner's gate marks.
+  const owner = resolvePtyOwnerWindow(opts.ptyId)
+  return owner
+    ? shouldDropHiddenRendererPtyData(owner.webContents.id, opts.ptyId, opts.settings)
+    : shouldDropHiddenRendererPtyDataInAnyWindow(opts.ptyId, opts.settings)
 }
 
 /** Main-side mirror of the renderer's isLocalNativeWindowsPty

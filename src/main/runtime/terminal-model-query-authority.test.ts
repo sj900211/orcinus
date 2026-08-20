@@ -14,6 +14,9 @@ import {
   setRendererPtyDeliveryInterest
 } from '../ipc/pty-hidden-delivery-gate'
 
+// Why: no router main window is registered here, so owner resolution falls back to the any-window union.
+const WINDOW = 7
+
 const ALL_ON = {
   terminalMainSideEffectAuthority: true,
   terminalHiddenDeliveryGate: true,
@@ -59,21 +62,21 @@ describe('shouldModelAnswerHiddenPtyQueries', () => {
 
   it('answers only for hidden-marked PTYs (the delivery decision is the reply decision)', () => {
     expect(answer('pty-1')).toBe(false)
-    markHiddenRendererPty('pty-1')
+    markHiddenRendererPty(WINDOW, 'pty-1')
     expect(answer('pty-1')).toBe(true)
     expect(answer('pty-other')).toBe(false)
   })
 
   it('yields to registered renderer delivery interest (chunk is delivered to a sidecar)', () => {
-    markHiddenRendererPty('pty-1')
-    setRendererPtyDeliveryInterest('pty-1', true)
+    markHiddenRendererPty(WINDOW, 'pty-1')
+    setRendererPtyDeliveryInterest(WINDOW, 'pty-1', true)
     expect(answer('pty-1')).toBe(false)
-    setRendererPtyDeliveryInterest('pty-1', false)
+    setRendererPtyDeliveryInterest(WINDOW, 'pty-1', false)
     expect(answer('pty-1')).toBe(true)
   })
 
   it('yields while a remote view subscriber is attached', () => {
-    markHiddenRendererPty('pty-1')
+    markHiddenRendererPty(WINDOW, 'pty-1')
     expect(
       shouldModelAnswerHiddenPtyQueries({
         ptyId: 'pty-1',
@@ -84,7 +87,7 @@ describe('shouldModelAnswerHiddenPtyQueries', () => {
   })
 
   it('stays silent under any kill switch', () => {
-    markHiddenRendererPty('pty-1')
+    markHiddenRendererPty(WINDOW, 'pty-1')
     expect(answer('pty-1', { terminalModelQueryAuthority: false })).toBe(false)
     expect(answer('pty-1', { terminalHiddenDeliveryGate: false })).toBe(false)
     expect(answer('pty-1', { terminalMainSideEffectAuthority: false })).toBe(false)

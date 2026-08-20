@@ -68,6 +68,13 @@ import { startFolderRepoGitUpgradeWatch } from '../ipc/folder-repo-git-upgrade'
 import { logStartupMilestone } from '../startup/startup-diagnostics'
 import { createRuntimeRendererNotificationSender } from './runtime-renderer-notification-sender'
 import { registerRendererDocumentNavigation } from './renderer-document-navigation'
+import {
+  clearMainWindowForRouting,
+  listAppWindows,
+  resolvePtyOwnerWindow,
+  resolveWorktreeOwnerWindow,
+  setMainWindowForRouting
+} from './window-affinity-router'
 
 const UPDATER_SETUP_FALLBACK_MS = 15_000
 
@@ -325,22 +332,75 @@ function registerRuntimeWindowLifecycle(
   const notifierToken = ++runtimeNotifierTokenCounter
   activeRuntimeNotifierToken = notifierToken
   runtime.attachWindow(mainWindow.id)
+  // Why: worktree-scoped runtime traffic routes to the worktree's owner window; the router needs the main fallback.
+  setMainWindowForRouting(mainWindow)
   const mainWebContents = mainWindow.webContents
   const rendererNotifications = createRuntimeRendererNotificationSender({
     isWindowDestroyed: () => mainWindow.isDestroyed(),
     webContents: mainWebContents,
     onFailure: (reason) => runtime.markGraphReloadFailed(mainWindow.id, reason)
   })
-  const send = rendererNotifications.send
+  type NotificationSend = (channel: string, ...values: unknown[]) => boolean
+  // Why cached per webContents: senders are stateful (suspend on failure) and must not be rebuilt per notification.
+  const sendersByWebContentsId = new Map<
+    number,
+    Pick<ReturnType<typeof createRuntimeRendererNotificationSender>, 'send' | 'close'>
+  >()
+  sendersByWebContentsId.set(mainWebContents.id, rendererNotifications)
+  const senderForWindow = (window: BrowserWindow): NotificationSend => {
+    const webContents = window.webContents
+    const cached = sendersByWebContentsId.get(webContents.id)
+    if (cached) {
+      return cached.send
+    }
+    const sender = createRuntimeRendererNotificationSender({
+      isWindowDestroyed: () => window.isDestroyed(),
+      webContents,
+      // Why no graph failure: workspace windows never attach a runtime graph — only the main window syncs one.
+      onFailure: () => {}
+    })
+    sendersByWebContentsId.set(webContents.id, sender)
+    webContents.once('destroyed', () => {
+      sender.close()
+      sendersByWebContentsId.delete(webContents.id)
+    })
+    return sender.send
+  }
+  const sendToWorktreeOwner: (
+    worktreeId: string | undefined,
+    channel: string,
+    ...values: unknown[]
+  ) => boolean = (worktreeId, channel, ...values) => {
+    const target = resolveWorktreeOwnerWindow(worktreeId)
+    return target ? senderForWindow(target)(channel, ...values) : false
+  }
+  const sendToPtyOwner: (ptyId: string, channel: string, ...values: unknown[]) => boolean = (
+    ptyId,
+    channel,
+    ...values
+  ) => {
+    const target = resolvePtyOwnerWindow(ptyId)
+    return target ? senderForWindow(target)(channel, ...values) : false
+  }
+  const broadcast: NotificationSend = (channel, ...values) => {
+    let sent = false
+    for (const window of listAppWindows()) {
+      sent = senderForWindow(window)(channel, ...values) || sent
+    }
+    return sent
+  }
+  // Why the ?? mainWindow fallback: request relays own the renderer_unavailable error path for dead windows.
+  const requestWindowForWorktree = (worktreeId: string): BrowserWindow =>
+    resolveWorktreeOwnerWindow(worktreeId) ?? mainWindow
   runtime.setNotifier({
     worktreesChanged: (repoId, renamed) => {
       // Why: clear scan caches before the renderer handles this event, so it can't read stale TTL entries after a mutation.
       runWorktreeChangeInvalidators(repoId)
-      send('worktrees:changed', renamed ? { repoId, renamed } : { repoId })
+      broadcast('worktrees:changed', renamed ? { repoId, renamed } : { repoId })
     },
-    worktreeBaseStatus: (event) => send('worktree:baseStatus', event),
-    worktreeRemoteBranchConflict: (event) => send('worktree:remoteBranchConflict', event),
-    reposChanged: () => send('repos:changed'),
+    worktreeBaseStatus: (event) => broadcast('worktree:baseStatus', event),
+    worktreeRemoteBranchConflict: (event) => broadcast('worktree:remoteBranchConflict', event),
+    reposChanged: () => broadcast('repos:changed'),
     activateWorktree: (
       repoId,
       worktreeId,
@@ -348,7 +408,7 @@ function registerRuntimeWindowLifecycle(
       startup?: WorktreeStartupLaunch,
       defaultTabs?: CreateWorktreeResult['defaultTabs']
     ) => {
-      send('ui:activateWorktree', {
+      sendToWorktreeOwner(worktreeId, 'ui:activateWorktree', {
         repoId,
         worktreeId,
         ...(setup ? { setup } : {}),
@@ -357,7 +417,7 @@ function registerRuntimeWindowLifecycle(
       })
     },
     createTerminal: (worktreeId, opts) =>
-      send('ui:createTerminal', {
+      sendToWorktreeOwner(worktreeId, 'ui:createTerminal', {
         worktreeId,
         command: opts.command,
         ...(opts.cwd ? { cwd: opts.cwd } : {}),
@@ -367,6 +427,13 @@ function registerRuntimeWindowLifecycle(
       }),
     revealTerminalSession: (worktreeId, opts) =>
       new Promise((resolve, reject) => {
+        // Why resolved once: the reply must come from the same window the request targeted.
+        const targetWindow = resolveWorktreeOwnerWindow(worktreeId)
+        if (!targetWindow) {
+          reject(new Error('runtime_unavailable'))
+          return
+        }
+        const targetWebContents = targetWindow.webContents
         const requestId = randomUUID()
         const expectedIdentity = opts.expectedProcessIdentity
           ? opts.tabId && opts.leafId
@@ -382,8 +449,8 @@ function registerRuntimeWindowLifecycle(
           reject(new Error('Terminal reveal timed out'))
         }, 10_000)
         const handler = (event: Electron.IpcMainEvent, reply: TerminalTabCreateReply): void => {
-          // Why: requestId is renderer-supplied, so only the targeted main window may satisfy the reveal.
-          if (event.sender !== mainWindow.webContents || reply.requestId !== requestId) {
+          // Why: requestId is renderer-supplied, so only the worktree's owner window may satisfy the reveal.
+          if (event.sender !== targetWebContents || reply.requestId !== requestId) {
             return
           }
           clearTimeout(timer)
@@ -410,7 +477,7 @@ function registerRuntimeWindowLifecycle(
           })
         }
         ipcMain.on('terminal:tabCreateReply', handler)
-        const sent = send('ui:createTerminal', {
+        const sent = senderForWindow(targetWindow)('ui:createTerminal', {
           requestId,
           worktreeId,
           ptyId: opts.ptyId,
@@ -440,13 +507,13 @@ function registerRuntimeWindowLifecycle(
         }
       }),
     resolveLegacyWorkerTerminalRecovery: (paneKey, resolution, ptyId) =>
-      send('agentStatus:legacyWorkerTerminalRecovery', {
+      broadcast('agentStatus:legacyWorkerTerminalRecovery', {
         paneKey,
         resolution,
         ...(ptyId ? { ptyId } : {})
       }),
     splitTerminal: (tabId, paneRuntimeId, opts) => {
-      send('ui:splitTerminal', {
+      broadcast('ui:splitTerminal', {
         tabId,
         paneRuntimeId,
         direction: opts.direction,
@@ -454,23 +521,24 @@ function registerRuntimeWindowLifecycle(
         telemetrySource: opts.telemetrySource
       })
     },
-    renameTerminal: (tabId, title) => send('ui:renameTerminal', { tabId, title }),
+    renameTerminal: (tabId, title) => broadcast('ui:renameTerminal', { tabId, title }),
     focusTerminal: (tabId, worktreeId, leafId) =>
-      send('ui:focusTerminal', { tabId, worktreeId, leafId }),
-    focusEditorTab: (tabId, worktreeId) => send('ui:focusEditorTab', { tabId, worktreeId }),
+      sendToWorktreeOwner(worktreeId, 'ui:focusTerminal', { tabId, worktreeId, leafId }),
+    focusEditorTab: (tabId, worktreeId) =>
+      sendToWorktreeOwner(worktreeId, 'ui:focusEditorTab', { tabId, worktreeId }),
     closeSessionTab: (tabId, worktreeId) =>
-      requestSessionTabCloseFromRenderer(mainWindow, tabId, worktreeId),
+      requestSessionTabCloseFromRenderer(requestWindowForWorktree(worktreeId), tabId, worktreeId),
     moveSessionTab: (worktreeId: string, move: RuntimeMobileSessionTabMove) =>
-      send('ui:moveSessionTab', { worktreeId, ...move }),
+      sendToWorktreeOwner(worktreeId, 'ui:moveSessionTab', { worktreeId, ...move }),
     openFile: (worktreeId, filePath, relativePath, runtimeEnvironmentId?) =>
-      send('ui:openFileFromMobile', {
+      sendToWorktreeOwner(worktreeId, 'ui:openFileFromMobile', {
         worktreeId,
         filePath,
         relativePath,
         runtimeEnvironmentId
       }),
     openDiff: (worktreeId, filePath, relativePath, staged, runtimeEnvironmentId?) =>
-      send('ui:openDiffFromMobile', {
+      sendToWorktreeOwner(worktreeId, 'ui:openDiffFromMobile', {
         worktreeId,
         filePath,
         relativePath,
@@ -478,32 +546,35 @@ function registerRuntimeWindowLifecycle(
         runtimeEnvironmentId
       }),
     readMobileMarkdownTab: (worktreeId, tabId) =>
-      requestMobileMarkdownFromRenderer(mainWindow, {
+      requestMobileMarkdownFromRenderer(requestWindowForWorktree(worktreeId), {
         operation: 'read',
         worktreeId,
         tabId
       }) as Promise<RuntimeMarkdownReadTabResult>,
     saveMobileMarkdownTab: (worktreeId, tabId, baseVersion, content) =>
-      requestMobileMarkdownFromRenderer(mainWindow, {
+      requestMobileMarkdownFromRenderer(requestWindowForWorktree(worktreeId), {
         operation: 'save',
         worktreeId,
         tabId,
         baseVersion,
         content
       }) as Promise<RuntimeMarkdownSaveTabResult>,
-    closeTerminal: (tabId, paneRuntimeId) => send('ui:closeTerminal', { tabId, paneRuntimeId }),
+    closeTerminal: (tabId, paneRuntimeId) =>
+      broadcast('ui:closeTerminal', { tabId, paneRuntimeId }),
     closeTerminalTab: (tabId, options) =>
-      requestTerminalTabCloseFromRenderer(mainWindow, tabId, options),
-    sleepWorktree: (worktreeId) => send('ui:sleepWorktree', { worktreeId }),
-    resumeSleepingAgents: (worktreeId) => send('ui:resumeSleepingAgents', { worktreeId }),
+      requestTerminalTabCloseFromRenderer(listAppWindows(), tabId, options),
+    sleepWorktree: (worktreeId) =>
+      sendToWorktreeOwner(worktreeId, 'ui:sleepWorktree', { worktreeId }),
+    resumeSleepingAgents: (worktreeId) =>
+      sendToWorktreeOwner(worktreeId, 'ui:resumeSleepingAgents', { worktreeId }),
     terminalFitOverrideChanged: (ptyId, mode, cols, rows) =>
-      send('runtime:terminalFitOverrideChanged', { ptyId, mode, cols, rows }),
+      sendToPtyOwner(ptyId, 'runtime:terminalFitOverrideChanged', { ptyId, mode, cols, rows }),
     terminalDriverChanged: (ptyId, driver) =>
-      send('runtime:terminalDriverChanged', { ptyId, driver }),
+      sendToPtyOwner(ptyId, 'runtime:terminalDriverChanged', { ptyId, driver }),
     nativeChatLaunchDraftResolved: (tabId, resolution) =>
-      send('runtime:nativeChatLaunchDraftResolved', { tabId, ...resolution }),
+      broadcast('runtime:nativeChatLaunchDraftResolved', { tabId, ...resolution }),
     browserDriverChanged: (browserPageId, driver) =>
-      send('runtime:browserDriverChanged', { browserPageId, driver })
+      broadcast('runtime:browserDriverChanged', { browserPageId, driver })
   })
   registerRendererDocumentNavigation(mainWebContents, () => {
     rendererNotifications.onMainFrameReloadStarted()
@@ -527,6 +598,7 @@ function registerRuntimeWindowLifecycle(
       // Why: the notifier closes over the window; clear it in the no-window gap so the runtime can't retain destroyed graphs.
       runtime.setNotifier(null)
       activeRuntimeNotifierToken = null
+      clearMainWindowForRouting(mainWindow)
     }
   })
 }

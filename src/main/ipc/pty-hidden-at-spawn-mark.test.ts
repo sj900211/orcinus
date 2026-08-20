@@ -102,7 +102,7 @@ describe('registerPtyHandlers', () => {
         mainWindow.webContents.send.mockClear()
 
         // Daemon PTYs can emit prompt bytes before spawn() resolves, so the pre-spawn mark must already gate them.
-        expect(isHiddenRendererPty('daemon-session')).toBe(true)
+        expect(isHiddenRendererPty(mainWindow.webContents.id, 'daemon-session')).toBe(true)
         daemon.emitData('daemon-session', 'pre-spawn prompt\x1b[c')
         vi.advanceTimersByTime(50)
         expect(runtime.onPtyData).toHaveBeenCalledWith(
@@ -121,7 +121,7 @@ describe('registerPtyHandlers', () => {
 
         spawnGate.resolve()
         const result = await spawnPromise
-        expect(isHiddenRendererPty(result.id)).toBe(true)
+        expect(isHiddenRendererPty(mainWindow.webContents.id, result.id)).toBe(true)
       } finally {
         vi.useRealTimers()
       }
@@ -141,7 +141,7 @@ describe('registerPtyHandlers', () => {
       ).rejects.toThrow('spawn exploded')
 
       // A later visible attach reusing this session id must not start gated.
-      expect(isHiddenRendererPty('daemon-session')).toBe(false)
+      expect(isHiddenRendererPty(mainWindow.webContents.id, 'daemon-session')).toBe(false)
     })
     it('marks local PTYs hidden after spawn, before their first data task', async () => {
       vi.useFakeTimers()
@@ -157,7 +157,7 @@ describe('registerPtyHandlers', () => {
         })) as { id: string }
         mainWindow.webContents.send.mockClear()
 
-        expect(isHiddenRendererPty(spawnResult.id)).toBe(true)
+        expect(isHiddenRendererPty(mainWindow.webContents.id, spawnResult.id)).toBe(true)
         mockProc.emitData('first chunk')
         vi.advanceTimersByTime(2)
 
@@ -183,7 +183,7 @@ describe('registerPtyHandlers', () => {
         })) as { id: string }
         mainWindow.webContents.send.mockClear()
 
-        expect(isHiddenRendererPty(spawnResult.id)).toBe(false)
+        expect(isHiddenRendererPty(mainWindow.webContents.id, spawnResult.id)).toBe(false)
         mockProc.emitData('visible output')
         vi.advanceTimersByTime(2)
 

@@ -135,7 +135,11 @@ describe('renderer startup runtime routing', () => {
       "console.warn('Remote startup catalog refresh failed:'"
     )
     const lineageIndex = source.indexOf('actions.fetchWorktreeLineage()')
-    const startupRefreshCompletedIndex = source.indexOf('startupWorktreeRefreshCompleted: true')
+    // Why anchored: the workspace-window boot branch sets the same flag earlier; assert the deferred-refresh occurrence specifically.
+    const startupRefreshCompletedIndex = source.indexOf(
+      'startupWorktreeRefreshCompleted: true',
+      remoteWorktreeIndex
+    )
 
     expect(hydrationDoneIndex).toBeGreaterThanOrEqual(0)
     expect(hydrationDoneIndex).toBeLessThan(remoteCatalogIndex)
@@ -487,11 +491,11 @@ describe('renderer startup runtime routing', () => {
 
   it('checkpoints activeView and all session snapshots through one beforeunload handler (#9002)', () => {
     const source = readSource(SESSION_PERSISTENCE_PATH)
-    const checkpointStart = source.indexOf(
-      'const shutdownCheckpoint = createShutdownCheckpointGuard('
-    )
+    // The checkpoint body is a named function so main's on-demand request (workspace-window open)
+    // reuses the exact serialize+stage path the beforeunload guard runs.
+    const checkpointStart = source.indexOf('export function stageWorkspaceSessionCheckpoint(')
     const checkpointEnd = source.indexOf(
-      'const persistBeforeUnload = createShutdownCheckpointBeforeUnloadHandler(shutdownCheckpoint)',
+      'function applyRemoteWorkspacePatchStatus(',
       checkpointStart
     )
     expect(checkpointStart).toBeGreaterThanOrEqual(0)
@@ -510,9 +514,15 @@ describe('renderer startup runtime routing', () => {
     expect(checkpointBlock).toContain('!isIntentionalAppRestartInProgress()')
     expect(checkpointBlock).toContain('freshState.openFiles.some((file) => file.isDirty)')
     expect(checkpointBlock).toContain('sessions: []')
-    expect(checkpointBlock).toContain(
-      'return\n      }\n      window.api.app.stageBeforeUnloadSync({\n        sessions: sessionSnapshots'
+    // Line-ending normalized so a CRLF Windows checkout matches the same structure.
+    expect(checkpointBlock.replace(/\r\n/g, '\n')).toContain(
+      'return\n  }\n  window.api.app.stageBeforeUnloadSync({\n    sessions: sessionSnapshots'
     )
+    expect(source).toContain('createShutdownCheckpointGuard(() =>')
+    expect(source).toContain("stageWorkspaceSessionCheckpoint('quit')")
+    // Main's on-demand request must run the same checkpoint, mid-run flavored.
+    expect(source).toContain('registerSessionCheckpointRequestListener(() =>')
+    expect(source).toContain("stageWorkspaceSessionCheckpoint('periodic')")
     expect(source).toContain(
       'window.addEventListener(ORCA_APP_RESTART_ABORTED_EVENT, shutdownCheckpoint.reset)'
     )

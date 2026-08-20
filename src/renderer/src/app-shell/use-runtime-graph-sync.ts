@@ -9,10 +9,13 @@ import {
   setRuntimeGraphSyncEnabled
 } from '../runtime/sync-runtime-graph'
 import { useAppStore } from '../store'
+import { getWindowBootContext } from '../startup/window-boot-context'
 
 /** Keeps the mobile runtime graph republished as the store's session-visible state changes. */
 export function useRuntimeGraphSync(): void {
   const workspaceSessionReady = useAppStore((s) => s.workspaceSessionReady)
+  // Why: graph publishing is single-authority — a workspace window publishing too would fight the main window over the mobile runtime graph.
+  const isGraphPublishAuthority = getWindowBootContext().role === 'main'
 
   useEffect(() => {
     setRuntimeGraphStoreStateGetter(useAppStore.getState)
@@ -52,9 +55,9 @@ export function useRuntimeGraphSync(): void {
   }, [])
 
   useEffect(() => {
-    setRuntimeGraphSyncEnabled(workspaceSessionReady)
+    setRuntimeGraphSyncEnabled(workspaceSessionReady && isGraphPublishAuthority)
     return () => {
       setRuntimeGraphSyncEnabled(false)
     }
-  }, [workspaceSessionReady])
+  }, [workspaceSessionReady, isGraphPublishAuthority])
 }

@@ -843,7 +843,10 @@ function createWebPreloadApi(): Partial<PreloadApi> {
       readTerminalScrollback: () => null,
       setSync: (session, hostId) => {
         writeJson(sessionStorageKeyForHost(hostId), sanitizeWebRuntimeWorkspaceSession(session))
-      }
+      },
+      // Web has no second app window, so main never requests an on-demand checkpoint.
+      onCheckpointRequest: () => noopUnsubscribe,
+      sendCheckpointReply: () => {}
     },
     onboarding: {
       get: () => Promise.resolve(getStoredOnboarding()),

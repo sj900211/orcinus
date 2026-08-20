@@ -46,11 +46,21 @@ import {
 } from '../providers/local-pty-provider'
 import { setLocalPtyProvider, unregisterSshPtyProvider } from './pty'
 import { _resetHiddenRendererPtyDeliveryGateForTest } from './pty-hidden-delivery-gate'
+import { _resetWindowAffinityRouterForTest } from '../window/window-affinity-router'
 import { __resetShellStartupEnvCache } from '../pty/shell-startup-env'
 import { _resetWslCachesForTests } from '../wsl'
 
 /** The mocked webContents each suite asserts sends against. */
-export type PtyIpcTestWebContents = { on: Mock; send: Mock; removeListener: Mock }
+export type PtyIpcTestWebContents = {
+  // Why id/isDestroyed/getType/getURL: per-window flow control keys on webContents.id and the trusted-app-window guard probes real WebContents surface.
+  id: number
+  isDestroyed: () => boolean
+  getType: () => string
+  getURL: () => string
+  on: Mock
+  send: Mock
+  removeListener: Mock
+}
 
 /** The mocked BrowserWindow handed to registerPtyHandlers. */
 export type PtyIpcTestMainWindow = {
@@ -77,6 +87,10 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
     isVisible: () => true,
     isMinimized: () => false,
     webContents: {
+      id: 101,
+      isDestroyed: () => false,
+      getType: () => 'window',
+      getURL: () => 'file:///opt/orca/renderer/index.html',
       on: vi.fn(),
       send: vi.fn(),
       removeListener: vi.fn()
@@ -84,7 +98,15 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
   }
   const mainWindowIpcEvent = { sender: mainWindow.webContents }
   const foreignWindowIpcEvent = {
-    sender: { on: vi.fn(), send: vi.fn(), removeListener: vi.fn() }
+    sender: {
+      id: 999,
+      isDestroyed: () => false,
+      getType: () => 'window',
+      getURL: () => 'file:///foreign/index.html',
+      on: vi.fn(),
+      send: vi.fn(),
+      removeListener: vi.fn()
+    }
   }
   const envScope = createPtyIpcProcessEnvScope()
 
@@ -134,6 +156,8 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
     mainWindow.webContents.removeListener.mockReset()
     // Why: hidden-delivery gate state is module-level (PTY-keyed), so tests must not leak hidden bits across cases.
     _resetHiddenRendererPtyDeliveryGateForTest()
+    // Why: the router holds the previous test's fake main window; stream routing must re-resolve per test.
+    _resetWindowAffinityRouterForTest()
     __resetShellStartupEnvCache()
 
     // Why: mirror real Electron — ipcMain.handle throws on a duplicate channel, catching re-registration that forgot removeHandler.

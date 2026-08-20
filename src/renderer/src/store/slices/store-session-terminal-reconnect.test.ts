@@ -113,6 +113,48 @@ describe('reconnectPersistedTerminals', () => {
     expect((mockApi.pty as Record<string, unknown>).spawn).not.toHaveBeenCalled()
   })
 
+  it('reconnects only the scoped workspace keys and leaves the rest pending (workspace window)', async () => {
+    const store = createDaemonEnabledStore()
+    const wt1 = 'repo1::/path/wt1'
+    const wt2 = 'repo1::/path/wt2'
+
+    store.setState({
+      repos: [
+        { id: 'repo1', path: '/repo1', displayName: 'Repo 1', badgeColor: '#000', addedAt: 0 }
+      ],
+      worktreesByRepo: {
+        repo1: [
+          makeWorktree({ id: wt1, repoId: 'repo1', path: '/path/wt1' }),
+          makeWorktree({ id: wt2, repoId: 'repo1', path: '/path/wt2' })
+        ]
+      }
+    })
+
+    store.getState().hydrateWorkspaceSession({
+      activeRepoId: 'repo1',
+      activeWorktreeId: wt1,
+      activeTabId: 'tab1',
+      tabsByWorktree: {
+        [wt1]: [makeTab({ id: 'tab1', worktreeId: wt1, ptyId: 'old-pty-1' })],
+        [wt2]: [makeTab({ id: 'tab2', worktreeId: wt2, ptyId: 'old-pty-2' })]
+      },
+      terminalLayoutsByTabId: { tab1: makeLayout(), tab2: makeLayout() },
+      activeWorktreeIdsOnShutdown: [wt1, wt2]
+    })
+
+    await store.getState().reconnectPersistedTerminals(undefined, { workspaceKeys: [wt2] })
+
+    const s = store.getState()
+    // Scoped runs never flip the global session-ready flag — the main window owns it.
+    expect(s.workspaceSessionReady).toBe(false)
+    expect(s.tabsByWorktree[wt2][0].ptyId).toBe('old-pty-2')
+    expect(s.tabsByWorktree[wt1][0].ptyId).toBeNull()
+    // wt1 stays pending for whoever owns the unscoped reconnect.
+    expect(s.pendingReconnectWorktreeIds).toEqual([wt1])
+    expect(s.pendingReconnectPtyIdByTabId).toHaveProperty('tab1')
+    expect(s.pendingReconnectPtyIdByTabId).not.toHaveProperty('tab2')
+  })
+
   it('does not restore old pty ids onto remote tabs during reconnect preparation', async () => {
     const store = createTestStore()
     const wt1 = 'repo1::/remote/wt1'

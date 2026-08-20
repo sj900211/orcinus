@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { useShallow } from 'zustand/react/shallow'
 import { syncZoomCSSVar } from '@/lib/ui-zoom'
 import { installCodexDetachedPaneRestartExecutor } from '@/components/terminal-pane/codex-detached-pane-restart-scheduler'
 import { useAppStore } from '../store'
@@ -34,6 +33,7 @@ import {
 } from '../../../shared/execution-host'
 import { mapWithConcurrency } from '../../../shared/map-with-concurrency'
 import type { OnboardingState } from '../../../shared/onboarding-state-types'
+import { useStartupActions } from './use-startup-actions'
 
 async function listRuntimeSessionHostIdsForStartup(): Promise<ExecutionHostId[]> {
   try {
@@ -44,39 +44,6 @@ async function listRuntimeSessionHostIdsForStartup(): Promise<ExecutionHostId[]>
     console.warn('Failed to list runtime session hosts for startup:', err)
     return []
   }
-}
-
-function useStartupActions() {
-  // Why: consolidate action refs into one useShallow subscription so React runs one equality check per store mutation instead of one per action.
-  return useAppStore(
-    useShallow((s) => ({
-      fetchReposForAllHosts: s.fetchReposForAllHosts,
-      awaitLocalRepoCatalogSettlement: s.awaitLocalRepoCatalogSettlement,
-      fetchProjectGroupsForAllHosts: s.fetchProjectGroupsForAllHosts,
-      fetchFolderWorkspacesForAllHosts: s.fetchFolderWorkspacesForAllHosts,
-      fetchAllWorktrees: s.fetchAllWorktrees,
-      fetchWorktrees: s.fetchWorktrees,
-      fetchWorktreeLineage: s.fetchWorktreeLineage,
-      fetchOrcaProfiles: s.fetchOrcaProfiles,
-      fetchSettings: s.fetchSettings,
-      awaitOwnerWorktreeVisibilityDefaultsHydration:
-        s.awaitOwnerWorktreeVisibilityDefaultsHydration,
-      fetchKeybindings: s.fetchKeybindings,
-      initGitHubCache: s.initGitHubCache,
-      hydrateWorkspaceSession: s.hydrateWorkspaceSession,
-      hydrateTabsSession: s.hydrateTabsSession,
-      hydrateEditorSession: s.hydrateEditorSession,
-      hydrateBrowserSession: s.hydrateBrowserSession,
-      fetchBrowserSessionProfiles: s.fetchBrowserSessionProfiles,
-      reconnectPersistedTerminals: s.reconnectPersistedTerminals,
-      setDeferredSshReconnectTargets: s.setDeferredSshReconnectTargets,
-      setSshConnectionState: s.setSshConnectionState,
-      hydratePersistedUI: s.hydratePersistedUI,
-      setHydrationSucceeded: s.setHydrationSucceeded,
-      pruneLastVisitedTimestamps: s.pruneLastVisitedTimestamps,
-      seedActiveWorktreeLastVisitedIfMissing: s.seedActiveWorktreeLastVisitedIfMissing
-    }))
-  )
 }
 
 /**
@@ -254,8 +221,9 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
             onOnboardingLoadedRef.current(onboardingState)
           }
 
-          // Why: workspace windows own no SSH connections or PTY restore — running either here
-          // would fight the main window over live sessions (stream routing lands in a later phase).
+          // Why: workspace windows own no SSH connections — dialing here would fight the main
+          // window over live sessions. Their terminal reconnect runs scoped to the boot worktree
+          // below so the main window keeps owning every other worktree's restore.
           if (bootContext.role === 'main') {
             // Why: re-establish SSH before terminal reconnect so SSH-backed tabs route through pty.attach; passphrase targets defer to tab focus to avoid stacked credential dialogs.
             await restoreSessionSshConnectionsAtStartup({
@@ -283,6 +251,27 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
             // Why here: reconnect just published restored PTY ids; sweeping them now
             // re-offers stale Codex panes whose tabs never mount this session.
             sweepRestoredCodexPanesForStaleAccounts(useAppStore.getState())
+          } else {
+            await timeRendererStartupStep('terminal-provider-snapshot-capabilities', () => {
+              return refreshTerminalProviderSnapshotCapabilities(
+                collectTerminalProviderSnapshotPtyIds(useAppStore.getState())
+              )
+            })
+            reconnectStarted = true
+            // Why scoped: this window streams only its boot worktree's PTYs; SSH-backed tabs it
+            // cannot dial stay deferred (placeholder panes) instead of erroring.
+            await timeRendererStartupStep('reconnect-terminals', () =>
+              actions.reconnectPersistedTerminals(abortController.signal, {
+                workspaceKeys: [bootContext.worktreeId]
+              })
+            )
+            // Why: the workbench mounts behind workspaceSessionReady && (hydrationSucceeded ||
+            // startupWorktreeRefreshCompleted); flip the mount inputs while hydrationSucceeded
+            // stays false so canPersistWorkspaceSession keeps this window's session writer locked.
+            useAppStore.setState({
+              workspaceSessionReady: true,
+              startupWorktreeRefreshCompleted: true
+            })
           }
           syncZoomCSSVar()
           // Why (issue #1158): unlock the session writer only after hydration and all dependent steps succeeded, so a mid-startup throw can't serialize partially-mutated state to disk.
@@ -337,7 +326,13 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
           reconnectStarted,
           isCancelled: () => cancelled,
           hydratePersistedUI: actions.hydratePersistedUI,
-          reconnectPersistedTerminals: actions.reconnectPersistedTerminals,
+          // Why: a degraded workspace window must still only reconnect its boot worktree.
+          reconnectPersistedTerminals: (signal) =>
+            bootContext.role === 'workspace'
+              ? actions.reconnectPersistedTerminals(signal, {
+                  workspaceKeys: [bootContext.worktreeId]
+                })
+              : actions.reconnectPersistedTerminals(signal),
           abortSignal: abortController.signal
         })
       }

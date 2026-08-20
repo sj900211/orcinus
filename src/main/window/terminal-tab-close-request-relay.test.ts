@@ -13,6 +13,11 @@ const ipcMainMock = {
 
 vi.mock('electron', () => ({ ipcMain: ipcMainMock }))
 
+function createWindow() {
+  const webContents = { isDestroyed: () => false, send: vi.fn() }
+  return { isDestroyed: () => false, webContents }
+}
+
 describe('requestTerminalTabCloseFromRenderer', () => {
   beforeEach(() => {
     ipcEmitter.removeAllListeners()
@@ -20,16 +25,15 @@ describe('requestTerminalTabCloseFromRenderer', () => {
     ipcMainMock.removeListener.mockClear()
   })
 
-  it('waits for the targeted renderer durability acknowledgement', async () => {
+  it('waits for a targeted renderer durability acknowledgement', async () => {
     const { requestTerminalTabCloseFromRenderer } =
       await import('./terminal-tab-close-request-relay')
-    const webContents = { isDestroyed: () => false, send: vi.fn() }
+    const mainWindow = createWindow()
     const otherWebContents = {}
-    const mainWindow = { isDestroyed: () => false, webContents }
-    const pending = requestTerminalTabCloseFromRenderer(mainWindow as never, 'tab-1', {
+    const pending = requestTerminalTabCloseFromRenderer([mainWindow] as never, 'tab-1', {
       localPtyTeardownOwnedExternally: true
     })
-    const request = webContents.send.mock.calls[0]?.[1] as {
+    const request = mainWindow.webContents.send.mock.calls[0]?.[1] as {
       requestId: string
       tabId: string
       localPtyTeardownOwnedExternally?: boolean
@@ -51,7 +55,7 @@ describe('requestTerminalTabCloseFromRenderer', () => {
 
     ipcEmitter.emit(
       'ui:terminalTabCloseResponse',
-      { sender: webContents },
+      { sender: mainWindow.webContents },
       { requestId: request.requestId }
     )
     await expect(pending).resolves.toBeUndefined()
@@ -60,19 +64,50 @@ describe('requestTerminalTabCloseFromRenderer', () => {
   it('propagates renderer cancellation instead of reporting success', async () => {
     const { requestTerminalTabCloseFromRenderer } =
       await import('./terminal-tab-close-request-relay')
-    const webContents = { isDestroyed: () => false, send: vi.fn() }
-    const pending = requestTerminalTabCloseFromRenderer(
-      { isDestroyed: () => false, webContents } as never,
-      'tab-pinned'
-    )
-    const request = webContents.send.mock.calls[0]?.[1] as { requestId: string }
+    const mainWindow = createWindow()
+    const pending = requestTerminalTabCloseFromRenderer([mainWindow] as never, 'tab-pinned')
+    const request = mainWindow.webContents.send.mock.calls[0]?.[1] as { requestId: string }
 
     ipcEmitter.emit(
       'ui:terminalTabCloseResponse',
-      { sender: webContents },
+      { sender: mainWindow.webContents },
       { requestId: request.requestId, error: 'terminal_tab_pinned' }
     )
 
     await expect(pending).rejects.toThrow('terminal_tab_pinned')
+  })
+
+  it('broadcasts one request to every app window and accepts whichever owns the tab', async () => {
+    const { requestTerminalTabCloseFromRenderer } =
+      await import('./terminal-tab-close-request-relay')
+    const mainWindow = createWindow()
+    const workspaceWindow = createWindow()
+    const pending = requestTerminalTabCloseFromRenderer(
+      [mainWindow, workspaceWindow] as never,
+      'tab-ws'
+    )
+    const mainRequest = mainWindow.webContents.send.mock.calls[0]?.[1] as { requestId: string }
+    const workspaceRequest = workspaceWindow.webContents.send.mock.calls[0]?.[1] as {
+      requestId: string
+    }
+
+    // One transaction: both windows see the same requestId; the non-owner never replies.
+    expect(workspaceRequest.requestId).toBe(mainRequest.requestId)
+    ipcEmitter.emit(
+      'ui:terminalTabCloseResponse',
+      { sender: workspaceWindow.webContents },
+      { requestId: workspaceRequest.requestId }
+    )
+
+    await expect(pending).resolves.toBeUndefined()
+  })
+
+  it('rejects when no live app window exists', async () => {
+    const { requestTerminalTabCloseFromRenderer } =
+      await import('./terminal-tab-close-request-relay')
+
+    await expect(requestTerminalTabCloseFromRenderer([], 'tab-none')).rejects.toThrow(
+      'renderer_unavailable'
+    )
   })
 })

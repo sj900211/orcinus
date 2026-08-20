@@ -22,6 +22,9 @@ import {
 } from './terminal-view-attribute-store'
 import type { TerminalViewAttributes, TerminalViewRgb } from '../../shared/terminal-view-attributes'
 
+// Why: no router main window is registered here, so owner resolution falls back to the any-window union.
+const GATE_WINDOW = 7
+
 const settingsState = {
   terminalMainSideEffectAuthority: true as boolean,
   terminalHiddenDeliveryGate: true as boolean,
@@ -147,7 +150,7 @@ describe('reply parity for hidden-dropped chunks', () => {
     ['kitty CSI ? u reports pushed flags', '\x1b[=5;1u\x1b[?u', ['\x1b[?5u']]
   ])('%s', async (_label, chunk, expectedReplies) => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-q')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-q')
 
     runtime.onPtyData('pty-q', chunk, Date.now())
     await settle(runtime, 'pty-q')
@@ -172,7 +175,7 @@ describe('reply parity for hidden-dropped chunks', () => {
     ['DSR ?996n color-scheme query', '\x1b[?996n']
   ])('stays silent for %s', async (_label, chunk) => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-q')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-q')
 
     runtime.onPtyData('pty-q', chunk, Date.now())
     await settle(runtime, 'pty-q')
@@ -195,8 +198,8 @@ describe('reply ownership matrix', () => {
 
   it('never answers while renderer delivery interest holds the chunk delivered', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-i')
-    setRendererPtyDeliveryInterest('pty-i', true)
+    markHiddenRendererPty(GATE_WINDOW, 'pty-i')
+    setRendererPtyDeliveryInterest(GATE_WINDOW, 'pty-i', true)
 
     runtime.onPtyData('pty-i', DA1, Date.now())
     await settle(runtime, 'pty-i')
@@ -214,7 +217,7 @@ describe('reply ownership matrix', () => {
   ])('never answers with kill switch %s off', async (_label, flip) => {
     flip()
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-k')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-k')
 
     runtime.onPtyData('pty-k', DA1, Date.now())
     await settle(runtime, 'pty-k')
@@ -224,7 +227,7 @@ describe('reply ownership matrix', () => {
 
   it('yields while a remote view subscriber is attached and resumes on release', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-r')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-r')
     const release = runtime.registerRemoteTerminalViewSubscriber('pty-r')
 
     runtime.onPtyData('pty-r', DA1, Date.now())
@@ -252,7 +255,7 @@ describe('reply ownership matrix', () => {
 
   it('keeps raw preview presence separate from terminal query authority', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-preview')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-preview')
     const release = runtime.registerRawTerminalViewSubscriber('pty-preview')
 
     expect(runtime.hasRawTerminalViewSubscriber('pty-preview')).toBe(true)
@@ -273,7 +276,7 @@ describe('reply ownership matrix', () => {
 
   it('answers a dropped-chunk query exactly once', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-once')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-once')
 
     runtime.onPtyData('pty-once', DA1, Date.now())
     await settle(runtime, 'pty-once')
@@ -287,7 +290,7 @@ describe('main-side replay guard', () => {
 
   it('never answers queries embedded in a seeded snapshot, then answers live bytes', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-seed')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-seed')
 
     runtime.seedHeadlessTerminal('pty-seed', `restored prompt${DA1}`)
     await settle(runtime, 'pty-seed')
@@ -302,7 +305,7 @@ describe('main-side replay guard', () => {
     const { runtime, replies } = createResponderRuntime({
       rendererBuffer: { data: `restored screen${DA1}`, cols: 80, rows: 24 }
     })
-    markHiddenRendererPty('pty-hyd')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-hyd')
 
     // First live byte triggers maybeHydrateHeadlessFromRenderer; the hydration
     // seed parses the embedded DA1 but must not forward its reply.
@@ -316,7 +319,7 @@ describe('main-side replay guard', () => {
 describe('kitty flag re-seed parity (terminal-query-authority.md §kitty)', () => {
   it('answers ?u with the persisted snapshot flags after a re-seed, silently applied', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-kitty')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-kitty')
 
     // Daemon warm-reattach threads modes.kittyKeyboardFlags through the
     // spawn result into the seed; applying them is a seed-side write and
@@ -334,7 +337,7 @@ describe('kitty flag re-seed parity (terminal-query-authority.md §kitty)', () =
 
   it('answers ?0u when the snapshot carried no flags (fresh-shell paths)', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-kitty0')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-kitty0')
 
     runtime.seedHeadlessTerminal('pty-kitty0', 'restored prompt')
     runtime.onPtyData('pty-kitty0', '\x1b[?u', Date.now())
@@ -349,11 +352,11 @@ describe('ingestion-time ownership capture', () => {
 
   it('still answers when the hidden mark flips off between ingestion and the async write', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-race')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-race')
 
     runtime.onPtyData('pty-race', DA1, Date.now())
     // Flip before the queued writeChain link runs: the captured decision wins.
-    unmarkHiddenRendererPty('pty-race')
+    unmarkHiddenRendererPty(GATE_WINDOW, 'pty-race')
     await settle(runtime, 'pty-race')
 
     expect(replies.map((reply) => reply.data)).toEqual(['\x1b[?1;2c'])
@@ -363,7 +366,7 @@ describe('ingestion-time ownership capture', () => {
     const { runtime, replies } = createResponderRuntime()
 
     runtime.onPtyData('pty-race2', DA1, Date.now())
-    markHiddenRendererPty('pty-race2')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-race2')
     await settle(runtime, 'pty-race2')
 
     expect(replies).toEqual([])
@@ -375,7 +378,7 @@ describe('stale writeChain links after dispose', () => {
 
   it('never forwards a queued reply once the PTY state is disposed', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-stale')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-stale')
 
     // Queue a forward-flagged chain link, then dispose before it runs.
     runtime.onPtyData('pty-stale', DA1, Date.now())
@@ -387,7 +390,7 @@ describe('stale writeChain links after dispose', () => {
 
   it('never injects a stale reply into a successor PTY reusing the session id', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-reuse')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-reuse')
 
     // Daemon respawns reuse session ids: dispose with the flagged link still
     // queued, then re-create the same id before the link runs.
@@ -403,7 +406,7 @@ describe('stale writeChain links after dispose', () => {
 describe('ConPTY DA1 override', () => {
   it('retrofits the override when the spawn mark lands after data created the emulator', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-win-late')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-win-late')
 
     // Daemon warm-reattach flush: stream data creates the emulator before
     // the awaited spawn response marks the PTY native-Windows.
@@ -419,7 +422,7 @@ describe('ConPTY DA1 override', () => {
   it('keeps the override single-reply when installed at creation and marked again', async () => {
     const { runtime, replies } = createResponderRuntime()
     markNativeWindowsConptyPty('pty-win-idem')
-    markHiddenRendererPty('pty-win-idem')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-win-idem')
 
     runtime.onPtyData('pty-win-idem', 'boot output', Date.now())
     // A duplicate mark (e.g. respawn against a live emulator) must not stack
@@ -435,7 +438,7 @@ describe('ConPTY DA1 override', () => {
   it('answers CSI ?61;4c for marked native-Windows PTYs, suppressing the core ?1;2c', async () => {
     const { runtime, replies } = createResponderRuntime()
     markNativeWindowsConptyPty('pty-win')
-    markHiddenRendererPty('pty-win')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-win')
 
     runtime.onPtyData('pty-win', '\x1b[c', Date.now())
     await settle(runtime, 'pty-win')
@@ -446,7 +449,7 @@ describe('ConPTY DA1 override', () => {
   it('lets non-primary device-attribute queries fall through to the core', async () => {
     const { runtime, replies } = createResponderRuntime()
     markNativeWindowsConptyPty('pty-win2')
-    markHiddenRendererPty('pty-win2')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-win2')
 
     runtime.onPtyData('pty-win2', '\x1b[>c', Date.now())
     await settle(runtime, 'pty-win2')
@@ -547,7 +550,7 @@ describe('view-attribute bridge replies (after renderer push)', () => {
     ['DECRQM ?12 from pushed cursorBlink', '\x1b[?12$p', ['\x1b[?12;1$y']]
   ])('%s', async (_label, chunk, expectedReplies) => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-view')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-view')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData('pty-view', chunk, Date.now())
@@ -558,7 +561,7 @@ describe('view-attribute bridge replies (after renderer push)', () => {
 
   it('answers ?996n from palette luminance, not the pushed app mode (dark palette, light app mode)', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-lum-dark')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-lum-dark')
     // Supported divergence: light app mode with terminalUseSeparateLightTheme
     // off renders a dark terminal theme. A visible xterm answers ?996n from
     // bg/fg relative luminance (CoreBrowserTerminal._reportColorScheme), so
@@ -573,7 +576,7 @@ describe('view-attribute bridge replies (after renderer push)', () => {
 
   it('answers ?996n light for a light palette regardless of the pushed app mode', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-lum-light')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-lum-light')
     setTerminalViewAttributes(
       viewAttributes({
         foreground: [0x33, 0x33, 0x33],
@@ -592,7 +595,7 @@ describe('view-attribute bridge replies (after renderer push)', () => {
     // _reportColorScheme reads the CURRENT theme-service colors, which include
     // OSC 10/11 SET mutations — the per-PTY overlays layer the same way.
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-lum-set')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-lum-set')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData('pty-lum-set', '\x1b]11;#ffffff\x07\x1b]10;#101010\x07\x1b[?996n', Date.now())
@@ -603,7 +606,7 @@ describe('view-attribute bridge replies (after renderer push)', () => {
 
   it('stays silent before the first push, then answers the same query after it', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-first')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-first')
 
     runtime.onPtyData('pty-first', '\x1b]11;?\x07\x1b[?996n', Date.now())
     await settle(runtime, 'pty-first')
@@ -618,7 +621,7 @@ describe('view-attribute bridge replies (after renderer push)', () => {
 
   it('retrofits cursor options onto already-live emulators when the push lands late', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-late')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-late')
 
     // Emulator exists before any push: core default DECSCUSR is steady block.
     runtime.onPtyData('pty-late', '\x1bP$q q\x1b\\', Date.now())
@@ -635,8 +638,8 @@ describe('view-attribute bridge replies (after renderer push)', () => {
 describe('per-PTY OSC color SET layering', () => {
   it('layers an OSC 4 SET over the pushed base, isolated per PTY', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-a')
-    markHiddenRendererPty('pty-b')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-a')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-b')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData('pty-a', '\x1b]4;1;rgb:00/ff/00\x07\x1b]4;1;?\x07', Date.now())
@@ -652,7 +655,7 @@ describe('per-PTY OSC color SET layering', () => {
 
   it('restores a single indexed color via OSC 104;<idx>', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-104')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-104')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData('pty-104', '\x1b]4;1;#00ff00\x07\x1b]104;1\x07\x1b]4;1;?\x07', Date.now())
@@ -663,7 +666,7 @@ describe('per-PTY OSC color SET layering', () => {
 
   it('restores the whole indexed table via bare OSC 104', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-104all')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-104all')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData(
@@ -681,7 +684,7 @@ describe('per-PTY OSC color SET layering', () => {
 
   it('layers OSC 10/11/12 SETs and restores them via 110/111/112', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-special')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-special')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData(
@@ -709,7 +712,7 @@ describe('per-PTY OSC color SET layering', () => {
     // OSC SETs to its theme service; the model mirrors that state — but the
     // replay guard still keeps the seed from ANSWERING anything.
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-seedset')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-seedset')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.seedHeadlessTerminal('pty-seedset', 'restored\x1b]4;1;#00ff00\x07\x1b]4;1;?\x07')
@@ -723,7 +726,7 @@ describe('per-PTY OSC color SET layering', () => {
 
   it('preserves per-PTY overrides on an identical re-push (fresh renderer process)', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-idem')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-idem')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData('pty-idem', '\x1b]11;#ffffff\x07', Date.now())
@@ -741,7 +744,7 @@ describe('per-PTY OSC color SET layering', () => {
 
   it('clears per-PTY overrides when a new push lands (theme apply parity)', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-clear')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-clear')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData('pty-clear', '\x1b]11;#ffffff\x07', Date.now())
@@ -761,7 +764,7 @@ describe('per-PTY OSC color SET layering', () => {
 describe('view-attribute replay guard and suppression', () => {
   it('never answers view-attribute queries embedded in a seeded snapshot', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-vseed')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-vseed')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.seedHeadlessTerminal('pty-vseed', 'prompt\x1b]11;?\x07\x1b[?996n')
@@ -777,7 +780,7 @@ describe('view-attribute replay guard and suppression', () => {
     const { runtime, replies } = createResponderRuntime({
       rendererBuffer: { data: 'restored\x1b]11;?\x07\x1b[?996n', cols: 80, rows: 24 }
     })
-    markHiddenRendererPty('pty-vhyd')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-vhyd')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData('pty-vhyd', 'live output', Date.now())
@@ -798,8 +801,8 @@ describe('view-attribute replay guard and suppression', () => {
 
   it('never answers while renderer delivery interest holds the chunk delivered', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-vint')
-    setRendererPtyDeliveryInterest('pty-vint', true)
+    markHiddenRendererPty(GATE_WINDOW, 'pty-vint')
+    setRendererPtyDeliveryInterest(GATE_WINDOW, 'pty-vint', true)
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData('pty-vint', '\x1b]11;?\x07', Date.now())
@@ -810,7 +813,7 @@ describe('view-attribute replay guard and suppression', () => {
 
   it('yields view-attribute replies while a remote view subscriber is attached', async () => {
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-vrem')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-vrem')
     setTerminalViewAttributes(viewAttributes())
     const release = runtime.registerRemoteTerminalViewSubscriber('pty-vrem')
 
@@ -834,7 +837,7 @@ describe('view-attribute replay guard and suppression', () => {
   ])('never answers view-attribute queries with kill switch %s off', async (_label, flip) => {
     flip()
     const { runtime, replies } = createResponderRuntime()
-    markHiddenRendererPty('pty-vkill')
+    markHiddenRendererPty(GATE_WINDOW, 'pty-vkill')
     setTerminalViewAttributes(viewAttributes())
 
     runtime.onPtyData('pty-vkill', '\x1b]11;?\x07\x1b[?996n', Date.now())

@@ -3217,6 +3217,15 @@ const api = {
     /** Synchronous session save for beforeunload — blocks until flushed to disk. */
     setSync: (args, hostId) => {
       ipcRenderer.sendSync('session:set-sync', args, hostId)
+    },
+    onCheckpointRequest: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, args: { requestId: string }): void =>
+        callback(args)
+      ipcRenderer.on('session:checkpointRequest', listener)
+      return () => ipcRenderer.removeListener('session:checkpointRequest', listener)
+    },
+    sendCheckpointReply: (args) => {
+      ipcRenderer.send('session:checkpointReply', args)
     }
   } satisfies PreloadApi['session'],
 

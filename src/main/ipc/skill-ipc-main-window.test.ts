@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getTrustedUIRendererWebContentsMock, handleMock } = vi.hoisted(() => ({
-  getTrustedUIRendererWebContentsMock: vi.fn(),
+const { isTrustedUIRendererMock, handleMock } = vi.hoisted(() => ({
+  isTrustedUIRendererMock: vi.fn(),
   handleMock: vi.fn()
 }))
 
 vi.mock('electron', () => ({ ipcMain: { handle: handleMock } }))
 vi.mock('./ui', () => ({
-  getTrustedUIRendererWebContents: getTrustedUIRendererWebContentsMock
+  isTrustedUIRenderer: isTrustedUIRendererMock
 }))
 
 import { handleMainWindowSkillIpc } from './skill-ipc-main-window'
@@ -15,13 +15,15 @@ import { handleMainWindowSkillIpc } from './skill-ipc-main-window'
 describe('main-window skill IPC', () => {
   beforeEach(() => {
     handleMock.mockReset()
-    getTrustedUIRendererWebContentsMock.mockReset()
+    isTrustedUIRendererMock.mockReset()
   })
 
-  it('allows the trusted main renderer', () => {
+  it.each([
+    ['main renderer', { id: 1 }],
+    ['workspace window renderer', { id: 7 }]
+  ])('allows the trusted %s', (_label, sender) => {
     const listener = vi.fn(() => 'ok')
-    const sender = { id: 1 }
-    getTrustedUIRendererWebContentsMock.mockReturnValue(sender)
+    isTrustedUIRendererMock.mockImplementation((candidate) => candidate === sender)
     handleMainWindowSkillIpc('skills:test', listener)
 
     const handler = handleMock.mock.calls[0][1]
@@ -35,11 +37,12 @@ describe('main-window skill IPC', () => {
     ['missing main window', { id: 4 }]
   ])('rejects the %s before invoking skill code', (_label, sender) => {
     const listener = vi.fn()
-    getTrustedUIRendererWebContentsMock.mockReturnValue(null)
+    isTrustedUIRendererMock.mockReturnValue(false)
     handleMainWindowSkillIpc('skills:test', listener)
 
     const handler = handleMock.mock.calls[0][1]
     expect(() => handler({ sender }, 'value')).toThrow('Unauthorized skill IPC sender')
+    expect(isTrustedUIRendererMock).toHaveBeenCalledWith(sender)
     expect(listener).not.toHaveBeenCalled()
   })
 })
