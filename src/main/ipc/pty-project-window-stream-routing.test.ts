@@ -287,6 +287,71 @@ describe('registerPtyHandlers (project-window stream routing)', () => {
     }
   })
 
+  it('transfers owned PTYs to main with a restore marker when the workspace window is destroyed', async () => {
+    vi.useFakeTimers()
+    try {
+      const worktreeIdByPty = new Map<string, string>()
+      const runtime = createRuntimeStub(worktreeIdByPty)
+      const workspaceWindow = createWorkspaceWindow()
+      registerWorkspace(workspaceWindow)
+      const mockProc = createMockProc()
+      spawnMock.mockReturnValue(mockProc.proc)
+      registerPtyHandlers(mainWindow as never, runtime as never)
+
+      const result = (await handlers.get('pty:spawn')!(null, {
+        cols: 80,
+        rows: 24,
+        cwd: '/tmp',
+        worktreeId: WORKTREE_ID
+      })) as { id: string }
+      worktreeIdByPty.set(result.id, WORKTREE_ID)
+      fireWorkspaceDispatcherReady(workspaceWindow)
+
+      // Data establishes the workspace window's flow state, which registers its 'destroyed' listener.
+      mockProc.emitData('to-workspace')
+      vi.advanceTimersByTime(2)
+      expect(workspaceWindow.webContents.send).toHaveBeenCalledWith(
+        'pty:data',
+        expect.objectContaining({ id: result.id, data: 'to-workspace' })
+      )
+
+      const destroyedCall = workspaceWindow.webContents.on.mock.calls.find(
+        (call: unknown[]) => call[0] === 'destroyed'
+      )
+      expect(destroyedCall).toBeDefined()
+
+      // Order mirrors Electron: the BrowserWindow 'closed' (registry unregister) precedes the deferred marker.
+      unregisterProjectWindow(PROJECT_KEY, workspaceWindow as never)
+      mainWindow.webContents.send.mockClear()
+      ;(destroyedCall![1] as () => void)()
+
+      // The marker emit is deferred to setImmediate so the registry unregister lands first.
+      expect(mainWindow.webContents.send).not.toHaveBeenCalledWith(
+        'pty:modelRestoreNeeded',
+        expect.anything()
+      )
+      await vi.runAllTimersAsync()
+
+      expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+        'pty:modelRestoreNeeded',
+        expect.objectContaining({ id: result.id, reason: 'renderer-window-closed' })
+      )
+
+      // The released owner-change debt lets the new (main) owner start clean once output resumes.
+      mockProc.emitData('back-to-main')
+      vi.advanceTimersByTime(2)
+      getPtyAckDataListener()({ sender: mainWindow.webContents } as never, {
+        id: result.id,
+        processedChars: 'back-to-main'.length
+      })
+      expect(getPtyRendererDeliveryDebugSnapshot().rendererInFlightChars).toBe(0)
+
+      deletePtyOwnership(result.id)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   // Regression for the workspace-window takeover: a second sessionId attach is the renderer-reload
   // reattach path (provider returns the live pty, isReattach), so the later claim must win delivery.
   it('second sessionId attach from another window takes over delivery without killing the pty', async () => {

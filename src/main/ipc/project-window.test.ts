@@ -150,6 +150,26 @@ function fireActiveProjectChanged(sender: unknown, projectKey: unknown): void {
   }
 }
 
+function fireHandbackProjectSession(sender: unknown, handback: unknown): { ok: boolean } {
+  const event = { sender, returnValue: { ok: false } as { ok: boolean } }
+  for (const listener of eventListeners.get('session:handbackProjectSession') ?? []) {
+    listener(event, handback)
+  }
+  return event.returnValue
+}
+
+function sentHandback(window: TestWindow): unknown[] {
+  return window.webContents.send.mock.calls
+    .filter((c: unknown[]) => c[0] === 'session:projectSessionHandback')
+    .map((c: unknown[]) => c[1])
+}
+
+const validHandback = {
+  projectKey: 'repo-1',
+  workspaceKeys: ['repo-1::/wt/a'],
+  session: { tabsByWorktree: {} }
+}
+
 function openProjectsPayloads(window: TestWindow): string[][] {
   return window.webContents.send.mock.calls
     .filter((c: unknown[]) => c[0] === 'projectWindow:openProjectsChanged')
@@ -533,6 +553,72 @@ describe('registerProjectWindowHandlers', () => {
         fireActiveProjectChanged(mainSender, '')
         fireActiveProjectChanged(mainSender, 42)
         expect(rekeyProjectWindowMock).not.toHaveBeenCalled()
+      } finally {
+        warnSpy.mockRestore()
+      }
+    })
+  })
+
+  describe('session:handbackProjectSession', () => {
+    it('relays a closing project window session slice to the main window and replies ok', () => {
+      const mainWindow = makeMainWindow()
+      getRoutedMainWindowMock.mockReturnValue(mainWindow)
+
+      const reply = fireHandbackProjectSession(mainSender, validHandback)
+
+      expect(reply).toEqual({ ok: true })
+      expect(sentHandback(mainWindow)).toEqual([validHandback])
+    })
+
+    it('rejects an untrusted sender without forwarding', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const mainWindow = makeMainWindow()
+        getRoutedMainWindowMock.mockReturnValue(mainWindow)
+
+        const reply = fireHandbackProjectSession(untrustedSender, validHandback)
+
+        expect(reply).toEqual({ ok: false })
+        expect(sentHandback(mainWindow)).toEqual([])
+      } finally {
+        warnSpy.mockRestore()
+      }
+    })
+
+    it('rejects a malformed payload without forwarding', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const mainWindow = makeMainWindow()
+        getRoutedMainWindowMock.mockReturnValue(mainWindow)
+
+        expect(fireHandbackProjectSession(mainSender, null)).toEqual({ ok: false })
+        expect(
+          fireHandbackProjectSession(mainSender, { projectKey: '', workspaceKeys: [], session: {} })
+        ).toEqual({ ok: false })
+        expect(
+          fireHandbackProjectSession(mainSender, {
+            projectKey: 'repo-1',
+            workspaceKeys: 'nope',
+            session: {}
+          })
+        ).toEqual({ ok: false })
+        expect(sentHandback(mainWindow)).toEqual([])
+      } finally {
+        warnSpy.mockRestore()
+      }
+    })
+
+    it('replies ok:false when no main window is routed', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        getRoutedMainWindowMock.mockReturnValue(null)
+
+        const reply = fireHandbackProjectSession(mainSender, validHandback)
+
+        expect(reply).toEqual({ ok: false })
+        expect(warnSpy).toHaveBeenCalledWith(
+          '[project-window] no main window to receive the project session handback; terminals in the closing window may not persist'
+        )
       } finally {
         warnSpy.mockRestore()
       }

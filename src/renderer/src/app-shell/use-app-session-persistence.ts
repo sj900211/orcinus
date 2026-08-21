@@ -21,6 +21,8 @@ import {
   createShutdownCheckpointGuard
 } from '../lib/shutdown-checkpoint-guard'
 import { registerSessionCheckpointRequestListener } from '../lib/session-checkpoint-request'
+import { stageProjectWindowSessionHandback } from '../lib/project-window-session-handback'
+import { registerProjectWindowSessionHandbackReceiver } from '../lib/project-window-session-handback-receiver'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
 import { dispatchWindowCloseRequest } from '../components/window-close-request-coordinator'
 import {
@@ -167,9 +169,12 @@ export function useAppSessionPersistence(): void {
     // two firings, PTY exit events can arrive and unmount TerminalPanes,
     // emptying shutdownBufferCaptures. The guard prevents the second call
     // from overwriting the good session data with an empty snapshot.
-    const shutdownCheckpoint = createShutdownCheckpointGuard(() =>
+    const shutdownCheckpoint = createShutdownCheckpointGuard(() => {
       stageWorkspaceSessionCheckpoint('quit')
-    )
+      // Why: a project window isn't a persistence writer, so the checkpoint above is a no-op for it;
+      // hand its project slice to main (the writer) so terminals created here survive its close.
+      stageProjectWindowSessionHandback()
+    })
     const persistBeforeUnload = createShutdownCheckpointBeforeUnloadHandler(shutdownCheckpoint)
     window.addEventListener('beforeunload', persistBeforeUnload)
     window.addEventListener(ORCA_APP_RESTART_ABORTED_EVENT, shutdownCheckpoint.reset)
@@ -192,6 +197,10 @@ export function useAppSessionPersistence(): void {
       stageWorkspaceSessionCheckpoint('periodic')
     )
   }, [])
+
+  // Why: the main window (single writer) merges + persists a closing project window's session slice
+  // so terminals created in that window survive its close and resume streaming here.
+  useEffect(() => registerProjectWindowSessionHandbackReceiver(), [])
 
   // Why: beforeunload never fires on a hard kill (crash, forced update, TerminateProcess), so periodically capture agent session ids (not scrollback) so live agents keep a resume record.
   useEffect(() => {

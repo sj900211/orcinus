@@ -844,9 +844,11 @@ function createWebPreloadApi(): Partial<PreloadApi> {
       setSync: (session, hostId) => {
         writeJson(sessionStorageKeyForHost(hostId), sanitizeWebRuntimeWorkspaceSession(session))
       },
-      // Web has no second app window, so main never requests an on-demand checkpoint.
+      // Web has no second app window, so main never requests an on-demand checkpoint or a handback.
       onCheckpointRequest: () => noopUnsubscribe,
-      sendCheckpointReply: () => {}
+      sendCheckpointReply: () => {},
+      handbackProjectSessionSync: () => {},
+      onProjectSessionHandback: () => noopUnsubscribe
     },
     onboarding: {
       get: () => Promise.resolve(getStoredOnboarding()),

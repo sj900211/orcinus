@@ -8,7 +8,13 @@
  * marker is delivery machinery, not PTY data — remote-runtime transports
  * never see it.
  */
-export type PtyModelRestoreReason = 'hidden-drop' | 'unhide' | 'pending-cap' | 'delivery-heal'
+export type PtyModelRestoreReason =
+  | 'hidden-drop'
+  | 'unhide'
+  | 'pending-cap'
+  | 'delivery-heal'
+  // The owner window closed; its PTYs fell back to main, which must repaint from the model.
+  | 'renderer-window-closed'
 
 export type PtyModelRestoreNeededEvent = {
   id: string

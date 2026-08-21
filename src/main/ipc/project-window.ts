@@ -12,6 +12,7 @@ import {
   rekeyProjectWindow
 } from '../window/project-window-registry'
 import { getRoutedMainWindow } from '../window/window-affinity-router'
+import type { ProjectWindowSessionHandback } from '../../shared/project-window-session-handback'
 import { isTrustedUIRenderer } from './ui'
 
 // Why 2s: covers a busy renderer's stage round-trip without making Open feel hung; on expiry the
@@ -61,6 +62,30 @@ function requestMainWindowSessionCheckpoint(): Promise<void> {
 }
 
 /**
+ * Reverse of the open-time checkpoint: relay a closing project window's serialized
+ * session slice to the MAIN window renderer, which merges it (scoped to the project's
+ * worktree keys) and persists — keeping main the single session writer. Returns whether
+ * the relay reached a live main window; the closing window degrades gracefully if not.
+ */
+function relayProjectSessionHandbackToMain(handback: ProjectWindowSessionHandback): boolean {
+  const mainWebContents = getRoutedMainWindow()?.webContents
+  if (!mainWebContents || mainWebContents.isDestroyed()) {
+    // Why: no main window means nothing owns persistence right now; the closing window's tabs are lost, but there is no writer to hand them to.
+    console.warn(
+      '[project-window] no main window to receive the project session handback; terminals in the closing window may not persist'
+    )
+    return false
+  }
+  try {
+    mainWebContents.send('session:projectSessionHandback', handback)
+    return true
+  } catch {
+    // Why: a frame disposed mid-send must not throw back into the closing window's synchronous beforeunload.
+    return false
+  }
+}
+
+/**
  * Payload is per-recipient: entries owned by the target window are excluded, so every
  * renderer can treat the received list uniformly as "projects open in OTHER windows".
  */
@@ -106,6 +131,7 @@ export function registerProjectWindowHandlers(store: Store, keybindings?: Keybin
   ipcMain.removeHandler('projectWindow:open')
   ipcMain.removeHandler('projectWindow:raise')
   ipcMain.removeAllListeners('projectWindow:activeProjectChanged')
+  ipcMain.removeAllListeners('session:handbackProjectSession')
   unsubscribeRegistryBroadcast?.()
   unsubscribeRegistryBroadcast = onProjectWindowRegistryChanged(broadcastOpenProjectsChanged)
 
@@ -195,5 +221,30 @@ export function registerProjectWindowHandlers(store: Store, keybindings?: Keybin
     // Why: this message doubles as "project renderer is subscribed"; the reply snapshot hydrates
     // late subscribers even if the did-finish-load send raced ahead of the renderer's listener.
     sendOpenProjectsTo(senderWindow, listProjectWindowProjectKeys())
+  })
+
+  // Why sync: a closing project window fires this in beforeunload; a sync reply keeps the relay
+  // ordered ahead of the window teardown so main receives the slice before the renderer dies.
+  ipcMain.on('session:handbackProjectSession', (event, handback: unknown): void => {
+    event.returnValue = { ok: false }
+    if (!isTrustedUIRenderer(event.sender)) {
+      console.warn('[project-window] session handback rejected: untrusted sender', event.sender.id)
+      return
+    }
+    const payload = handback as Partial<ProjectWindowSessionHandback> | null
+    if (
+      !payload ||
+      typeof payload.projectKey !== 'string' ||
+      payload.projectKey.length === 0 ||
+      !Array.isArray(payload.workspaceKeys) ||
+      typeof payload.session !== 'object' ||
+      payload.session === null
+    ) {
+      console.warn('[project-window] session handback rejected: invalid payload')
+      return
+    }
+    event.returnValue = {
+      ok: relayProjectSessionHandbackToMain(payload as ProjectWindowSessionHandback)
+    }
   })
 }

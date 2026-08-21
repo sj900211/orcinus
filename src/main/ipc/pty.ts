@@ -3135,6 +3135,10 @@ export function registerPtyHandlers(
       clearDeliveryResyncProbe(state)
       state.deliveryResyncUnansweredWarnLogged = false
     }
+    // Why: a closing project window's live PTYs fall back to main, which must repaint them; the
+    // main window's own reload repaints from itself, so it keeps the plain delete (no owner change).
+    const isOwnerWindowGone = webContentsId !== mainFlowState.webContentsId
+    const ownerGonePtyIds = new Set<string>()
     // Deleting the visited entry mid-iteration is safe for Map/Set iterators.
     for (const [id, accounting] of rendererDeliveryAccountingByPty) {
       if (accounting.ownerWebContentsId !== webContentsId) {
@@ -3143,7 +3147,13 @@ export function registerPtyHandlers(
       // Why release before clearing: pending bytes and credits belonged to the dead page; releasing producer pauses first keeps no shell wedged.
       producerFlowControl.release(id)
       sshOutputIntake?.transferPtyProjections(id, 'renderer-lifecycle-reset')
-      rendererDeliveryAccountingByPty.delete(id)
+      if (isOwnerWindowGone) {
+        // Latches a restore marker for the new (main) owner instead of dropping the PTY silently.
+        releasePtyAccountingForOwnerChange(id, accounting)
+        ownerGonePtyIds.add(id)
+      } else {
+        rendererDeliveryAccountingByPty.delete(id)
+      }
     }
     for (const id of pendingData.keys()) {
       if (!ptyBelongsToWindow(id, webContentsId)) {
@@ -3166,7 +3176,8 @@ export function registerPtyHandlers(
       }
     }
     for (const id of rendererDeliveryRestoreNeededPtys) {
-      if (ptyBelongsToWindow(id, webContentsId)) {
+      // Why keep ownerGonePtyIds: their restore latch was just added above for the new (main) owner; the deferred emit below consumes it.
+      if (!ownerGonePtyIds.has(id) && ptyBelongsToWindow(id, webContentsId)) {
         rendererDeliveryRestoreNeededPtys.delete(id)
       }
     }
@@ -3178,6 +3189,34 @@ export function registerPtyHandlers(
       state.dispatcherReady = false
       // Why: arm the self-heal watchdog so a never-arriving handshake can't hold the gate forever; the real handshake cancels it.
       armDispatcherReadyWatchdog(state)
+    }
+    if (ownerGonePtyIds.size > 0) {
+      // Why deferred: the BrowserWindow 'closed' handler that unregisters the project window from the
+      // routing registry runs after this webContents-'destroyed' reset; waiting a turn lets
+      // resolvePtyOwnerWindow fall the marker through to main instead of the dying project window.
+      setImmediate(() => {
+        for (const id of ownerGonePtyIds) {
+          if (!rendererDeliveryRestoreNeededPtys.has(id)) {
+            continue
+          }
+          if (
+            sendModelRestoreNeededMarker(
+              id,
+              'renderer-window-closed',
+              runtime?.getPtyOutputSequence(id)
+            )
+          ) {
+            rendererDeliveryRestoreNeededPtys.delete(id)
+          } else {
+            console.warn(
+              '[pty] restore marker after window close found no owner; PTY output may stall',
+              {
+                id: redactPtyIdForDiagnostics(id)
+              }
+            )
+          }
+        }
+      })
     }
   }
 

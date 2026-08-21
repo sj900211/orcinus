@@ -3,6 +3,7 @@ import type {
   WorkspaceSessionPatch,
   WorkspaceSessionState
 } from '../../shared/workspace-session-state-types'
+import type { ProjectWindowSessionHandback } from '../../shared/project-window-session-handback'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type {
   RemoteWorkspaceChangedEvent,
@@ -23,6 +24,10 @@ export type WorkspaceSessionApi = {
     /** Main asks this window to checkpoint its live session now (e.g. before a workspace window opens). */
     onCheckpointRequest: (callback: (args: { requestId: string }) => void) => () => void
     sendCheckpointReply: (args: { requestId: string; ok: boolean }) => void
+    /** A closing project window hands its project's session slice to main synchronously (reverse checkpoint). */
+    handbackProjectSessionSync: (args: ProjectWindowSessionHandback) => void
+    /** Main window receives a closing project window's session slice to merge and persist. */
+    onProjectSessionHandback: (callback: (args: ProjectWindowSessionHandback) => void) => () => void
   }
   cache: {
     getGitHub: () => Promise<{

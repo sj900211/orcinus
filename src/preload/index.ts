@@ -3237,6 +3237,18 @@ const api = {
     },
     sendCheckpointReply: (args) => {
       ipcRenderer.send('session:checkpointReply', args)
+    },
+    /** Synchronous so it lands during the closing window's beforeunload before teardown. */
+    handbackProjectSessionSync: (args) => {
+      ipcRenderer.sendSync('session:handbackProjectSession', args)
+    },
+    onProjectSessionHandback: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        args: Parameters<typeof callback>[0]
+      ): void => callback(args)
+      ipcRenderer.on('session:projectSessionHandback', listener)
+      return () => ipcRenderer.removeListener('session:projectSessionHandback', listener)
     }
   } satisfies PreloadApi['session'],
 
