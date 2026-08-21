@@ -179,6 +179,22 @@ describe('getEmptyProjectPlaceholderRepoIds', () => {
     ).toEqual([sleeping.id])
   })
 
+  it('keeps a windowed-elsewhere ungrouped project as a header-only placeholder', () => {
+    // Its rows are hidden by the visibility funnel; the header must stay so the marker/background render.
+    expect(
+      Array.from(
+        getEmptyProjectPlaceholderRepoIds({
+          groupBy: 'repo',
+          repos: [repo],
+          worktreesByRepo: { [repo.id]: [worktree] },
+          visibleWorktrees: [],
+          filterRepoIds: [],
+          projectKeysInOtherWindows: new Set([repo.id])
+        })
+      )
+    ).toEqual([repo.id])
+  })
+
   it('does not placeholder ungrouped neighbors of a filtered grouped member', () => {
     const grouped: Repo = { ...repo, id: 'repo-grouped', projectGroupId: 'group-1' }
     const ungrouped: Repo = { ...repo, id: 'repo-ungrouped' }

@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  AppWindow,
   CircleX,
   Ellipsis,
   Eye,
@@ -24,11 +25,18 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
 import { getRepositoryIconSectionId } from '@/components/settings/repository-settings-targets'
 import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { WorktreeVisibilityDefaults } from '../../../../../../shared/global-settings-types'
+import {
+  getRepoExecutionHostId,
+  LOCAL_EXECUTION_HOST_ID,
+  type ExecutionHostId
+} from '../../../../../../shared/execution-host'
 import { isGitRepoKind } from '../../../../../../shared/repo-kind'
+import { projectKeyForWorkspaceKey } from '../../../../../../shared/project-window-key'
 import {
   effectiveExternalWorktreeVisibility,
   isLegacyRepoForExternalWorktreeVisibility
@@ -56,6 +64,27 @@ function getWorktreeVisibilityMenuLabel(
   return visibility === 'show' ? 'Hide non-Orca worktrees' : 'Show hidden worktrees'
 }
 
+/**
+ * "Open in New Window" gating for a project header. SSH/runtime-hosted projects are
+ * excluded: a project window defers non-local terminal attach, so it would open onto
+ * dead panes. Shown only for a FREE project — one no window currently owns: not open
+ * in another window (its header is a marker there) AND not this window's own active
+ * project (already shown here). Free-only both matches "open a project you aren't
+ * focused on" and structurally caps windows at the project count (main included):
+ * each open consumes a free project, so you run out of windows before projects.
+ */
+export function canOpenProjectInNewWindow(args: {
+  isOpenInOtherWindow: boolean
+  isOwnActiveProject: boolean
+  executionHostId: ExecutionHostId
+}): boolean {
+  return (
+    !args.isOpenInOtherWindow &&
+    !args.isOwnActiveProject &&
+    args.executionHostId === LOCAL_EXECUTION_HOST_ID
+  )
+}
+
 export type RepoHeaderProjectActions = {
   getWorktreeVisibilityDefaults: (repo: Repo) => WorktreeVisibilityDefaults | undefined
   onOpenRepoSettings: (projectId: string, sectionId?: string) => void
@@ -78,6 +107,18 @@ export function RepoHeaderProjectActionsMenu({
   projectGroups: readonly ProjectGroup[]
   actions: RepoHeaderProjectActions
 }): React.JSX.Element {
+  // The window unit is the PROJECT: its repoId keys the project-window registry.
+  const isOpenInOtherWindow = useAppStore((s) => s.projectKeysInOtherWindows.has(repo.id))
+  // Why: this window already owns the project it displays, so "open in new window" is offered
+  // only for FREE projects (not this window's active one, not one owned elsewhere).
+  const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
+  const isOwnActiveProject =
+    activeWorktreeId !== null && projectKeyForWorkspaceKey(activeWorktreeId) === repo.id
+  const showOpenInNewWindow = canOpenProjectInNewWindow({
+    isOpenInOtherWindow,
+    isOwnActiveProject,
+    executionHostId: getRepoExecutionHostId(repo)
+  })
   return (
     <DropdownMenu modal={false}>
       <Tooltip>
@@ -118,6 +159,15 @@ export function RepoHeaderProjectActionsMenu({
         onClick={stopRepoHeaderMenuEvent}
         onKeyDown={stopRepoHeaderMenuEvent}
       >
+        {showOpenInNewWindow ? (
+          <DropdownMenuItem onSelect={() => void window.api.projectWindow.open(repo.id)}>
+            <AppWindow className="size-3.5" />
+            {translate(
+              'auto.components.sidebar.WorktreeList.openInNewWindow',
+              'Open in New Window'
+            )}
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onSelect={() => actions.onOpenRepoSettings(repo.id)}>
           <SlidersHorizontal className="size-3.5" />
           {translate('auto.components.sidebar.WorktreeList.2cdffbc728', 'Project Settings')}

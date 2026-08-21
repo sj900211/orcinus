@@ -20,6 +20,7 @@ import { getRepoOwnerWorktreeVisibilityDefaults } from '../../../../store/worktr
 type BuildArgs = {
   props: VirtualizedWorktreeViewportProps
   projectGroups: readonly ProjectGroup[]
+  projectKeysInOtherWindows: ReadonlySet<string>
   renderRows: RenderRow[]
   firstHeaderIndex: number
   virtualization: WorktreeListVirtualizer
@@ -78,6 +79,7 @@ export function buildWorktreeVirtualRowContext(args: BuildArgs): WorktreeVirtual
       collapsedGroups: props.collapsedGroups,
       workspaceStatuses: props.workspaceStatuses,
       projectGroups: args.projectGroups,
+      projectKeysInOtherWindows: args.projectKeysInOtherWindows,
       sshConnectionStates: args.sshConnectionStates,
       highlightedRevealRowKey: reveal.highlightedRevealRowKey,
       dragOverStatus: runtime.dragOverStatus,

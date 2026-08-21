@@ -49,7 +49,7 @@ vi.mock('../macos-tcc-prompt-notice', () => ({
 }))
 
 import { attachMainWindowServices } from './attach-main-window-services'
-import { registerWorkspaceWindow, unregisterWorkspaceWindow } from './workspace-window-registry'
+import { registerProjectWindow, unregisterProjectWindow } from './project-window-registry'
 
 type MockFn = ReturnType<typeof vi.fn>
 
@@ -118,7 +118,7 @@ describe('attachMainWindowServices notifier routing (workspace windows)', () => 
     const mainWindow = createMainWindow(mainSend)
     const runtime = createRuntime()
     const workspaceWindow = createWorkspaceWindow(77)
-    registerWorkspaceWindow('wt-owned', workspaceWindow as never)
+    registerProjectWindow('wt-owned', workspaceWindow as never)
     try {
       attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
       const notifier = runtime.setNotifier.mock.calls[0][0] as {
@@ -138,7 +138,7 @@ describe('attachMainWindowServices notifier routing (workspace windows)', () => 
       // Worktrees without a workspace window still land on the main window.
       expect(mainSend.mock.calls.map(([channel]) => channel)).toEqual(['ui:createTerminal'])
     } finally {
-      unregisterWorkspaceWindow('wt-owned', workspaceWindow as never)
+      unregisterProjectWindow('wt-owned', workspaceWindow as never)
     }
   })
 
@@ -147,7 +147,7 @@ describe('attachMainWindowServices notifier routing (workspace windows)', () => 
     const mainWindow = createMainWindow(mainSend)
     const runtime = createRuntime()
     const workspaceWindow = createWorkspaceWindow(78)
-    registerWorkspaceWindow('wt-broadcast', workspaceWindow as never)
+    registerProjectWindow('wt-broadcast', workspaceWindow as never)
     try {
       attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
       const notifier = runtime.setNotifier.mock.calls[0][0] as {
@@ -168,7 +168,7 @@ describe('attachMainWindowServices notifier routing (workspace windows)', () => 
         ])
       }
     } finally {
-      unregisterWorkspaceWindow('wt-broadcast', workspaceWindow as never)
+      unregisterProjectWindow('wt-broadcast', workspaceWindow as never)
     }
   })
 
@@ -177,7 +177,7 @@ describe('attachMainWindowServices notifier routing (workspace windows)', () => 
     const mainWindow = createMainWindow(mainSend)
     const runtime = createRuntime()
     const workspaceWindow = createWorkspaceWindow(79)
-    registerWorkspaceWindow('wt-reveal', workspaceWindow as never)
+    registerProjectWindow('wt-reveal', workspaceWindow as never)
     try {
       attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
       const notifier = runtime.setNotifier.mock.calls[0][0] as {
@@ -214,7 +214,7 @@ describe('attachMainWindowServices notifier routing (workspace windows)', () => 
       )
       await expect(revealPromise).resolves.toEqual({ tabId: 'tab-9', title: 'agent' })
     } finally {
-      unregisterWorkspaceWindow('wt-reveal', workspaceWindow as never)
+      unregisterProjectWindow('wt-reveal', workspaceWindow as never)
     }
   })
 })

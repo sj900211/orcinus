@@ -338,6 +338,7 @@ function setLineageState(
       'inline-agents'
     ] satisfies WorktreeCardProperty[],
     worktreeLineageById,
+    projectKeysInOtherWindows: new Set(),
     worktreesByRepo: {
       [repo.id]: worktrees
     }

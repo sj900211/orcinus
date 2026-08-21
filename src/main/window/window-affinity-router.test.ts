@@ -6,14 +6,16 @@ import {
   clearMainWindowForRouting,
   getRoutedMainWindow,
   listAppWindows,
+  resolveProjectKeyForWorkspaceKey,
   resolvePtyOwnerWindow,
   resolveWorktreeOwnerWindow,
   sendToPtyOwner,
   sendToWorktreeOwner,
   setMainWindowForRouting,
+  setProjectKeyResolverForRouting,
   setPtyWorktreeResolverForRouting
 } from './window-affinity-router'
-import { registerWorkspaceWindow, unregisterWorkspaceWindow } from './workspace-window-registry'
+import { registerProjectWindow, unregisterProjectWindow } from './project-window-registry'
 
 type FakeWindow = {
   isDestroyed: () => boolean
@@ -31,51 +33,87 @@ const asWindow = (window: FakeWindow): BrowserWindow => window as unknown as Bro
 
 describe('window-affinity-router', () => {
   const registered: [string, FakeWindow][] = []
-  const register = (worktreeId: string, window: FakeWindow): void => {
-    registerWorkspaceWindow(worktreeId, asWindow(window))
-    registered.push([worktreeId, window])
+  const register = (projectKey: string, window: FakeWindow): void => {
+    registerProjectWindow(projectKey, asWindow(window))
+    registered.push([projectKey, window])
   }
 
   afterEach(() => {
-    for (const [worktreeId, window] of registered.splice(0)) {
-      unregisterWorkspaceWindow(worktreeId, asWindow(window))
+    for (const [projectKey, window] of registered.splice(0)) {
+      unregisterProjectWindow(projectKey, asWindow(window))
     }
     _resetWindowAffinityRouterForTest()
   })
 
-  it('resolves a worktree to its workspace window and falls back to the main window', () => {
-    const main = createWindow()
-    const workspace = createWindow()
-    setMainWindowForRouting(asWindow(main))
-    register('wt-1', workspace)
+  describe('resolveProjectKeyForWorkspaceKey', () => {
+    it('maps folder keys to themselves without consulting the injected resolver', () => {
+      const resolver = vi.fn(() => 'never')
+      setProjectKeyResolverForRouting(resolver)
+      expect(resolveProjectKeyForWorkspaceKey('folder:fw-1')).toBe('folder:fw-1')
+      expect(resolver).not.toHaveBeenCalled()
+    })
 
-    expect(resolveWorktreeOwnerWindow('wt-1')).toBe(workspace)
-    expect(resolveWorktreeOwnerWindow('wt-other')).toBe(main)
+    it('prefers the injected runtime resolver for worktree ids', () => {
+      setProjectKeyResolverForRouting((worktreeId) =>
+        worktreeId === 'repo-1::/wt' ? 'repo-1' : undefined
+      )
+      expect(resolveProjectKeyForWorkspaceKey('repo-1::/wt')).toBe('repo-1')
+    })
+
+    it('falls back to the repoId prefix parse before injection or on resolver misses', () => {
+      expect(resolveProjectKeyForWorkspaceKey('repo-2::/wt')).toBe('repo-2')
+      setProjectKeyResolverForRouting(() => undefined)
+      expect(resolveProjectKeyForWorkspaceKey('repo-2::/wt')).toBe('repo-2')
+      // Separator-less keys own themselves.
+      expect(resolveProjectKeyForWorkspaceKey('repo-bare')).toBe('repo-bare')
+    })
+  })
+
+  it('resolves EVERY worktree of a project to its project window and falls back to main', () => {
+    const main = createWindow()
+    const projectWindow = createWindow()
+    setMainWindowForRouting(asWindow(main))
+    register('repo-1', projectWindow)
+
+    expect(resolveWorktreeOwnerWindow('repo-1::/wt/a')).toBe(projectWindow)
+    // Sibling worktree of the same project routes to the SAME window (project ownership).
+    expect(resolveWorktreeOwnerWindow('repo-1::/wt/b')).toBe(projectWindow)
+    expect(resolveWorktreeOwnerWindow('repo-other::/wt')).toBe(main)
     expect(resolveWorktreeOwnerWindow(undefined)).toBe(main)
   })
 
-  it('ignores destroyed workspace and main windows', () => {
+  it('resolves folder workspace keys to their own project window', () => {
     const main = createWindow()
-    const deadWorkspace = createWindow({ destroyed: true })
+    const folderWindow = createWindow()
     setMainWindowForRouting(asWindow(main))
-    register('wt-1', deadWorkspace)
+    register('folder:fw-1', folderWindow)
 
-    expect(resolveWorktreeOwnerWindow('wt-1')).toBe(main)
+    expect(resolveWorktreeOwnerWindow('folder:fw-1')).toBe(folderWindow)
+    expect(resolveWorktreeOwnerWindow('folder:fw-other')).toBe(main)
+  })
+
+  it('ignores destroyed project and main windows', () => {
+    const main = createWindow()
+    const deadProjectWindow = createWindow({ destroyed: true })
+    setMainWindowForRouting(asWindow(main))
+    register('repo-1', deadProjectWindow)
+
+    expect(resolveWorktreeOwnerWindow('repo-1::/wt')).toBe(main)
 
     const deadMain = createWindow({ destroyed: true })
     setMainWindowForRouting(asWindow(deadMain))
     expect(getRoutedMainWindow()).toBeNull()
-    expect(resolveWorktreeOwnerWindow('wt-other')).toBeNull()
+    expect(resolveWorktreeOwnerWindow('repo-other::/wt')).toBeNull()
   })
 
-  it('resolves a pty through the injected worktree resolver', () => {
+  it('resolves a pty through the injected worktree resolver into project ownership', () => {
     const main = createWindow()
-    const workspace = createWindow()
+    const projectWindow = createWindow()
     setMainWindowForRouting(asWindow(main))
-    register('wt-1', workspace)
-    setPtyWorktreeResolverForRouting((ptyId) => (ptyId === 'pty-owned' ? 'wt-1' : undefined))
+    register('repo-1', projectWindow)
+    setPtyWorktreeResolverForRouting((ptyId) => (ptyId === 'pty-owned' ? 'repo-1::/wt' : undefined))
 
-    expect(resolvePtyOwnerWindow('pty-owned')).toBe(workspace)
+    expect(resolvePtyOwnerWindow('pty-owned')).toBe(projectWindow)
     expect(resolvePtyOwnerWindow('pty-unknown')).toBe(main)
 
     setPtyWorktreeResolverForRouting(null)
@@ -84,20 +122,23 @@ describe('window-affinity-router', () => {
 
   it('sends to the owner window only and reports delivery', () => {
     const main = createWindow()
-    const workspace = createWindow()
+    const projectWindow = createWindow()
     setMainWindowForRouting(asWindow(main))
-    register('wt-1', workspace)
-    setPtyWorktreeResolverForRouting(() => 'wt-1')
+    register('repo-1', projectWindow)
+    setPtyWorktreeResolverForRouting(() => 'repo-1::/wt')
 
     expect(sendToPtyOwner('pty-1', 'pty:data', { id: 'pty-1', data: 'x' })).toBe(true)
-    expect(workspace.webContents.send).toHaveBeenCalledWith('pty:data', { id: 'pty-1', data: 'x' })
+    expect(projectWindow.webContents.send).toHaveBeenCalledWith('pty:data', {
+      id: 'pty-1',
+      data: 'x'
+    })
     expect(main.webContents.send).not.toHaveBeenCalled()
 
-    expect(sendToWorktreeOwner('wt-other', 'ui:sleepWorktree', { worktreeId: 'wt-other' })).toBe(
-      true
-    )
+    expect(
+      sendToWorktreeOwner('repo-other::/wt', 'ui:sleepWorktree', { worktreeId: 'repo-other::/wt' })
+    ).toBe(true)
     expect(main.webContents.send).toHaveBeenCalledWith('ui:sleepWorktree', {
-      worktreeId: 'wt-other'
+      worktreeId: 'repo-other::/wt'
     })
   })
 
@@ -112,18 +153,18 @@ describe('window-affinity-router', () => {
     expect(sendToWorktreeOwner(undefined, 'ui:anything')).toBe(false)
   })
 
-  it('broadcasts to the main window plus every live workspace window', () => {
+  it('broadcasts to the main window plus every live project window', () => {
     const main = createWindow()
-    const workspaceA = createWindow()
+    const projectWindowA = createWindow()
     const dead = createWindow({ destroyed: true })
     setMainWindowForRouting(asWindow(main))
-    register('wt-a', workspaceA)
-    register('wt-dead', dead)
+    register('repo-a', projectWindowA)
+    register('repo-dead', dead)
 
-    expect(listAppWindows()).toEqual([main, workspaceA])
+    expect(listAppWindows()).toEqual([main, projectWindowA])
     expect(broadcastToAppWindows('repos:changed')).toBe(true)
     expect(main.webContents.send).toHaveBeenCalledWith('repos:changed')
-    expect(workspaceA.webContents.send).toHaveBeenCalledWith('repos:changed')
+    expect(projectWindowA.webContents.send).toHaveBeenCalledWith('repos:changed')
     expect(dead.webContents.send).not.toHaveBeenCalled()
   })
 

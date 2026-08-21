@@ -308,6 +308,7 @@ function setStatusLaneState(): void {
       'inline-agents'
     ] satisfies WorktreeCardProperty[],
     worktreeLineageById: { [child.id]: makeLineage(child, parent) },
+    projectKeysInOtherWindows: new Set(),
     worktreesByRepo: { [repo.id]: [parent, child, bystander] }
   }
 }

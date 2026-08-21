@@ -178,6 +178,7 @@ import {
   resolveWorktreeOwnerWindow,
   sendToPtyOwner,
   setMainWindowForRouting,
+  setProjectKeyResolverForRouting,
   setPtyWorktreeResolverForRouting
 } from '../window/window-affinity-router'
 import {
@@ -2472,6 +2473,7 @@ export function registerPtyHandlers(
   // Why: stream routing must work from registration on, before attach-main-window-services re-registers the same window.
   setMainWindowForRouting(mainWindow)
   setPtyWorktreeResolverForRouting(runtime ? (id) => runtime.getPtyWorktreeId?.(id) : null)
+  setProjectKeyResolverForRouting(runtime ? (id) => runtime.getWorktreeRepoId?.(id) : null)
   registerRendererLifecycleResetHandlers(mainWebContents)
 
   const getLocalPtyStartupPromise = (connectionId?: string | null): Promise<void> | undefined => {

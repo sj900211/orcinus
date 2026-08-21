@@ -12154,6 +12154,12 @@ export class OrcaRuntimeService {
     return this.ptysById.get(ptyId)?.worktreeId
   }
 
+  /** The repo owning a worktree — worktree ids are `repoId::path` (the runtime's own
+   *  repo derivation, see getRepoIdFromWorktreeId call sites); undefined for non-worktree keys. */
+  getWorktreeRepoId(worktreeId: string): string | undefined {
+    return splitWorktreeId(worktreeId)?.repoId
+  }
+
   private recordAgentPromptLifecycleState(ptyId: string, status: AgentStatus | null): void {
     if (status === 'permission') {
       this.recordAgentPromptPermissionObservation(ptyId)

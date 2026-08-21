@@ -110,6 +110,34 @@ describe('computeVisibleWorktreeIds', () => {
     expect(deviceIds.get('env-1')).toBe('authenticated-device')
   })
 
+  it('hides worktrees of a project windowed in another window (header stays via placeholder)', () => {
+    const owned1 = makeWorktree('owned1', 'repo1')
+    const owned2 = makeWorktree('owned2', 'repo1')
+    const free = makeWorktree('free', 'repo2')
+
+    const result = computeVisibleWorktreeIds(
+      { repo1: [owned1, owned2], repo2: [free] },
+      [owned1.id, owned2.id, free.id],
+      visibleOptions({ projectKeysInOtherWindows: new Set(['repo1']) })
+    )
+
+    // repo1 rows drop out entirely; repo2 is untouched. (The repo1 header is kept by the placeholder path, not this funnel.)
+    expect(result).toEqual([free.id])
+  })
+
+  it('keeps every project visible when no project is windowed elsewhere', () => {
+    const a = makeWorktree('a', 'repo1')
+    const b = makeWorktree('b', 'repo2')
+
+    const result = computeVisibleWorktreeIds(
+      { repo1: [a], repo2: [b] },
+      [a.id, b.id],
+      visibleOptions({ projectKeysInOtherWindows: new Set() })
+    )
+
+    expect(result).toEqual([a.id, b.id])
+  })
+
   it('hides only known workspaces created by another device', () => {
     const own = {
       ...makeWorktree('own'),

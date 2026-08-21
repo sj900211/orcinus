@@ -43,7 +43,8 @@ vi.mock('@/store', () => ({
       ptyIdsByTabId,
       tabsByWorktree,
       updateWorktreeMeta,
-      worktreeCardProperties
+      worktreeCardProperties,
+      projectKeysInOtherWindows: new Set()
     })
 }))
 

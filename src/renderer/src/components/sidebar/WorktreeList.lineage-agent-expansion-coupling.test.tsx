@@ -360,6 +360,7 @@ function setAgentLineageState(options: {
       'inline-agents'
     ] satisfies WorktreeCardProperty[],
     worktreeLineageById: { [child.id]: makeLineage(child, parent) },
+    projectKeysInOtherWindows: new Set(),
     worktreesByRepo: { [repo.id]: [parent, child] },
 
     // ── agent-list specific state (real WorktreeCardAgents deps) ──

@@ -83,6 +83,7 @@ export function useSidebarSectionRows(args: SectionRowsArgs) {
     [repos]
   )
   const allRepoIds = useMemo(() => repos.map((r) => r.id), [repos])
+  const projectKeysInOtherWindows = useAppStore((s) => s.projectKeysInOtherWindows)
   const placeholderRepoIds = useMemo(
     () =>
       getEmptyProjectPlaceholderRepoIds({
@@ -90,9 +91,17 @@ export function useSidebarSectionRows(args: SectionRowsArgs) {
         repos: args.visibleReposForRows,
         worktreesByRepo,
         visibleWorktrees: worktrees,
-        filterRepoIds: args.filterRepoIds
+        filterRepoIds: args.filterRepoIds,
+        projectKeysInOtherWindows
       }),
-    [args.filterRepoIds, args.groupBy, args.visibleReposForRows, worktrees, worktreesByRepo]
+    [
+      args.filterRepoIds,
+      args.groupBy,
+      args.visibleReposForRows,
+      worktrees,
+      worktreesByRepo,
+      projectKeysInOtherWindows
+    ]
   )
 
   // Why: subscribe on a flat key array (useShallow) so progress ticks don't rebuild the whole row model.

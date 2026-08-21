@@ -27,7 +27,8 @@ vi.mock('@/store', () => {
     createProjectGroup: vi.fn(),
     moveProjectToGroup: vi.fn(),
     deleteFolderWorkspace: vi.fn(),
-    setActiveWorktree: vi.fn()
+    setActiveWorktree: vi.fn(),
+    projectKeysInOtherWindows: new Set()
   }
   return {
     useAppStore: Object.assign((selector: (value: typeof state) => unknown) => selector(state), {

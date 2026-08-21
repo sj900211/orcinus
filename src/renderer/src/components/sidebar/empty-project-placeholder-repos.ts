@@ -8,6 +8,8 @@ export function getEmptyProjectPlaceholderRepoIds(args: {
   worktreesByRepo: Readonly<Record<string, readonly Worktree[] | undefined>>
   visibleWorktrees: readonly Worktree[]
   filterRepoIds: readonly string[]
+  // A repo's project key is its repoId; when windowed elsewhere its rows are hidden but its header must stay.
+  projectKeysInOtherWindows?: ReadonlySet<string>
 }): Set<string> {
   if (args.groupBy !== 'repo') {
     return new Set()
@@ -24,7 +26,9 @@ export function getEmptyProjectPlaceholderRepoIds(args: {
     // Why: workspace filters hide cards, but must not rewrite the visible
     // membership of a persisted Project Group. #8865
     const isFilteredProjectGroupMember = repo.projectGroupId != null && !visibleRepoIds.has(repo.id)
-    if (hasNoWorktrees || isFilteredProjectGroupMember) {
+    // Why: a project windowed elsewhere has its rows hidden here, but stays a header-only marker.
+    const isWindowedElsewhere = args.projectKeysInOtherWindows?.has(repo.id) ?? false
+    if (hasNoWorktrees || isFilteredProjectGroupMember || isWindowedElsewhere) {
       placeholderRepoIds.add(repo.id)
     }
   }

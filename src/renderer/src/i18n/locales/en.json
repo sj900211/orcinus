@@ -5293,6 +5293,8 @@
           "deleteWithDescendants": "Delete with Descendants…"
         },
         "WorktreeList": {
+          "openInNewWindow": "Open in New Window",
+          "projectOpenInAnotherWindow": "Project open in another window",
           "7a8b9c0d1e": "Update required",
           "hostAuthNeeded": "Authentication needed",
           "hostDisconnected": "Disconnected",

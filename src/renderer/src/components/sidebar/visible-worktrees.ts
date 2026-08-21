@@ -48,6 +48,7 @@ import {
 } from './workspace-creator-visibility'
 import { isDefaultBranchWorkspace } from './default-branch-workspace'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 
 /**
  * Whether the "Hide sleeping" sweep must keep this row (#8873).
@@ -82,6 +83,8 @@ type VisibleWorktreeOptions = {
   worktreeLineageById: Record<string, WorktreeLineage>
   injectLineageAncestors?: boolean
   forcedVisibleWorktreeIds?: readonly string[]
+  // Project keys (repoId / `folder:` key) windowed elsewhere: their rows hide here so the owning window is the only place they activate.
+  projectKeysInOtherWindows?: ReadonlySet<string>
 }
 
 export function computeVisibleWorktrees(
@@ -118,6 +121,16 @@ export function computeVisibleWorktrees(
 
   if (opts.hideDetachedHeadWorkspaces) {
     all = all.filter((w) => !isDetachedHeadWorkspace(w))
+  }
+
+  // Why: a project windowed elsewhere only shows its rows in its own window; here it stays a header-only marker (the section header is emitted even with zero rows).
+  if (opts.projectKeysInOtherWindows && opts.projectKeysInOtherWindows.size > 0) {
+    const projectKeysInOtherWindows = opts.projectKeysInOtherWindows
+    all = all.filter((w) => {
+      // Synthetic folder rows are their own single-member project; git worktrees carry their repoId.
+      const projectKey = parseWorkspaceKey(w.id)?.type === 'folder' ? w.id : w.repoId
+      return !projectKeysInOtherWindows.has(projectKey)
+    })
   }
 
   const visibleHostIds =

@@ -18,7 +18,10 @@ import {
 import { recoverFromDegradedStartup } from '../startup/startup-degraded-recovery'
 import { restoreSessionSshConnectionsAtStartup } from '../startup/startup-ssh-connection-restore'
 import { getWindowBootContext } from '../startup/window-boot-context'
-import { activateAndRevealWorkspace } from '../lib/worktree-activation'
+import {
+  activateProjectWindowBootWorkspace,
+  collectProjectWindowReconnectKeys
+} from '../startup/project-window-boot-workspace'
 import { publishTerminalViewAttributesAtAppStart } from '../components/terminal-pane/terminal-appearance'
 import { getSystemPrefersDark } from '../lib/terminal-theme'
 import {
@@ -66,7 +69,7 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
   // Fetch initial data + hydrate GitHub cache from disk
   useEffect(() => {
     let cancelled = false
-    // Workspace windows (opened via workspaceWindow:open) hydrate read-only onto one worktree;
+    // Project windows (opened via projectWindow:open) hydrate read-only onto one project;
     // the main window stays the only SSH-reconnect/terminal-restore/persistence owner.
     const bootContext = getWindowBootContext()
     // Why: declared outside the async block so cleanup can abort it — under StrictMode the first (unmounted) pass would otherwise keep spawning PTYs.
@@ -204,14 +207,7 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
             actions.seedActiveWorktreeLastVisitedIfMissing()
           })
           if (bootContext.role === 'workspace') {
-            // Why: same shared activation path as a sidebar click, so repo/view/tab state land consistently.
-            const activated = activateAndRevealWorkspace(bootContext.worktreeId)
-            if (activated === false) {
-              console.warn(
-                '[startup] Workspace window worktree not found after hydration; keeping default view:',
-                bootContext.worktreeId
-              )
-            }
+            await activateProjectWindowBootWorkspace(bootContext)
           }
           await timeRendererStartupStep('fetch-browser-session-profiles', () =>
             actions.fetchBrowserSessionProfiles()
@@ -258,11 +254,14 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
               )
             })
             reconnectStarted = true
-            // Why scoped: this window streams only its boot worktree's PTYs; SSH-backed tabs it
+            // Why scoped: this window streams only its own project's PTYs; SSH-backed tabs it
             // cannot dial stay deferred (placeholder panes) instead of erroring.
             await timeRendererStartupStep('reconnect-terminals', () =>
               actions.reconnectPersistedTerminals(abortController.signal, {
-                workspaceKeys: [bootContext.worktreeId]
+                workspaceKeys: collectProjectWindowReconnectKeys(
+                  useAppStore.getState(),
+                  bootContext
+                )
               })
             )
             // Why: the workbench mounts behind workspaceSessionReady && (hydrationSucceeded ||
@@ -326,11 +325,14 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
           reconnectStarted,
           isCancelled: () => cancelled,
           hydratePersistedUI: actions.hydratePersistedUI,
-          // Why: a degraded workspace window must still only reconnect its boot worktree.
+          // Why: a degraded project window must still only reconnect its own project's workspaces.
           reconnectPersistedTerminals: (signal) =>
             bootContext.role === 'workspace'
               ? actions.reconnectPersistedTerminals(signal, {
-                  workspaceKeys: [bootContext.worktreeId]
+                  workspaceKeys: collectProjectWindowReconnectKeys(
+                    useAppStore.getState(),
+                    bootContext
+                  )
                 })
               : actions.reconnectPersistedTerminals(signal),
           abortSignal: abortController.signal

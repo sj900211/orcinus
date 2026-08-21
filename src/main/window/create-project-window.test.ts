@@ -14,8 +14,8 @@ vi.mock('./createMainWindow', () => ({
   loadMainWindow: loadMainWindowMock
 }))
 
-import { createOrFocusWorkspaceWindow } from './create-workspace-window'
-import { getWorkspaceWindow } from './workspace-window-registry'
+import { createOrFocusProjectWindow } from './create-project-window'
+import { getProjectWindow } from './project-window-registry'
 
 type FakeWindow = {
   destroyed: boolean
@@ -53,7 +53,7 @@ function makeFakeWindow(): FakeWindow {
 
 const openWindows: FakeWindow[] = []
 
-describe('createOrFocusWorkspaceWindow', () => {
+describe('createOrFocusProjectWindow', () => {
   beforeEach(() => {
     createMainWindowMock.mockImplementation(() => {
       const window = makeFakeWindow()
@@ -73,20 +73,28 @@ describe('createOrFocusWorkspaceWindow', () => {
     getFocusedWindowMock.mockReturnValue(null)
   })
 
-  it('creates a deferred-load workspace window, registers it, and loads the worktree query param', () => {
+  it('creates a deferred-load project window, registers it, and loads the project query param', () => {
     const store = { marker: 'store' }
     const getKeybindings = vi.fn()
 
-    const window = createOrFocusWorkspaceWindow(store as never, 'wt one/1', { getKeybindings })
+    const window = createOrFocusProjectWindow(store as never, 'repo one/1', { getKeybindings })
 
     expect(createMainWindowMock).toHaveBeenCalledWith(store, {
       role: 'workspace',
       deferLoad: true,
       getKeybindings
     })
-    expect(getWorkspaceWindow('wt one/1')).toBe(window)
+    expect(getProjectWindow('repo one/1')).toBe(window)
     expect(loadMainWindowMock).toHaveBeenCalledWith(window, {
-      search: 'orca-worktree=wt%20one%2F1'
+      search: 'orca-project=repo%20one%2F1'
+    })
+  })
+
+  it('appends the optional initial worktree as an orca-worktree param', () => {
+    const window = createOrFocusProjectWindow(null, 'repo-1', { worktreeId: 'repo-1::/wt a' })
+
+    expect(loadMainWindowMock).toHaveBeenCalledWith(window, {
+      search: 'orca-project=repo-1&orca-worktree=repo-1%3A%3A%2Fwt%20a'
     })
   })
 
@@ -95,7 +103,7 @@ describe('createOrFocusWorkspaceWindow', () => {
       getBounds: () => ({ x: 100, y: 50, width: 1280, height: 720 })
     })
 
-    createOrFocusWorkspaceWindow(null, 'wt-2')
+    createOrFocusProjectWindow(null, 'repo-2')
 
     expect(createMainWindowMock).toHaveBeenCalledWith(null, {
       role: 'workspace',
@@ -106,8 +114,8 @@ describe('createOrFocusWorkspaceWindow', () => {
   })
 
   it('focuses the existing window instead of creating a second one', () => {
-    const first = createOrFocusWorkspaceWindow(null, 'wt-3')
-    const second = createOrFocusWorkspaceWindow(null, 'wt-3')
+    const first = createOrFocusProjectWindow(null, 'repo-3')
+    const second = createOrFocusProjectWindow(null, 'repo-3')
 
     expect(second).toBe(first)
     expect(createMainWindowMock).toHaveBeenCalledTimes(1)
@@ -116,23 +124,23 @@ describe('createOrFocusWorkspaceWindow', () => {
   })
 
   it('restores a minimized existing window when re-requested', () => {
-    const window = createOrFocusWorkspaceWindow(null, 'wt-4') as unknown as FakeWindow
+    const window = createOrFocusProjectWindow(null, 'repo-4') as unknown as FakeWindow
     window.minimized = true
 
-    createOrFocusWorkspaceWindow(null, 'wt-4')
+    createOrFocusProjectWindow(null, 'repo-4')
 
     expect(window.restore).toHaveBeenCalledTimes(1)
     expect(window.focus).toHaveBeenCalledTimes(1)
   })
 
   it('unregisters on close so the next request opens a fresh window', () => {
-    const first = createOrFocusWorkspaceWindow(null, 'wt-5') as unknown as FakeWindow
+    const first = createOrFocusProjectWindow(null, 'repo-5') as unknown as FakeWindow
     first.destroyed = true
     first.emit('closed')
 
-    expect(getWorkspaceWindow('wt-5')).toBeNull()
+    expect(getProjectWindow('repo-5')).toBeNull()
 
-    const second = createOrFocusWorkspaceWindow(null, 'wt-5')
+    const second = createOrFocusProjectWindow(null, 'repo-5')
     expect(second).not.toBe(first)
     expect(createMainWindowMock).toHaveBeenCalledTimes(2)
   })

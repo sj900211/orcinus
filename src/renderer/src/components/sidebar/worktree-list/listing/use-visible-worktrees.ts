@@ -45,6 +45,7 @@ export function useVisibleSidebarWorktrees(args: {
     workspaceHostScope
   } = filterState
   const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
+  const projectKeysInOtherWindows = useAppStore((s) => s.projectKeysInOtherWindows)
   const agentStatusEpoch = useAppStore((s) => (!showSleepingWorkspaces ? s.agentStatusEpoch : 0))
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   const runtimeStatusByEnvironmentId = useAppStore((s) => s.runtimeStatusByEnvironmentId)
@@ -94,6 +95,7 @@ export function useVisibleSidebarWorktrees(args: {
       visibleWorkspaceHostIds,
       defaultHostId: getSettingsFocusedExecutionHostId(settings),
       worktreeLineageById,
+      projectKeysInOtherWindows,
       forcedVisibleWorktreeIds: args.agentSendTargetWorktreeId
         ? [args.agentSendTargetWorktreeId]
         : undefined
@@ -101,6 +103,7 @@ export function useVisibleSidebarWorktrees(args: {
   }, [
     args.agentSendTargetWorktreeId,
     agentStatusEpoch,
+    projectKeysInOtherWindows,
     filterRepoIds,
     showSleepingWorkspaces,
     hideDefaultBranchWorkspace,

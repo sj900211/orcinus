@@ -66,7 +66,8 @@ function retryFocus(window: BrowserWindow, app: Pick<App, 'focus'>, setTimer: Fo
 
 // Why: shared so the sync success path and the async retry/adopt callback can't
 // drift on win32 reinforcement (moveTop/pulseAlwaysOnTop) or the 100ms focus retry.
-function activateWindow(
+// Exported for projectWindow:raise, which reveals an existing project window cross-platform.
+export function activateWindow(
   window: BrowserWindow,
   app: Pick<App, 'focus'>,
   platform: NodeJS.Platform,

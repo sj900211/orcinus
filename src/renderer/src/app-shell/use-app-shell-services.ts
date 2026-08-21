@@ -16,6 +16,8 @@ import { useGitStatusPolling } from '../components/right-sidebar/useGitStatusPol
 import { useOsc52ClipboardDefaultOnNotice } from '../components/terminal-pane/osc52-clipboard-default-on-notice'
 import { useWebSessionTabsSync } from '../runtime/web-session-tabs-sync'
 import { useRemoteRuntimeRecoveryTriggers } from '../runtime/use-remote-runtime-recovery-triggers'
+import { useWorktreeTakeoverNavigation } from './use-worktree-takeover-navigation'
+import { useProjectWindowActiveProjectSync } from './use-project-window-active-project-sync'
 
 /**
  * App-level subscriptions that must outlive any individual surface. Each one is here because
@@ -33,6 +35,10 @@ export function useAppShellServices(): void {
   useWebSessionTabsSync()
   // Subscribe to IPC push events
   useIpcEvents()
+  // Multi-window: navigate away when another window takes over the active project, and
+  // (workspace role only) report cross-project switches so main re-keys the window registry.
+  useWorktreeTakeoverNavigation()
+  useProjectWindowActiveProjectSync()
   useRemoteRuntimeRecoveryTriggers()
   useAutomationDispatchEvents()
   // Why: git polling lives at App level (RightSidebar unmounts when closed, stranding stale Rebasing/Merging badges); gate on workspaceSessionReady so it doesn't compete with first paint.

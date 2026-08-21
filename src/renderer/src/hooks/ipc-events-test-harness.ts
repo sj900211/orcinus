@@ -75,6 +75,7 @@ export function createHarnessStoreState(
     setPortForwards: vi.fn(),
     clearPortForwards: vi.fn(),
     setDetectedPorts: vi.fn(),
+    setProjectKeysInOtherWindows: vi.fn(),
     enqueueSshCredentialRequest: vi.fn(),
     removeSshCredentialRequest: vi.fn(),
     ptyIdsByTabId: {},
@@ -126,6 +127,8 @@ export type IpcEventsHarness = {
   jumpToWorktreeIndex: (index: number) => void
   jumpToTabIndex: (index: number) => void
   navigationUpdate: (event: { browserPageId: string; url: string; title: string }) => void
+  /** Fire the main-process "projects open in other windows" push. */
+  openProjectsChanged: (projectKeys: string[]) => void
   /** Standard (non-palette) target of a workspace digit chord. */
   activateAndRevealWorkspace: ReturnType<typeof vi.fn>
 }
@@ -151,6 +154,7 @@ export async function loadIpcEventsHarness(
   let navigationUpdateListener:
     | ((event: { browserPageId: string; url: string; title: string }) => void)
     | null = null
+  let openProjectsChangedListener: ((projectKeys: string[]) => void) | null = null
   const indexJumpListeners = new Map<string, (index: number) => void>()
 
   vi.resetModules()
@@ -262,6 +266,12 @@ export async function loadIpcEventsHarness(
         mobile: createApiNamespaceStub({
           consumePendingUnpairedDeviceAuthFailure: () => Promise.resolve(false)
         }),
+        projectWindow: createApiNamespaceStub({
+          onOpenProjectsChanged: (listener: (projectKeys: string[]) => void) => {
+            openProjectsChangedListener = listener
+            return () => {}
+          }
+        }),
         remoteWorkspace: createApiNamespaceStub({ clientId: () => Promise.resolve(null) })
       } as Record<string, unknown>,
       { get: (target, prop: string) => target[prop] ?? createApiNamespaceStub() }
@@ -291,6 +301,12 @@ export async function loadIpcEventsHarness(
         throw new Error('Expected the browser navigation listener to be registered')
       }
       navigationUpdateListener(event)
+    },
+    openProjectsChanged: (projectKeys) => {
+      if (typeof openProjectsChangedListener !== 'function') {
+        throw new Error('Expected the open-projects-changed listener to be registered')
+      }
+      openProjectsChangedListener(projectKeys)
     },
     activateAndRevealWorkspace
   }

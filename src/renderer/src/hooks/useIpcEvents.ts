@@ -1314,6 +1314,17 @@ export function useIpcEvents(): void {
       })
     )
 
+    // Why ?.: additive API — older preloads/web fallback and partial test harnesses may lack it.
+    const unsubscribeOpenProjectsChanged = window.api.projectWindow?.onOpenProjectsChanged?.(
+      (projectKeys) => {
+        // Main tailors the payload per recipient, so this list is exactly "open in OTHER windows".
+        useAppStore.getState().setProjectKeysInOtherWindows(projectKeys)
+      }
+    )
+    if (unsubscribeOpenProjectsChanged) {
+      unsubs.push(unsubscribeOpenProjectsChanged)
+    }
+
     if (window.api.keybindings) {
       unsubs.push(
         window.api.keybindings.onChanged((snapshot) => {

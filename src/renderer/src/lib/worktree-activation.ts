@@ -17,6 +17,7 @@ import {
 import { resumeSleepingAgentSessionsForWorktree } from '@/lib/resume-sleeping-agent-session'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../shared/workspace-scope'
+import { projectKeyForWorkspaceKey } from '../../../shared/project-window-key'
 import {
   folderWorkspaceActivationBlocked,
   getFolderWorkspacePathStatusDescription,
@@ -62,9 +63,38 @@ function ensureFolderWorkspaceInitialTerminal(
   return primaryTabId
 }
 
+/**
+ * Raise-instead-of-switch: a workspace whose PROJECT is owned by another app window
+ * must focus that window, not re-activate here. Returns true when the raise was
+ * dispatched (caller returns `false` without side effects). `bypass` is for internal
+ * flows that must not bounce — see ActivateOtherWindowGuardOpts.
+ *
+ * Why raise the window only (no worktree forwarding): the owning window already shows
+ * that project's rows, so cross-window worktree-activation forwarding is dead weight —
+ * dropping it removes the fragile forwarding bug class.
+ */
+function raiseOtherWindowForWorkspaceKey(workspaceKey: string, bypass?: boolean): boolean {
+  if (bypass) {
+    return false
+  }
+  const projectKey = projectKeyForWorkspaceKey(workspaceKey)
+  if (!useAppStore.getState().projectKeysInOtherWindows.has(projectKey)) {
+    return false
+  }
+  void window.api.projectWindow?.raise?.(projectKey)
+  return true
+}
+
+type ActivateOtherWindowGuardOpts = {
+  /** Skip the raise-instead-of-switch guard. Use sparingly: takeover nav-away (the target was
+   *  just vetted as un-windowed, and bouncing there could loop) and history replay that must
+   *  not re-raise. Every other caller should let the guard run. */
+  bypassOtherWindowGuard?: boolean
+}
+
 export function activateAndRevealFolderWorkspace(
   folderWorkspaceId: string,
-  opts?: {
+  opts?: ActivateOtherWindowGuardOpts & {
     sidebarRevealBehavior?: PendingSidebarWorktreeReveal['behavior']
     startup?: WorktreeStartupPayload
     runtimeEnvironmentId?: string | null
@@ -73,6 +103,15 @@ export function activateAndRevealFolderWorkspace(
     providesInitialSurface?: boolean
   }
 ): ActivateAndRevealResult | false {
+  // Why keyed by folder key: a folder workspace is its own single-member project (`folder:<id>`).
+  if (
+    raiseOtherWindowForWorkspaceKey(
+      folderWorkspaceKey(folderWorkspaceId),
+      opts?.bypassOtherWindowGuard
+    )
+  ) {
+    return false
+  }
   const state = useAppStore.getState()
   const folderWorkspaceOwner = findFolderWorkspaceOwner(
     state,
@@ -138,7 +177,7 @@ export function activateAndRevealFolderWorkspace(
 
 export function activateAndRevealWorktree(
   worktreeId: string,
-  opts?: {
+  opts?: ActivateOtherWindowGuardOpts & {
     startup?: WorktreeStartupPayload
     initialCwd?: string
     setup?: WorktreeSetupLaunch
@@ -157,6 +196,9 @@ export function activateAndRevealWorktree(
     providesInitialSurface?: boolean
   }
 ): ActivateAndRevealResult | false {
+  if (raiseOtherWindowForWorkspaceKey(worktreeId, opts?.bypassOtherWindowGuard)) {
+    return false
+  }
   const state = useAppStore.getState()
   const wt = state.getKnownWorktreeById(worktreeId, opts?.executionHostId)
   if (!wt) {
@@ -271,7 +313,10 @@ export function activateAndRevealWorktree(
  */
 export function activateAndRevealWorkspace(
   workspaceId: string,
-  opts?: { executionHostId?: ExecutionHostId; providesInitialSurface?: boolean }
+  opts?: ActivateOtherWindowGuardOpts & {
+    executionHostId?: ExecutionHostId
+    providesInitialSurface?: boolean
+  }
 ): ActivateAndRevealResult | false {
   const workspaceScope = parseWorkspaceKey(workspaceId)
   if (workspaceScope?.type === 'folder') {

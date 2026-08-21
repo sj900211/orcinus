@@ -58,6 +58,7 @@ export const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktr
   const settings = useAppStore((s) => s.settings)
   const worktreeVisibilityDefaultsByHost = useAppStore((s) => s.worktreeVisibilityDefaultsByHost)
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
+  const projectKeysInOtherWindows = useAppStore((s) => s.projectKeysInOtherWindows)
   const newCardStyle = settings?.experimentalNewWorktreeCardStyle === true
 
   const reveal = useSidebarRevealHighlight()
@@ -305,6 +306,7 @@ export const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktr
     newCardStyle,
     folderBackedProjectGroupIds,
     projectGroups,
+    projectKeysInOtherWindows,
     session,
     runtime,
     primaryActive,

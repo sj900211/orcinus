@@ -24,6 +24,7 @@ import {
   WORKTREE_SECTION_HEADER_PADDING_LEFT
 } from './indentation'
 import { FolderPathStatusIndicator } from './FolderPathStatusIndicator'
+import { ProjectWindowHeaderMarker } from './ProjectWindowHeaderMarker'
 import {
   ProjectGroupCreateWorkspaceButton,
   ProjectGroupHeaderMenu
@@ -45,6 +46,8 @@ export type SectionHeaderRowContext = {
   collapsedGroups: Set<string>
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
   projectGroups: readonly ProjectGroup[]
+  // Project keys windowed elsewhere: their header gets a de-emphasized "parked in another window" background.
+  projectKeysInOtherWindows: ReadonlySet<string>
   sshConnectionStates: AppState['sshConnectionStates']
   highlightedRevealRowKey: string | null
   dragOverStatus: WorkspaceStatus | null
@@ -236,6 +239,10 @@ export function renderWorktreeSectionHeaderRow(args: {
           isPinnedHeader &&
             ctx.pinDragOver &&
             'rounded-md bg-worktree-sidebar-accent ring-1 ring-worktree-sidebar-ring/40',
+          // Why bg-secondary (not the accent used above): a windowed project is de-emphasized/parked, so its tint must read distinct from active/selected/drag-over.
+          projectIdForHeader &&
+            ctx.projectKeysInOtherWindows.has(projectIdForHeader) &&
+            'rounded-md bg-secondary',
           row.repo && 'overflow-hidden'
         )}
         style={{
@@ -274,6 +281,11 @@ export function renderWorktreeSectionHeaderRow(args: {
         }
         onClick={(event) => {
           if (shouldIgnoreRepoHeaderToggle(event)) {
+            return
+          }
+          // Why: a windowed project's header only shows here as a marker; clicking it raises the owning window instead of toggling a section with no rows.
+          if (projectIdForHeader && ctx.projectKeysInOtherWindows.has(projectIdForHeader)) {
+            void window.api.projectWindow?.raise?.(projectIdForHeader)
             return
           }
           ctx.toggleGroupWithScrollAnchor(row.key)
@@ -326,6 +338,9 @@ export function renderWorktreeSectionHeaderRow(args: {
                 {row.label}
               </div>
               <RepoForkIndicator upstream={row.repo?.upstream} />
+              {projectIdForHeader ? (
+                <ProjectWindowHeaderMarker projectKey={projectIdForHeader} />
+              ) : null}
               <FolderPathStatusIndicator status={projectGroupPathStatus} />
             </div>
           </div>

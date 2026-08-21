@@ -688,7 +688,7 @@ export function createMainWindow(
       // Why: mark this in-place reload so the did-finish-load orphan sweep spares live PTYs until session restore (#5787).
       opts?.onBeforeRecoveryReload?.(mainWindow.webContents.id)
       if (isWorkspaceWindow) {
-        // Why: keep the current URL so the orca-worktree boot param survives; loadMainWindow would reboot this as a second main-role persistence writer.
+        // Why: keep the current URL so the orca-project boot params survive; loadMainWindow would reboot this as a second main-role persistence writer.
         mainWindow.webContents.reload()
       } else {
         loadMainWindow(mainWindow)

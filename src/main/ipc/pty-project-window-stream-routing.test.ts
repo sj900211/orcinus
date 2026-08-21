@@ -2,10 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { spawnMock, onMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { getPtyRendererDeliveryDebugSnapshot, registerPtyHandlers, deletePtyOwnership } from './pty'
-import {
-  registerWorkspaceWindow,
-  unregisterWorkspaceWindow
-} from '../window/workspace-window-registry'
+import { registerProjectWindow, unregisterProjectWindow } from '../window/project-window-registry'
 import { addTrustedUIRendererWebContentsId, removeTrustedUIRendererWebContentsId } from './ui'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
@@ -52,11 +49,12 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () =>
   import('./pty-ipc-mock-registry').then((m) => m.codexBackfillRecoveryModuleMock())
 )
 
-describe('registerPtyHandlers (workspace-window stream routing)', () => {
+describe('registerPtyHandlers (project-window stream routing)', () => {
   const { handlers, mainWindow, getPtyWriteListener, getPtyAckDataListener, createMockProc } =
     setupPtyIpcSuite()
 
   const WORKSPACE_WEB_CONTENTS_ID = 707
+  const PROJECT_KEY = 'repo-1'
   const WORKTREE_ID = 'repo-1::wt-owned'
 
   function createWorkspaceWindow() {
@@ -66,7 +64,7 @@ describe('registerPtyHandlers (workspace-window stream routing)', () => {
         id: WORKSPACE_WEB_CONTENTS_ID,
         isDestroyed: () => false,
         getType: () => 'window',
-        getURL: () => 'file:///opt/orca/renderer/index.html?orca-worktree=wt',
+        getURL: () => 'file:///opt/orca/renderer/index.html?orca-project=repo-1',
         on: vi.fn(),
         send: vi.fn(),
         removeListener: vi.fn()
@@ -85,6 +83,8 @@ describe('registerPtyHandlers (workspace-window stream routing)', () => {
       getPtyOutputSequence: vi.fn(() => 0),
       getDriver: vi.fn(() => ({ kind: 'desktop' })),
       getPtyWorktreeId: vi.fn((ptyId: string) => worktreeIdByPty.get(ptyId)),
+      // Project routing: worktree ids are `repoId::path`; the injected resolver mirrors the runtime accessor.
+      getWorktreeRepoId: vi.fn((worktreeId: string) => worktreeId.split('::')[0]),
       createPreAllocatedTerminalHandle: vi.fn(() => null),
       preAllocateHandleForPty: vi.fn()
     }
@@ -105,10 +105,10 @@ describe('registerPtyHandlers (workspace-window stream routing)', () => {
   })
 
   function registerWorkspace(workspaceWindow: ReturnType<typeof createWorkspaceWindow>): void {
-    registerWorkspaceWindow(WORKTREE_ID, workspaceWindow as never)
+    registerProjectWindow(PROJECT_KEY, workspaceWindow as never)
     addTrustedUIRendererWebContentsId(workspaceWindow.webContents.id)
     cleanups.push(() => {
-      unregisterWorkspaceWindow(WORKTREE_ID, workspaceWindow as never)
+      unregisterProjectWindow(PROJECT_KEY, workspaceWindow as never)
       removeTrustedUIRendererWebContentsId(workspaceWindow.webContents.id)
     })
   }
@@ -266,7 +266,7 @@ describe('registerPtyHandlers (workspace-window stream routing)', () => {
       )
 
       // Window closed: the registry entry goes away and the stream falls back to main.
-      unregisterWorkspaceWindow(WORKTREE_ID, workspaceWindow as never)
+      unregisterProjectWindow(PROJECT_KEY, workspaceWindow as never)
       mainWindow.webContents.send.mockClear()
       mockProc.emitData('back-to-main')
       vi.advanceTimersByTime(2)
@@ -404,7 +404,7 @@ describe('registerPtyHandlers (workspace-window stream routing)', () => {
       mockProc.emitData('second-era') // owned by the workspace window, never acked there
       vi.advanceTimersByTime(2)
 
-      unregisterWorkspaceWindow(WORKTREE_ID, workspaceWindow as never)
+      unregisterProjectWindow(PROJECT_KEY, workspaceWindow as never)
       mainWindow.webContents.send.mockClear()
       mockProc.emitData('era-three!') // 10 chars back to main
       vi.advanceTimersByTime(2)
