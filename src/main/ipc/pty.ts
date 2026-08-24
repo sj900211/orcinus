@@ -1,16 +1,11 @@
 /* eslint-disable max-lines -- Why: PTY IPC is centralized in one main-process module so spawn env scoping, lifecycle cleanup, process inspection, and renderer IPC stay behind one audited boundary. */
 import { join, delimiter } from 'node:path'
+import { getAppEnvironment } from '../../shared/app-environment'
+import { getPtyIpc, getPtyPower, type PtyPowerSurface } from './pty-host-bindings'
+import { isRendererGone, rendererWebContents } from './pty-renderer-surface'
 import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
-import {
-  type BrowserWindow,
-  type IpcMainEvent,
-  type IpcMainInvokeEvent,
-  type WebContents,
-  ipcMain,
-  app,
-  powerMonitor
-} from 'electron'
+import type { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
 export { getBashShellReadyRcfileContent } from '../providers/local-pty-shell-ready-bash-rcfile'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type { PtyBindingSourceExpectation, Store } from '../persistence'
@@ -2292,16 +2287,16 @@ let lastPowerResumeAtMs: number | null = null
 let powerSignalBreadcrumbsInstalled = false
 
 // Why: both field freeze variants correlate with display sleep; suspend/resume timestamps let breadcrumbs line up against the wake.
-function installPowerSignalBreadcrumbs(): void {
+function installPowerSignalBreadcrumbs(power: PtyPowerSurface): void {
   if (powerSignalBreadcrumbsInstalled) {
     return
   }
   powerSignalBreadcrumbsInstalled = true
-  powerMonitor.on('suspend', () => {
+  power.on('suspend', () => {
     lastPowerSuspendAtMs = Date.now()
     mainDeliveryBreadcrumbs.record('power-suspend')
   })
-  powerMonitor.on('resume', () => {
+  power.on('resume', () => {
     lastPowerResumeAtMs = Date.now()
     mainDeliveryBreadcrumbs.record('power-resume')
   })
@@ -2446,7 +2441,7 @@ export function unbindLocalProviderListeners(): void {
 // ─── IPC Registration ───────────────────────────────────────────────
 
 export function registerPtyHandlers(
-  mainWindow: BrowserWindow,
+  mainWindow: BrowserWindow | null,
   runtime?: OrcaRuntimeService,
   getSelectedCodexHomePath?: GetSelectedCodexHomePath,
   getSettings?: () => GlobalSettings,
@@ -2462,6 +2457,7 @@ export function registerPtyHandlers(
     onPtyExit?: (id: string, exitSequence: number) => void
   }
 ): void {
+  const ipc = getPtyIpc()
   // Why: a re-registration means a new window owns delivery — cancel the prior closure's watchdogs and neutralize its bridged reset so mark-hidden below can't arm a timer against the dead closure.
   clearRendererDispatcherReadyWatchdog()
   resetRendererDeliveryAccountingForLifecycleReset = () => {}
@@ -2469,12 +2465,18 @@ export function registerPtyHandlers(
   invalidatePendingPtyDrainPolicy = () => {}
   // Why: the closure generation fences lifecycle listeners left on workspace webContents that outlive this registration.
   const closureGeneration = ++ptyHandlersClosureGeneration
-  const mainWebContents = mainWindow.webContents
+  // Why null-safe: headless `orca serve` passes no window; routing/flow-state stay inert there, but spawn/kill IPC still installs for remote clients.
+  const rendererContents = rendererWebContents(mainWindow)
+  const mainWebContents = rendererContents
   // Why: stream routing must work from registration on, before attach-main-window-services re-registers the same window.
-  setMainWindowForRouting(mainWindow)
+  if (mainWindow) {
+    setMainWindowForRouting(mainWindow)
+  }
   setPtyWorktreeResolverForRouting(runtime ? (id) => runtime.getPtyWorktreeId?.(id) : null)
   setProjectKeyResolverForRouting(runtime ? (id) => runtime.getWorktreeRepoId?.(id) : null)
-  registerRendererLifecycleResetHandlers(mainWebContents)
+  if (rendererContents) {
+    registerRendererLifecycleResetHandlers(rendererContents)
+  }
 
   const getLocalPtyStartupPromise = (connectionId?: string | null): Promise<void> | undefined => {
     if (connectionId) {
@@ -2494,32 +2496,32 @@ export function registerPtyHandlers(
   }
 
   // Remove prior handlers so re-registration (e.g. macOS re-activate creating a new window) doesn't double-register.
-  ipcMain.removeHandler('pty:spawn')
-  ipcMain.removeHandler('pty:kill')
-  ipcMain.removeHandler('pty:listSessions')
-  ipcMain.removeHandler('pty:hasPty')
-  ipcMain.removeHandler('pty:hasChildProcesses')
-  ipcMain.removeHandler('pty:getForegroundProcess')
-  ipcMain.removeHandler('pty:inspectProcess')
-  ipcMain.removeHandler('pty:confirmForegroundProcess')
-  ipcMain.removeHandler('pty:getCwd')
-  ipcMain.removeHandler('pty:getSize')
-  ipcMain.removeHandler('pty:getAuthoritativeBufferSnapshotCapabilities')
-  ipcMain.removeHandler('pty:declarePendingPaneSerializer')
-  ipcMain.removeHandler('pty:settlePaneSerializer')
-  ipcMain.removeHandler('pty:clearPendingPaneSerializer')
-  ipcMain.removeHandler('pty:reportRendererSerializerReady')
-  ipcMain.removeHandler('pty:getMainBufferSnapshot')
-  ipcMain.removeHandler('pty:sideEffectSnapshot')
-  ipcMain.removeHandler('pty:getRendererDeliveryDebugSnapshot')
-  ipcMain.removeHandler('pty:resetRendererDeliveryDebug')
-  ipcMain.removeHandler('pty:reportRendererDeliveryState')
-  ipcMain.removeHandler('pty:writeAccepted')
-  ipcMain.removeAllListeners('pty:write')
-  ipcMain.removeAllListeners('pty:ackColdRestore')
-  ipcMain.removeAllListeners('pty:ackData')
-  ipcMain.removeAllListeners('pty:deliveryResyncResponse')
-  ipcMain.removeAllListeners('pty:serializeBuffer:response')
+  ipc.removeHandler('pty:spawn')
+  ipc.removeHandler('pty:kill')
+  ipc.removeHandler('pty:listSessions')
+  ipc.removeHandler('pty:hasPty')
+  ipc.removeHandler('pty:hasChildProcesses')
+  ipc.removeHandler('pty:getForegroundProcess')
+  ipc.removeHandler('pty:inspectProcess')
+  ipc.removeHandler('pty:confirmForegroundProcess')
+  ipc.removeHandler('pty:getCwd')
+  ipc.removeHandler('pty:getSize')
+  ipc.removeHandler('pty:getAuthoritativeBufferSnapshotCapabilities')
+  ipc.removeHandler('pty:declarePendingPaneSerializer')
+  ipc.removeHandler('pty:settlePaneSerializer')
+  ipc.removeHandler('pty:clearPendingPaneSerializer')
+  ipc.removeHandler('pty:reportRendererSerializerReady')
+  ipc.removeHandler('pty:getMainBufferSnapshot')
+  ipc.removeHandler('pty:sideEffectSnapshot')
+  ipc.removeHandler('pty:getRendererDeliveryDebugSnapshot')
+  ipc.removeHandler('pty:resetRendererDeliveryDebug')
+  ipc.removeHandler('pty:reportRendererDeliveryState')
+  ipc.removeHandler('pty:writeAccepted')
+  ipc.removeAllListeners('pty:write')
+  ipc.removeAllListeners('pty:ackColdRestore')
+  ipc.removeAllListeners('pty:ackData')
+  ipc.removeAllListeners('pty:deliveryResyncResponse')
+  ipc.removeAllListeners('pty:serializeBuffer:response')
 
   // Why: only LocalPtyProvider needs main-process hook injection; daemon-backed providers spawn subprocesses internally.
   if (localProvider instanceof LocalPtyProvider) {
@@ -2548,9 +2550,9 @@ export function registerPtyHandlers(
         const skipCodexHomeEnv = ctx?.isWsl === true && !selectedCodexHomePath
         const ptySettings = getSettings?.()
         const env = buildPtyHostEnv(id, baseEnv, {
-          isPackaged: app.isPackaged,
+          isPackaged: getAppEnvironment().isPackaged(),
           resourcesPath: process.resourcesPath,
-          userDataPath: app.getPath('userData'),
+          userDataPath: getAppEnvironment().getPath('userData'),
           selectedCodexHomePath,
           skipCodexHomeEnv,
           stripInheritedOrcaCodexHome: shouldStripInheritedOrcaCodexHome({
@@ -2685,7 +2687,7 @@ export function registerPtyHandlers(
   // Why: attribute sender-scoped IPC (ACKs, resync replies, health reports) to that window's state; unknown senders fall back to the main window like the single-window era.
   function flowStateForSenderEvent(
     event: IpcMainEvent | IpcMainInvokeEvent | null | undefined
-  ): RendererWindowFlowState {
+  ): RendererWindowFlowState | null {
     const senderId = event?.sender?.id
     return (senderId !== undefined ? windowFlowStates.get(senderId) : undefined) ?? mainFlowState
   }
@@ -2762,11 +2764,12 @@ export function registerPtyHandlers(
     worktreeId: string | undefined
   ): void {
     const owner = resolveWorktreeOwnerWindow(worktreeId)
-    const transition = transitionHiddenRendererPtyDeliveryState(
-      owner ? owner.webContents.id : mainWebContents.id,
-      id,
-      hidden
-    )
+    // Why skip headless: with no owner and no main renderer there is no window to attribute hidden marks to.
+    const reportingWebContentsId = owner ? owner.webContents.id : mainWebContents?.id
+    if (reportingWebContentsId === undefined) {
+      return
+    }
+    const transition = transitionHiddenRendererPtyDeliveryState(reportingWebContentsId, id, hidden)
     if (transition.policyChanged) {
       invalidatePendingPtyDrainPolicy(id)
     }
@@ -2827,7 +2830,8 @@ export function registerPtyHandlers(
   // Why: count of watchdog gate force-opens (no handshake arrived); nonzero flags a dropped-handshake self-heal.
   let rendererDispatcherReadyForcedCount = 0
   // Why no watchdog yet: mirrors the single-window boot — the initial navigation's lifecycle reset arms it.
-  const mainFlowState = createWindowFlowState(mainWebContents)
+  // Why nullable: headless `orca serve` has no renderer, so there is no main flow state to track.
+  const mainFlowState = mainWebContents ? createWindowFlowState(mainWebContents) : null
 
   function trackWorkspaceWindowDeliveryLifecycle(state: RendererWindowFlowState): void {
     const generation = closureGeneration
@@ -3008,7 +3012,7 @@ export function registerPtyHandlers(
       diagnostics: buildMainDeliveryDiagnostics(),
       rendererLifecycleResetCount,
       lastLifecycleResetClearedChars,
-      rendererPtyDispatcherReady: mainFlowState.dispatcherReady,
+      rendererPtyDispatcherReady: mainFlowState?.dispatcherReady ?? false,
       rendererDispatcherReadyForcedCount
     }
   }
@@ -3043,13 +3047,13 @@ export function registerPtyHandlers(
       })
     }
     perPty.sort((a, b) => b.inFlightChars + b.pendingChars - (a.inFlightChars + a.pendingChars))
-    const windowAlive = !mainWindow.isDestroyed()
+    const windowAlive = !isRendererGone(mainWindow)
     return {
-      appVersion: app.getVersion(),
+      appVersion: getAppEnvironment().getVersion(),
       mainUptimeMs: Math.round(process.uptime() * 1000),
-      windowFocused: windowAlive ? mainWindow.isFocused() : null,
-      windowVisible: windowAlive ? mainWindow.isVisible() : null,
-      windowMinimized: windowAlive ? mainWindow.isMinimized() : null,
+      windowFocused: windowAlive ? mainWindow!.isFocused() : null,
+      windowVisible: windowAlive ? mainWindow!.isVisible() : null,
+      windowMinimized: windowAlive ? mainWindow!.isMinimized() : null,
       msSinceLastPowerSuspend: lastPowerSuspendAtMs === null ? null : now - lastPowerSuspendAtMs,
       msSinceLastPowerResume: lastPowerResumeAtMs === null ? null : now - lastPowerResumeAtMs,
       perPty: perPty.slice(0, DELIVERY_DIAGNOSTICS_MAX_PTYS),
@@ -3123,7 +3127,7 @@ export function registerPtyHandlers(
     const owner = resolvePtyOwnerWindow(id)
     return owner
       ? owner.webContents.id === webContentsId
-      : webContentsId === mainFlowState.webContentsId
+      : webContentsId === mainFlowState?.webContentsId
   }
 
   function resetWindowScopedDeliveryStateForLifecycle(webContentsId: number): void {
@@ -3137,7 +3141,7 @@ export function registerPtyHandlers(
     }
     // Why: a closing project window's live PTYs fall back to main, which must repaint them; the
     // main window's own reload repaints from itself, so it keeps the plain delete (no owner change).
-    const isOwnerWindowGone = webContentsId !== mainFlowState.webContentsId
+    const isOwnerWindowGone = webContentsId !== mainFlowState?.webContentsId
     const ownerGonePtyIds = new Set<string>()
     // Deleting the visited entry mid-iteration is safe for Map/Set iterators.
     for (const [id, accounting] of rendererDeliveryAccountingByPty) {
@@ -3220,8 +3224,11 @@ export function registerPtyHandlers(
     }
   }
 
-  resetRendererDeliveryAccountingForLifecycleReset = () =>
-    resetWindowScopedDeliveryStateForLifecycle(mainFlowState.webContentsId)
+  resetRendererDeliveryAccountingForLifecycleReset = () => {
+    if (mainFlowState) {
+      resetWindowScopedDeliveryStateForLifecycle(mainFlowState.webContentsId)
+    }
+  }
   // Why the bridge: let a later re-registration cancel this closure's timers (armed via hoisted fns, so this assignment can precede their definitions).
   clearRendererDispatcherReadyWatchdog = () => {
     for (const state of windowFlowStates.values()) {
@@ -3952,7 +3959,7 @@ export function registerPtyHandlers(
       pendingDataCreditReleasedDuringFlush = false
       pendingData.endRound(round)
     }
-    if (mainFlowState.dispatcherReady && pendingData.size > 0 && writes === 0 && !sendFailed) {
+    if (mainFlowState?.dispatcherReady && pendingData.size > 0 && writes === 0 && !sendFailed) {
       ackGatedFlushSkipCount++
     }
     if (sendFailed && pendingData.size > 0) {
@@ -4502,7 +4509,7 @@ export function registerPtyHandlers(
     pending.resolve(result)
   }
 
-  ipcMain.on(
+  ipc.on(
     'pty:serializeBuffer:response',
     (
       _event,
@@ -4563,6 +4570,11 @@ export function registerPtyHandlers(
     ptyId: string,
     opts?: { scrollbackRows?: number; altScreenForcesZeroRows?: boolean }
   ): Promise<SerializeResult> {
+    // Why owner-scoped (not just main): only the window streaming this pty can serialize its buffer; no owner (headless/all-closed) settles null.
+    if (!resolvePtyOwnerWindow(ptyId)) {
+      return Promise.resolve(null)
+    }
+
     const requestId = randomUUID()
     return new Promise<SerializeResult>((resolve) => {
       const timeout = setTimeout(() => {
@@ -4587,6 +4599,10 @@ export function registerPtyHandlers(
   // Why: reload/crash orphans delivery-interest holds and hidden marks; reset so surviving PTYs aren't stuck force-fed or gated — each pane's first sync re-marks.
   clearRendererGateResetHandlers()
   const resetRendererPtyDeliveryGateState = (): void => {
+    // Why guarded: this only runs off a renderer lifecycle event, so mainWebContents is present, but the null type must be narrowed.
+    if (!mainWebContents) {
+      return
+    }
     const gateDebug = getHiddenRendererPtyDeliveryDebug()
     resetRendererScopedHiddenPtyDeliveryState(mainWebContents.id)
     if (gateDebug.hiddenDeliveryGatedPtyCount > 0 || gateDebug.deliveryInterestPtyCount > 0) {
@@ -4597,9 +4613,13 @@ export function registerPtyHandlers(
   }
   rendererGateResetLoadHandler = resetRendererPtyDeliveryGateState
   rendererGateResetGoneHandler = resetRendererPtyDeliveryGateState
-  rendererGateResetWebContents = mainWebContents
-  mainWebContents.on('did-finish-load', rendererGateResetLoadHandler)
-  mainWebContents.on('render-process-gone', rendererGateResetGoneHandler)
+  // Why guarded: with no renderer there is nothing to reset a gate for, and nothing
+  // that will ever emit these. Registering against a fake window was the old workaround.
+  if (rendererContents) {
+    rendererGateResetWebContents = rendererContents
+    rendererContents.on('did-finish-load', rendererGateResetLoadHandler)
+    rendererContents.on('render-process-gone', rendererGateResetGoneHandler)
+  }
 
   // Why: only LocalPtyProvider PTYs (main-process) can be orphaned on reload; daemon sessions survive by design and cleanup would kill them.
   clearDidFinishLoadHandler()
@@ -4608,14 +4628,16 @@ export function registerPtyHandlers(
     didFinishLoadHandler = () => {
       // Why: always advance to keep the generation monotonic, but skip the sweep on crash/freeze-recovery reload — it would kill live local PTYs before session restore (#5787).
       const generation = lp.advanceGeneration()
-      if (options?.isRecoveryReloadInFlight?.(mainWindow.webContents.id)) {
+      if (rendererContents && options?.isRecoveryReloadInFlight?.(rendererContents.id)) {
         return
       }
       // Why: the retained provider onExit callback is the only physical-exit proof; it clears ownership after the OS reaps it.
       lp.killOrphanedPtys(generation - 1)
     }
-    didFinishLoadWebContents = mainWindow.webContents
-    mainWindow.webContents.on('did-finish-load', didFinishLoadHandler)
+    if (rendererContents) {
+      didFinishLoadWebContents = rendererContents
+      rendererContents.on('did-finish-load', didFinishLoadHandler)
+    }
   }
 
   const assertFolderWorkspacePtyPathUsable = async (
@@ -5137,13 +5159,13 @@ export function registerPtyHandlers(
           settings: ptySettings
         })
       if (isDaemonHostSpawn && sessionId && !preAdoptedStablePane) {
-        if (!isSafePtySessionId(sessionId, app.getPath('userData'))) {
+        if (!isSafePtySessionId(sessionId, getAppEnvironment().getPath('userData'))) {
           throw new Error('Invalid PTY session id')
         }
         env = buildPtyHostEnv(sessionId, env ?? {}, {
-          isPackaged: app.isPackaged,
+          isPackaged: getAppEnvironment().isPackaged(),
           resourcesPath: process.resourcesPath,
-          userDataPath: app.getPath('userData'),
+          userDataPath: getAppEnvironment().getPath('userData'),
           selectedCodexHomePath,
           skipCodexHomeEnv,
           stripInheritedOrcaCodexHome,
@@ -5692,6 +5714,7 @@ export function registerPtyHandlers(
               tabId: hostSessionBinding.tabId,
               leafId: hostSessionBinding.leafId,
               ptyId: result.id,
+              hostAdmittedMembership: true,
               ...(result.incarnationId ? { incarnationId: result.incarnationId } : {}),
               ...(cwd ? { startupCwd: cwd } : {}),
               ...(hostSessionBinding.expectedSourceBinding
@@ -6277,7 +6300,7 @@ export function registerPtyHandlers(
     return Math.max(0, Math.min(50_000, Math.floor(value)))
   }
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:getMainBufferSnapshot',
     async (
       _event,
@@ -6341,22 +6364,22 @@ export function registerPtyHandlers(
   )
 
   // Why: main owns side effects, so this replay restores title state only — never historical bells/completions (no-attention-replay rule, terminal-side-effect-authority.md).
-  ipcMain.handle('pty:sideEffectSnapshot', (_event, args: { id: string }) => {
+  ipc.handle('pty:sideEffectSnapshot', (_event, args: { id: string }) => {
     if (!runtime || typeof args?.id !== 'string' || args.id.length === 0) {
       return null
     }
     return runtime.getTerminalSideEffectSnapshot(args.id)
   })
 
-  installPowerSignalBreadcrumbs()
-  ipcMain.handle('pty:getRendererDeliveryDebugSnapshot', (): PtyRendererDeliveryDebugSnapshot => {
+  installPowerSignalBreadcrumbs(getPtyPower())
+  ipc.handle('pty:getRendererDeliveryDebugSnapshot', (): PtyRendererDeliveryDebugSnapshot => {
     return getPtyRendererDeliveryDebugSnapshot()
   })
-  ipcMain.handle('pty:resetRendererDeliveryDebug', (): void => {
+  ipc.handle('pty:resetRendererDeliveryDebug', (): void => {
     resetPtyRendererDeliveryDebug()
   })
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:spawn',
     async (
       _event,
@@ -6879,16 +6902,16 @@ export function registerPtyHandlers(
           }
           const sessionIdForEnv = effectiveSessionId
           // Why: this id reaches filesystem paths; reject traversal/separators so a crafted IPC payload can't escape the expected roots.
-          if (!isSafePtySessionId(sessionIdForEnv, app.getPath('userData'))) {
+          if (!isSafePtySessionId(sessionIdForEnv, getAppEnvironment().getPath('userData'))) {
             throw new Error('Invalid PTY session id')
           }
           // Why: clone before mutating so injections don't leak back into args.env (renderer may reuse it).
           env = { ...baseEnv }
           try {
             buildPtyHostEnv(sessionIdForEnv, env, {
-              isPackaged: app.isPackaged,
+              isPackaged: getAppEnvironment().isPackaged(),
               resourcesPath: process.resourcesPath,
-              userDataPath: app.getPath('userData'),
+              userDataPath: getAppEnvironment().getPath('userData'),
               selectedCodexHomePath,
               skipCodexHomeEnv,
               stripInheritedOrcaCodexHome,
@@ -7670,11 +7693,13 @@ export function registerPtyHandlers(
     (value as { rows: number }).rows > 0
 
   // Why: workspace windows are equally privileged app UI (typing, ACKs, visibility); guests/popouts/stale windows stay rejected.
+  // Null-tolerant per upstream: headless has no sender that can legitimately match, so every write fails closed.
   const isPtyEventFromTrustedAppWindow = (event: IpcMainEvent | IpcMainInvokeEvent): boolean => {
     const sender = event.sender
     if (
+      mainWebContents !== null &&
       sender === mainWebContents &&
-      !mainWindow.isDestroyed() &&
+      !isRendererGone(mainWindow) &&
       !(typeof mainWebContents.isDestroyed === 'function' && mainWebContents.isDestroyed())
     ) {
       return true
@@ -7739,7 +7764,7 @@ export function registerPtyHandlers(
 
   const hostViewportClaimTails = new Map<string, Promise<boolean>>()
 
-  ipcMain.on('pty:write', (event, args: unknown) => {
+  ipc.on('pty:write', (event, args: unknown) => {
     if (!isPtyEventFromTrustedAppWindow(event) || !isPtyWritePayload(args)) {
       return
     }
@@ -7750,7 +7775,7 @@ export function registerPtyHandlers(
     }
     writePtyInput(args)
   })
-  ipcMain.handle('pty:writeAccepted', (event, args: unknown): boolean | Promise<boolean> => {
+  ipc.handle('pty:writeAccepted', (event, args: unknown): boolean | Promise<boolean> => {
     if (!isPtyEventFromTrustedAppWindow(event) || !isPtyWritePayload(args)) {
       return false
     }
@@ -7760,8 +7785,8 @@ export function registerPtyHandlers(
       : writePtyInputAccepted(args)
   })
 
-  ipcMain.removeAllListeners('pty:claimViewport')
-  ipcMain.on('pty:claimViewport', (event, args: unknown) => {
+  ipc.removeAllListeners('pty:claimViewport')
+  ipc.on('pty:claimViewport', (event, args: unknown) => {
     if (!isPtyEventFromTrustedAppWindow(event) || !runtime || !isPtyViewportClaimPayload(args)) {
       return
     }
@@ -7783,9 +7808,9 @@ export function registerPtyHandlers(
     })
   })
 
-  // Why: resize is fire-and-forget — ipcMain.on (not .handle) halves IPC traffic by skipping the empty acknowledgement reply.
-  ipcMain.removeAllListeners('pty:resize')
-  ipcMain.on('pty:resize', (_event, args: { id: string; cols: number; rows: number }) => {
+  // Why: resize is fire-and-forget — ipc.on (not .handle) halves IPC traffic by skipping the empty acknowledgement reply.
+  ipc.removeAllListeners('pty:resize')
+  ipc.on('pty:resize', (_event, args: { id: string; cols: number; rows: number }) => {
     // Why: after a desktop-fit override change the renderer's safeFit cascade re-measures ALL panes (background ones at full width), so suppress every pty:resize in this window to avoid corrupting PTY dimensions.
     if (runtime?.isResizeSuppressed()) {
       return
@@ -7825,13 +7850,13 @@ export function registerPtyHandlers(
   })
 
   // Why: pty:reportGeometry is a measurement-only sibling of pty:resize — it refreshes the restore-target cache (never resizes) so mobile-fit hold learns real desktop dims even while resize is blocked. See docs/mobile-fit-hold.md.
-  ipcMain.removeAllListeners('pty:reportGeometry')
-  ipcMain.on('pty:reportGeometry', (_event, args: { id: string; cols: number; rows: number }) => {
+  ipc.removeAllListeners('pty:reportGeometry')
+  ipc.on('pty:reportGeometry', (_event, args: { id: string; cols: number; rows: number }) => {
     runtime?.recordRendererGeometry(args.id, args.cols, args.rows)
   })
 
   // Why: fire-and-forget — clears the DaemonPtyAdapter's sticky cold-restore cache after the renderer consumed it; no-op for non-daemon providers.
-  ipcMain.on('pty:ackColdRestore', (_event, args: { id: string }) => {
+  ipc.on('pty:ackColdRestore', (_event, args: { id: string }) => {
     const provider = tryGetProviderForPty(args.id)
     if (provider && 'ackColdRestore' in provider && typeof provider.ackColdRestore === 'function') {
       provider.ackColdRestore(args.id)
@@ -7839,10 +7864,13 @@ export function registerPtyHandlers(
   })
 
   // Why: renderer ACKs bound main→renderer delivery without stopping PTY ingestion — agent/status consumers still see every chunk via the provider/runtime path.
-  ipcMain.on(
+  ipc.on(
     'pty:ackData',
     (event, args: { id: string; charCount?: number; processedChars?: number }) => {
       const senderFlowState = flowStateForSenderEvent(event)
+      if (!senderFlowState) {
+        return
+      }
       senderFlowState.lastAckReceivedAtMs = Date.now()
       // Why: a live ACK channel means a future unanswered probe is a fresh diagnostic event, not a continuation of the last silent streak.
       senderFlowState.deliveryResyncUnansweredWarnLogged = false
@@ -7876,11 +7904,12 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.on(
+  ipc.on(
     'pty:deliveryResyncResponse',
     (event, args: { requestId: number; processedCharsByPty: Record<string, number> }) => {
       const senderFlowState = flowStateForSenderEvent(event)
       if (
+        !senderFlowState ||
         senderFlowState.deliveryResyncOutstandingRequestId === null ||
         args?.requestId !== senderFlowState.deliveryResyncOutstandingRequestId
       ) {
@@ -7912,10 +7941,14 @@ export function registerPtyHandlers(
   )
 
   // Why invoke + renderer-initiated: the field wedge (v1.4.121-rc.0) kills every main→renderer push channel while invoke survives, so the resync rides here plus a write-off lane.
-  ipcMain.handle(
+  ipc.handle(
     'pty:reportRendererDeliveryState',
     (event, args: PtyRendererDeliveryStateReport): PtyRendererDeliveryHealthReply => {
       const senderFlowState = flowStateForSenderEvent(event)
+      // Why neutral reply: an unknown sender (or headless with no main) has no delivery to report on or heal.
+      if (!senderFlowState) {
+        return { inFlightTotalChars: 0, inFlightPtyCount: 0, msSinceLastAck: null }
+      }
       // Extra repair lane for the lost-ACK variant: identical max-merge to the resync response, so a heal is only reached when merging cannot drain.
       const ackSenderState = ackAttributionFlowState(event)
       let creditedAny = false
@@ -7969,8 +8002,8 @@ export function registerPtyHandlers(
   )
 
   // Why: renderer signals its pty:data listener is live; until then sends are held so boot-window bytes can't drop into a listener-less page and pin the gate.
-  ipcMain.removeAllListeners('pty:rendererDispatcherReady')
-  ipcMain.on('pty:rendererDispatcherReady', (event) => {
+  ipc.removeAllListeners('pty:rendererDispatcherReady')
+  ipc.on('pty:rendererDispatcherReady', (event) => {
     // Why: the reconcile below destructively clears delivery accounting, so a straggler handshake from an untrusted window must not reset app-window state.
     if (!isPtyEventFromTrustedAppWindow(event)) {
       return
@@ -7987,8 +8020,8 @@ export function registerPtyHandlers(
     schedulePendingDataFlush(0)
   })
 
-  ipcMain.removeAllListeners('pty:setActiveRendererPty')
-  ipcMain.on('pty:setActiveRendererPty', (_event, args: { id: string; active: boolean }) => {
+  ipc.removeAllListeners('pty:setActiveRendererPty')
+  ipc.on('pty:setActiveRendererPty', (_event, args: { id: string; active: boolean }) => {
     if (typeof args.id !== 'string' || !args.id) {
       return
     }
@@ -8004,8 +8037,8 @@ export function registerPtyHandlers(
     invalidatePendingPtyDrainPriority(args.id)
   })
 
-  ipcMain.removeAllListeners('pty:setRendererPtyVisible')
-  ipcMain.on('pty:setRendererPtyVisible', (_event, args: { id: string; visible: boolean }) => {
+  ipc.removeAllListeners('pty:setRendererPtyVisible')
+  ipc.on('pty:setRendererPtyVisible', (_event, args: { id: string; visible: boolean }) => {
     if (typeof args.id !== 'string' || !args.id) {
       return
     }
@@ -8020,16 +8053,21 @@ export function registerPtyHandlers(
     syncPtyBackgroundedDelivery(args.id, 'visibility-report')
   })
 
-  ipcMain.removeAllListeners('pty:setHiddenRendererPty')
-  ipcMain.on('pty:setHiddenRendererPty', (event, args: { id: string; hidden: boolean }) => {
+  ipc.removeAllListeners('pty:setHiddenRendererPty')
+  ipc.on('pty:setHiddenRendererPty', (event, args: { id: string; hidden: boolean }) => {
     if (typeof args.id !== 'string' || !args.id) {
+      return
+    }
+    // Why fall back to main: senderless events (tests, legacy relays) attribute to the main window; headless has neither.
+    const reportingWebContentsId = event?.sender?.id ?? mainWebContents?.id
+    if (reportingWebContentsId === undefined) {
       return
     }
     mainDeliveryBreadcrumbs.record(args.hidden === true ? 'gate-mark' : 'gate-unmark', {
       id: redactPtyIdForDiagnostics(args.id)
     })
     const transition = transitionHiddenRendererPtyDeliveryState(
-      event?.sender?.id ?? mainWebContents.id,
+      reportingWebContentsId,
       args.id,
       args.hidden === true
     )
@@ -8069,8 +8107,8 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.removeAllListeners('pty:terminalViewAttributes')
-  ipcMain.on('pty:terminalViewAttributes', (_event, args: unknown) => {
+  ipc.removeAllListeners('pty:terminalViewAttributes')
+  ipc.on('pty:terminalViewAttributes', (_event, args: unknown) => {
     // Why validate-or-drop: a malformed palette gives a wrong color reply that breaks TUI theme detection worse than the silent-until-first-push default.
     const attributes = validateTerminalViewAttributes(args)
     if (attributes) {
@@ -8078,33 +8116,34 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.removeAllListeners('pty:setPtyDeliveryInterest')
-  ipcMain.on('pty:setPtyDeliveryInterest', (event, args: { id: string; interested: boolean }) => {
+  ipc.removeAllListeners('pty:setPtyDeliveryInterest')
+  ipc.on('pty:setPtyDeliveryInterest', (event, args: { id: string; interested: boolean }) => {
     if (typeof args.id !== 'string' || !args.id) {
+      return
+    }
+    // Why fall back to main: senderless events (tests, legacy relays) attribute to the main window; headless has neither.
+    const reportingWebContentsId = event?.sender?.id ?? mainWebContents?.id
+    if (reportingWebContentsId === undefined) {
       return
     }
     // Why: any delivery interest suppresses the hidden-delivery gate (raw-byte consumers keep receiving while hidden); not synced to the daemon pacer so interest churn can't un-pace a flood.
     const settings = getSettings?.()
     const wasDroppable = shouldDropHiddenRendererPtyDataForOwner(args.id, settings)
-    setRendererPtyDeliveryInterest(
-      event?.sender?.id ?? mainWebContents.id,
-      args.id,
-      args.interested === true
-    )
+    setRendererPtyDeliveryInterest(reportingWebContentsId, args.id, args.interested === true)
     if (wasDroppable !== shouldDropHiddenRendererPtyDataForOwner(args.id, settings)) {
       invalidatePendingPtyDrainPolicy(args.id)
     }
   })
 
-  ipcMain.removeAllListeners('pty:signal')
-  ipcMain.on('pty:signal', (_event, args: { id: string; signal: string }) => {
+  ipc.removeAllListeners('pty:signal')
+  ipc.on('pty:signal', (_event, args: { id: string; signal: string }) => {
     tryGetProviderForPty(args.id)
       ?.sendSignal(args.id, args.signal)
       .catch(() => {})
   })
 
-  ipcMain.removeAllListeners('pty:clearBuffer')
-  ipcMain.on('pty:clearBuffer', (_event, args: { id: string }) => {
+  ipc.removeAllListeners('pty:clearBuffer')
+  ipc.on('pty:clearBuffer', (_event, args: { id: string }) => {
     // Why: clear PTY-side state (ConPTY/daemon/SSH buffer) so the next prompt repaint doesn't land at a stale cursor row.
     tryGetProviderForPty(args.id)
       ?.clearBuffer(args.id)
@@ -8112,7 +8151,7 @@ export function registerPtyHandlers(
     runtime?.clearHeadlessTerminalBuffer(args.id).catch(() => {})
   })
 
-  ipcMain.handle('pty:kill', async (_event, args: { id: string; keepHistory?: boolean }) => {
+  ipc.handle('pty:kill', async (_event, args: { id: string; keepHistory?: boolean }) => {
     if (typeof args?.id !== 'string' || !args.id || args.id.startsWith('remote:')) {
       // Why: runtime terminal handles belong to terminal.close; unowned PTY routing could target the local provider.
       throw new Error('Invalid PTY provider id')
@@ -8162,7 +8201,7 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.handle('pty:listSessions', async (): Promise<PtyListedSession[]> => {
+  ipc.handle('pty:listSessions', async (): Promise<PtyListedSession[]> => {
     const deduped = new Map<string, PtyListedSession>()
     const admission = new PtyProcessListAdmission()
     await visitPtyProcessListingsInBatches(
@@ -8194,7 +8233,7 @@ export function registerPtyHandlers(
     return Array.from(deduped.values())
   })
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:getAuthoritativeBufferSnapshotCapabilities',
     async (_event, args: { ids?: unknown }) => {
       const ids = Array.isArray(args?.ids) ? args.ids.slice(0, 512) : []
@@ -8242,7 +8281,7 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle('pty:hasPty', async (_event, args: { id: string }): Promise<boolean | null> => {
+  ipc.handle('pty:hasPty', async (_event, args: { id: string }): Promise<boolean | null> => {
     if (typeof args?.id !== 'string' || args.id.startsWith('remote:')) {
       // Why: same routing hazard pty:kill guards against — ptyOwnership never holds
       // a runtime terminal handle and parseAppSshPtyId ignores it, so the lookup
@@ -8266,17 +8305,14 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.handle(
-    'pty:hasChildProcesses',
-    async (_event, args: { id: string }): Promise<boolean> => {
-      if (!hasPtyProviderForInspection(args.id)) {
-        return false
-      }
-      return getProviderForPty(args.id).hasChildProcesses(args.id)
+  ipc.handle('pty:hasChildProcesses', async (_event, args: { id: string }): Promise<boolean> => {
+    if (!hasPtyProviderForInspection(args.id)) {
+      return false
     }
-  )
+    return getProviderForPty(args.id).hasChildProcesses(args.id)
+  })
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:getForegroundProcess',
     async (_event, args: { id: string }): Promise<string | null> => {
       if (!hasPtyProviderForInspection(args.id)) {
@@ -8286,11 +8322,11 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle('pty:inspectProcess', async (_event, args: { id: string }) =>
+  ipc.handle('pty:inspectProcess', async (_event, args: { id: string }) =>
     inspectPtyProviderProcessForRenderer(getProviderForPty(args.id), args.id)
   )
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:confirmForegroundProcess',
     async (_event, args: { id: string }): Promise<string | null> => {
       if (!hasPtyProviderForInspection(args.id)) {
@@ -8303,7 +8339,7 @@ export function registerPtyHandlers(
   )
 
   // Why: Cmd+D split needs the live shell cwd so the new pane inherits it (not the worktree root); '' means unknown/unresolvable (Windows) → renderer falls through.
-  ipcMain.handle('pty:getCwd', async (_event, args: { id: string }): Promise<string> => {
+  ipc.handle('pty:getCwd', async (_event, args: { id: string }): Promise<string> => {
     try {
       return await getProviderForPty(args.id).getCwd(args.id)
     } catch {
@@ -8312,7 +8348,7 @@ export function registerPtyHandlers(
   })
 
   // Why: prefer the provider's APPLIED size over the requested ptySizes so the renderer's resume drift-check can spot a dropped resize; null means "cannot confirm" → re-forward once.
-  ipcMain.handle(
+  ipc.handle(
     'pty:getSize',
     async (_event, args: { id: string }): Promise<{ cols: number; rows: number } | null> => {
       const provider = tryGetProviderForPty(args.id)
@@ -8331,7 +8367,7 @@ export function registerPtyHandlers(
   )
 
   // Pre-signal handshake handlers (declare→spawn→settle/clear); see docs/mobile-prefer-renderer-scrollback.md and `pendingByPaneKey` above.
-  ipcMain.handle(
+  ipc.handle(
     'pty:declarePendingPaneSerializer',
     async (event, args: { paneKey?: unknown }): Promise<number> => {
       if (!isValidPaneKey(args.paneKey)) {
@@ -8341,7 +8377,7 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:settlePaneSerializer',
     async (_event, args: { paneKey?: unknown; gen?: unknown }): Promise<void> => {
       if (!isValidPaneKey(args.paneKey) || typeof args.gen !== 'number') {
@@ -8357,7 +8393,7 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:clearPendingPaneSerializer',
     async (_event, args: { paneKey?: unknown; gen?: unknown }): Promise<void> => {
       if (!isValidPaneKey(args.paneKey) || typeof args.gen !== 'number') {
@@ -8368,7 +8404,7 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:reportRendererSerializerReady',
     async (_event, args: { ptyId?: unknown }): Promise<void> => {
       if (
@@ -8396,17 +8432,13 @@ export function registerHeadlessPtyRuntime(
     onPtyExit?: (id: string, exitSequence: number) => void
   }
 ): void {
-  // Why: headless `orca serve` has no renderer window but still needs the same PTY handlers so remote clients can drive terminals.
-  const headlessWindow = {
-    isDestroyed: () => true,
-    webContents: {
-      send: () => {},
-      on: () => {},
-      removeListener: () => {}
-    }
-  } as unknown as BrowserWindow
+  // Why null and not a stub window: headless `orca serve` has no renderer but needs the
+  // same PTY handlers so remote clients can drive terminals. This used to pass a fake
+  // BrowserWindow whose isDestroyed() returned true — a window-shaped object that lied
+  // about being a window. `null` says the same thing honestly, and keeps `electron` out
+  // of this path entirely.
   registerPtyHandlers(
-    headlessWindow,
+    null,
     runtime,
     getSelectedCodexHomePath,
     getSettings,
