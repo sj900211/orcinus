@@ -87,10 +87,15 @@ export function fastGetViaSftp(
   sftp: SFTPWrapper,
   sourcePath: string,
   destinationPath: string,
-  options?: { signal?: AbortSignal }
+  options?: {
+    signal?: AbortSignal
+    // Forwards ssh2 fastGet's step callback (total, transferred, fileSize) for transfer progress.
+    onProgress?: (totalTransferred: number, chunk: number, fileSize: number) => void
+  }
 ): Promise<void> {
+  const step = options?.onProgress
   return waitForSftpCallback<void>(
-    (callback) => sftp.fastGet(sourcePath, destinationPath, callback),
+    (callback) => sftp.fastGet(sourcePath, destinationPath, step ? { step } : {}, callback),
     options
   )
 }

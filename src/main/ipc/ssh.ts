@@ -58,6 +58,8 @@ import { forceStopRelayForTarget } from '../ssh/ssh-relay-reset'
 import { isSshPtyNotFoundError } from '../providers/ssh-pty-errors'
 import { toAppSshPtyId, toRelaySshPtyId } from '../providers/ssh-pty-id'
 import { registerSshBrowseHandler } from './ssh-browse'
+import { registerSftpTransferHandlers } from './sftp-transfer'
+import { SftpConnectionPool } from '../ssh/sftp-connection'
 import {
   getConnectionIdsForWorktree,
   enrichSshDetectedPorts,
@@ -85,6 +87,7 @@ import {
 } from '../ssh/ssh-provider-authority'
 
 let connectionManager: SshConnectionManager | null = null
+let sftpConnectionPool: SftpConnectionPool | null = null
 let portForwardManager: SshPortForwardManager | null = null
 let persistedStore: Store | null = null
 let advertisedUrlWatcherUnsubscribe: (() => void) | null = null
@@ -145,6 +148,8 @@ export async function removeRegisteredSshTarget(targetId: string): Promise<void>
         `[ssh] Failed to disconnect removed target ${targetId}: ${err instanceof Error ? err.message : String(err)}`
       )
     }
+    // Why: drop any dedicated SFTP transport too, so a removed target leaves no raw connection behind.
+    await sftpConnectionPool?.disconnect(targetId).catch(() => {})
     persistedStore?.removeSshRemotePtyLeases(targetId)
     store.removeTarget(targetId)
   })
@@ -977,6 +982,15 @@ export function registerSshHandlers(
   } else {
     connectionManager = new SshConnectionManager(callbacks)
   }
+  // Why its own pool, not connectionManager: SFTP needs a relay-free raw transport so a plain SFTP
+  // server (no Node.js) works; the pool reuses a live relay client when one is up, else opens a
+  // dedicated raw connect(). getCallbacks resolves the current generation so re-registration (macOS
+  // re-activation) rewires prompts without a stale window reference.
+  sftpConnectionPool ??= new SftpConnectionPool({
+    getConnectionManager: () => connectionManager,
+    getStore: () => getSshTargetRegistryStore(),
+    getCallbacks: () => createSshConnectionCallbacks()
+  })
   portForwardManager ??= new SshPortForwardManager()
   portForwardManager.setCallbacks({
     onForwardClosed: (entry, reason) => {
@@ -994,6 +1008,10 @@ export function registerSshHandlers(
   refreshActiveRelaySessions()
   registerPowerMonitorReconnect()
   registerSshBrowseHandler(() => connectionManager)
+  registerSftpTransferHandlers((targetId) => sftpConnectionPool!.getConnection(targetId), {
+    retain: (targetId) => sftpConnectionPool?.retain(targetId),
+    release: (targetId) => sftpConnectionPool?.release(targetId)
+  })
 
   // ── Target CRUD ────────────────────────────────────────────────────
 
@@ -1672,7 +1690,8 @@ function sshShutdownTasks(targetIds: readonly string[]): SshShutdownTask[] {
         targetId,
         promise: teardownActiveSshSession(targetId, (session) => session.detachAndPersist())
       })),
-    { targetId: '*transports', promise: connectionManager?.disconnectAll() ?? Promise.resolve() }
+    { targetId: '*transports', promise: connectionManager?.disconnectAll() ?? Promise.resolve() },
+    { targetId: '*sftp', promise: sftpConnectionPool?.disconnectAll() ?? Promise.resolve() }
   ]
 }
 
@@ -1792,8 +1811,10 @@ export async function resetSshHandlerStateForTests(): Promise<void> {
   sshShutdownDrain = null
 
   await connectionManager?.disconnectAll()
+  await sftpConnectionPool?.disconnectAll()
   portForwardManager?.dispose()
   connectionManager = null
+  sftpConnectionPool = null
   portForwardManager = null
   setSshTargetRegistryStore(null)
   persistedStore = null

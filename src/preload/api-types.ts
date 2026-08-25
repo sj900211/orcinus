@@ -54,6 +54,7 @@ import type { KeybindingsApi, SettingsApi } from './api/settings-api'
 import type { ShellApi } from './api/shell-api'
 import type { SpeechApi } from './api/speech-api'
 import type { SshApi } from './api/ssh-api'
+import type { SftpApi } from './api/sftp-api'
 import type { DiagnosticsApi, MemoryApi, StatsApi, TelemetryApi } from './api/telemetry-api'
 import type { UiCommandEventApi } from './api/ui-command-event-api'
 import type { UiWindowApi } from './api/ui-window-api'
@@ -143,6 +144,7 @@ export type PreloadApi = {
   minimaxCredentials: MinimaxCredentialsApi
   grokAccounts: GrokAccountsApi
   ssh: SshApi
+  sftp: SftpApi
   automations: AutomationsApi
   wsl: RuntimeApi['wsl']
   pwsh: RuntimeApi['pwsh']

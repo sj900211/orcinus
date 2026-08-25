@@ -25,11 +25,18 @@ export function mkdirSftp(
   })
 }
 
+export type UploadFileOptions = {
+  exclusive?: boolean
+  signal?: AbortSignal
+  // Emits cumulative bytes read from the local file as the upload streams.
+  onProgress?: (bytesTransferred: number, totalBytes: number) => void
+}
+
 export function uploadFile(
   sftp: SFTPWrapper,
   localPath: string,
   remotePath: string,
-  options?: { exclusive?: boolean; signal?: AbortSignal }
+  options?: UploadFileOptions
 ): Promise<void> {
   return uploadFileAndJoinTeardown(sftp, localPath, remotePath, options)
 }
@@ -38,7 +45,7 @@ async function uploadFileAndJoinTeardown(
   sftp: SFTPWrapper,
   localPath: string,
   remotePath: string,
-  options?: { exclusive?: boolean; signal?: AbortSignal }
+  options?: UploadFileOptions
 ): Promise<void> {
   const handle = await open(localPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
   let handleClose: Promise<void> | undefined
@@ -68,6 +75,16 @@ async function uploadFileAndJoinTeardown(
       flags: options?.exclusive ? 'wx' : 'w'
     })
     readStream = handle.createReadStream({ autoClose: false })
+    if (options?.onProgress) {
+      const onProgress = options.onProgress
+      const totalBytes = openedStat.size
+      let bytesTransferred = 0
+      // Count bytes off the local read stream; the SFTP write side has no per-chunk callback.
+      readStream.on('data', (chunk: Buffer | string) => {
+        bytesTransferred += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length
+        onProgress(bytesTransferred, totalBytes)
+      })
+    }
     const abortTransfer = (): void => {
       const reason =
         options?.signal?.reason instanceof Error

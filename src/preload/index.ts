@@ -259,6 +259,7 @@ import type {
   PluginHostLogLine,
   PreloadApi
 } from './api-types'
+import type { SftpReaddirResult, SftpError, SftpTransferProgress } from './api/sftp-api'
 import type { AgentKind, LaunchSource, RequestKind } from '../shared/telemetry-events'
 import {
   KEYBOARD_LAYOUT_CHANGED_CHANNEL,
@@ -4876,6 +4877,37 @@ const api = {
 
     submitCredential: (args: { requestId: string; value: string | null }): Promise<void> =>
       ipcRenderer.invoke('ssh:submitCredential', args)
+  },
+
+  sftp: {
+    readdir: (args: { targetId: string; path: string }): Promise<SftpReaddirResult | SftpError> =>
+      ipcRenderer.invoke('sftp:readdir', args),
+
+    realpath: (args: { targetId: string; path: string }): Promise<string | SftpError> =>
+      ipcRenderer.invoke('sftp:realpath', args),
+
+    startUpload: (args: {
+      targetId: string
+      remoteDir: string
+      overwrite?: boolean
+    }): Promise<{ transferId: string } | { canceled: true } | SftpError> =>
+      ipcRenderer.invoke('sftp:startUpload', args),
+
+    startDownload: (args: {
+      targetId: string
+      remotePath: string
+    }): Promise<{ transferId: string } | { canceled: true } | SftpError> =>
+      ipcRenderer.invoke('sftp:startDownload', args),
+
+    cancelTransfer: (args: { transferId: string }): Promise<{ ok: true } | SftpError> =>
+      ipcRenderer.invoke('sftp:cancelTransfer', args),
+
+    onTransferProgress: (callback: (data: SftpTransferProgress) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: SftpTransferProgress): void =>
+        callback(data)
+      ipcRenderer.on('sftp:transferProgress', listener)
+      return () => ipcRenderer.removeListener('sftp:transferProgress', listener)
+    }
   },
 
   automations: {
