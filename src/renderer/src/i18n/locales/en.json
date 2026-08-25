@@ -15939,6 +15939,17 @@
         "expiredCompact": "Expired",
         "typeMarkdown": "Markdown",
         "typeHtml": "HTML"
+      },
+      "right-sidebar": {
+        "ServerExplorer": {
+          "selectHost": "Select an SFTP host",
+          "refresh": "Refresh",
+          "pickHostPrompt": "Select a host to browse its files",
+          "emptyDir": "This directory is empty",
+          "noHosts": "No SFTP hosts configured",
+          "addHost": "Add an SFTP host",
+          "activityTitle": "Server Explorer"
+        }
       }
     },
     "i18n": {

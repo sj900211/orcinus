@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Plug, Files, GitBranch, ListChecks, Workflow } from 'lucide-react'
+import { Plug, Files, GitBranch, ListChecks, Workflow, Server } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { useRepoById } from '@/store/selectors'
 import { isFolderRepo } from '../../../../shared/repo-kind'
@@ -110,6 +110,17 @@ export function useRightSidebarActivityItems({
         title: translate('auto.components.right.sidebar.index.441733b630', 'Ports'),
         shortcut: portsShortcut === 'Unassigned' ? '' : portsShortcut,
         sshOnly: true
+      },
+      // Why: SFTP hosts are workspace-independent, so no git/folder/ssh gating —
+      // the Server Explorer is always available regardless of the active workspace.
+      {
+        id: 'sftp',
+        icon: Server,
+        title: translate(
+          'auto.components.right-sidebar.ServerExplorer.activityTitle',
+          'Server Explorer'
+        ),
+        shortcut: ''
       },
       // Why: plugin panels append after the built-in tabs so core navigation
       // keeps stable positions regardless of which plugins are installed.
