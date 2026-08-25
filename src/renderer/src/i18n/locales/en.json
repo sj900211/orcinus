@@ -954,7 +954,9 @@
         "automationsDescription": "Schedule agent work and choose whether Automations appears in the sidebar.",
         "shareSkillsTitle": "Share Skills",
         "shareSkillsDescription": "Share your skills with an unlisted link. Anyone who has it can install them.",
-        "floatingWorkspaceWebDescription": "Global terminal and markdown tabs."
+        "floatingWorkspaceWebDescription": "Global terminal and markdown tabs.",
+        "sftpTitle": "SFTP Hosts",
+        "sftpDescription": "Browse and transfer files on remote servers over SFTP."
       },
       "useAppMenuPaste": {
         "pasteTooLarge": "Paste is too large."
@@ -7866,7 +7868,9 @@
           "devDescription": "Dev-only tools for exercising UI states.",
           "linearTitle": "Linear",
           "linearDescription": "How Linear works in Orca, setup checklist, agent skill, and example prompts.",
-          "tasksDescription": "Connect providers, install the Linear skill, and choose what appears in Tasks."
+          "tasksDescription": "Connect providers, install the Linear skill, and choose what appears in Tasks.",
+          "sftpHostsTitle": "SFTP Hosts",
+          "sftpHostsDescription": "Browse and transfer files on remote servers over SFTP."
         },
         "SettingsFormControls": {
           "42a4d15a30": "No matching fonts.",
@@ -11295,6 +11299,63 @@
         },
         "shortcutDefinitionCatalog": {
           "missionControlConflict": "Blocked by Mission Control. Remap here or change it in System Settings."
+        },
+        "sftp": {
+          "search": {
+            "title": "SFTP Hosts",
+            "description": "Manage SFTP file-transfer hosts.",
+            "addTitle": "Add SFTP Host",
+            "addDescription": "Add a new SFTP host."
+          }
+        },
+        "RemoteHostForm": {
+          "editTitle": "Edit SFTP host",
+          "addTitle": "Add SFTP host",
+          "editDescription": "Update connection details for this SFTP host.",
+          "addDescription": "Add a remote server to browse and transfer files over SFTP.",
+          "label": "Label",
+          "labelPlaceholder": "My Server",
+          "host": "Host *",
+          "hostPlaceholder": "server.example.com",
+          "username": "Username *",
+          "usernamePlaceholder": "deploy",
+          "port": "Port",
+          "authType": "Authentication type",
+          "authKey": "Key pair",
+          "authPassword": "Password",
+          "identityFile": "Identity File",
+          "identityPlaceholder": "~/.ssh/id_ed25519 (leave empty for SSH agent)",
+          "identityHint": "Optional. SSH agent is used by default.",
+          "password": "Password",
+          "passwordKeep": "Leave blank to keep the saved password",
+          "passwordNew": "Server password",
+          "passwordHint": "Stored encrypted with your OS keychain.",
+          "cancel": "Cancel",
+          "save": "Save Changes",
+          "add": "Add Host"
+        },
+        "RemoteHostsPane": {
+          "loadFailed": "Failed to load SFTP hosts",
+          "missingFields": "Label, host, and username are required",
+          "updated": "Host updated",
+          "added": "Host added",
+          "saveFailed": "Failed to save host",
+          "removed": "Host removed",
+          "removeFailed": "Failed to remove host",
+          "testOk": "Connection successful",
+          "title": "SFTP hosts",
+          "description": "Add remote servers to browse and transfer files over SFTP. Separate from SSH worktree hosts.",
+          "add": "Add Host",
+          "empty": "No SFTP hosts configured.",
+          "badgePassword": "Password",
+          "badgeKey": "Key",
+          "testing": "Testing…",
+          "test": "Test",
+          "edit": "Edit",
+          "remove": "Remove",
+          "removeTitle": "Remove SFTP host?",
+          "removeBody": "Remove \"{{value0}}\"? Its saved password is deleted. You can add it again later.",
+          "cancel": "Cancel"
         }
       },
       "right": {

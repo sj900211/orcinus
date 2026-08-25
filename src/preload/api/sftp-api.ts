@@ -1,3 +1,6 @@
+import type { SftpHost, SftpHostInput, SftpHostView } from '../../shared/sftp-host-types'
+export type { SftpHost, SftpHostInput, SftpHostView } from '../../shared/sftp-host-types'
+
 export type SftpEntryType = 'file' | 'directory' | 'symlink'
 
 export type SftpEntry = {
@@ -36,4 +39,11 @@ export type SftpApi = {
   }) => Promise<{ transferId: string } | { canceled: true } | SftpError>
   cancelTransfer: (args: { transferId: string }) => Promise<{ ok: true } | SftpError>
   onTransferProgress: (callback: (data: SftpTransferProgress) => void) => () => void
+  host: {
+    list: () => Promise<SftpHostView[]>
+    add: (input: SftpHostInput) => Promise<SftpHost | SftpError>
+    update: (args: { id: string; input: SftpHostInput }) => Promise<SftpHost | SftpError>
+    remove: (args: { id: string }) => Promise<{ ok: true } | SftpError>
+    test: (args: { id: string }) => Promise<{ ok: true } | SftpError>
+  }
 }

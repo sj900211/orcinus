@@ -259,7 +259,14 @@ import type {
   PluginHostLogLine,
   PreloadApi
 } from './api-types'
-import type { SftpReaddirResult, SftpError, SftpTransferProgress } from './api/sftp-api'
+import type {
+  SftpReaddirResult,
+  SftpError,
+  SftpTransferProgress,
+  SftpHost,
+  SftpHostInput,
+  SftpHostView
+} from './api/sftp-api'
 import type { AgentKind, LaunchSource, RequestKind } from '../shared/telemetry-events'
 import {
   KEYBOARD_LAYOUT_CHANGED_CHANNEL,
@@ -4907,6 +4914,18 @@ const api = {
         callback(data)
       ipcRenderer.on('sftp:transferProgress', listener)
       return () => ipcRenderer.removeListener('sftp:transferProgress', listener)
+    },
+
+    host: {
+      list: (): Promise<SftpHostView[]> => ipcRenderer.invoke('sftp:host:list'),
+      add: (input: SftpHostInput): Promise<SftpHost | SftpError> =>
+        ipcRenderer.invoke('sftp:host:add', input),
+      update: (args: { id: string; input: SftpHostInput }): Promise<SftpHost | SftpError> =>
+        ipcRenderer.invoke('sftp:host:update', args),
+      remove: (args: { id: string }): Promise<{ ok: true } | SftpError> =>
+        ipcRenderer.invoke('sftp:host:remove', args),
+      test: (args: { id: string }): Promise<{ ok: true } | SftpError> =>
+        ipcRenderer.invoke('sftp:host:test', args)
     }
   },
 

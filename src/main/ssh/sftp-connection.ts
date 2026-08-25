@@ -1,15 +1,14 @@
 import type { SshTarget } from '../../shared/ssh-types'
-import type { SshConnectionManager } from './ssh-connection-manager'
-import type { SshConnectionStore } from './ssh-connection-store'
+import type { SftpHost } from '../../shared/sftp-host-types'
 import { SshConnection, type SshConnectionCallbacks } from './ssh-connection'
 
-// Relay-free raw SSH connection accessor for the SFTP Server Explorer (Expedition 3).
+// Relay-free raw ssh2 connection accessor for the SFTP feature (Expedition 3).
 //
-// Why this exists apart from SshConnectionManager: `ssh:connect` deploys a Node.js relay on top of
-// the transport (ipc/ssh.ts → SshRelaySession → ssh-remote-node-resolution needs Node 18+). A plain
-// SFTP server has no Node.js, so that path never reaches 'connected'. SFTP needs only the raw ssh2
-// channel, which SshConnection.connect()/sftp() provide with zero relay coupling — so we open and
-// cache a dedicated raw connection per target here, reusing a live relay transport when one is up.
+// Why this exists apart from SshConnectionManager: `ssh:connect` deploys a Node.js relay on top of the
+// transport (needs Node 18+). A plain SFTP server has no Node.js, so that path never reaches
+// 'connected'. SFTP needs only the raw ssh2 channel from SshConnection.connect()/sftp(). Hosts come
+// from the standalone SFTP host registry (separate from worktree SSH targets), so every connection is
+// dedicated — and a password host supplies its sealed password straight to the auth flow, no prompt.
 
 /** Idle raw SFTP connections are torn down after this long to avoid holding transports open forever. */
 const SFTP_IDLE_TEARDOWN_MS = 10 * 60 * 1000
@@ -33,84 +32,91 @@ type DedicatedEntry = {
 }
 
 export type SftpConnectionPoolDeps = {
-  getConnectionManager: () => SshConnectionManager | null
-  getStore: () => SshConnectionStore | null
-  getCallbacks: () => SshConnectionCallbacks
+  getHost: (id: string) => SftpHost | undefined
+  readPassword: (id: string) => string | null
+  getBaseCallbacks: () => SshConnectionCallbacks
 }
 
 /**
- * Per-target pool of relay-free raw ssh2 connections for SFTP.
- *
- * Resolution order per target:
- *   1. A LIVE relay connection in the manager (already connected) — reuse its ssh2 client so we don't
- *      open a second transport to the same host.
- *   2. Otherwise a DEDICATED raw SshConnection we own, opened via connect() (no relay/Node.js),
- *      reusing the existing host-key/passphrase/known-hosts machinery connect() already wires.
+ * Per-host pool of relay-free raw ssh2 connections for SFTP. Every host resolves to a DEDICATED
+ * SshConnection opened via connect() (no relay/Node.js), cached and idle-reaped. A password host's
+ * sealed password is fed to the credential flow so it never prompts on connect.
  */
 export class SftpConnectionPool {
   private dedicated = new Map<string, DedicatedEntry>()
-  // Per-target count of in-flight transfers holding the connection, so the idle reaper never fires
+  // Per-host count of in-flight transfers holding the connection, so the idle reaper never fires
   // mid-stream (an active transfer is not idle).
   private inUse = new Map<string, number>()
 
   constructor(private deps: SftpConnectionPoolDeps) {}
 
-  async getConnection(targetId: string): Promise<SshConnection> {
-    // Why prefer a live relay transport: reusing it shares session slots instead of competing with the
-    // relay for the server's MaxSessions budget, and it needs no fresh auth prompt. But skip a
-    // system-SSH transport — its sftp() always throws, so reusing it would guarantee SFTP failure when
-    // a dedicated raw connection might actually serve SFTP.
-    const live = this.deps.getConnectionManager()?.getConnection(targetId)
-    if (live && live.getState().status === 'connected' && !live.usesSystemSshTransport()) {
-      return live
-    }
-
-    const target = this.deps.getStore()?.getTarget(targetId)
-    if (!target) {
+  async getConnection(hostId: string): Promise<SshConnection> {
+    const host = this.deps.getHost(hostId)
+    if (!host) {
       throw new SftpConnectionAccessFailure({
         kind: 'unknown-target',
-        message: `SSH connection "${targetId}" not found`
+        message: `SFTP host "${hostId}" not found`
       })
     }
-
-    return this.ensureDedicated(target)
+    return this.ensureDedicated(host)
   }
 
-  private ensureDedicated(target: SshTarget): Promise<SshConnection> {
-    const existing = this.dedicated.get(target.id)
+  private ensureDedicated(host: SftpHost): Promise<SshConnection> {
+    const existing = this.dedicated.get(host.id)
     if (existing) {
       const status = existing.conn.getState().status
       // Why reuse only a healthy dedicated connection: a disconnected/failed one must be rebuilt so a
       // transient drop doesn't wedge SFTP on a dead transport.
       if (status === 'connected' || status === 'connecting' || status === 'reconnecting') {
-        this.touch(target.id)
+        this.touch(host.id)
         return existing.connectPromise
       }
-      this.teardownEntry(target.id)
+      this.teardownEntry(host.id)
     }
 
-    const conn = new SshConnection(target, this.deps.getCallbacks())
-    const connectPromise = this.connectDedicated(target.id, conn)
-    this.dedicated.set(target.id, { conn, connectPromise, idleTimer: null })
-    this.touch(target.id)
+    const conn = new SshConnection(sftpHostToSshTarget(host), this.buildCallbacks(host))
+    const connectPromise = this.connectDedicated(host.id, conn)
+    this.dedicated.set(host.id, { conn, connectPromise, idleTimer: null })
+    this.touch(host.id)
     return connectPromise
   }
 
-  private async connectDedicated(targetId: string, conn: SshConnection): Promise<SshConnection> {
+  // Why: a password host feeds its sealed password straight to the auth flow (kind='password') instead
+  // of prompting the user on every connect; a key host (or a missing password) uses the base callbacks.
+  private buildCallbacks(host: SftpHost): SshConnectionCallbacks {
+    const base = this.deps.getBaseCallbacks()
+    if (host.authType !== 'password') {
+      return base
+    }
+    return {
+      ...base,
+      onCredentialRequest: async (targetId, kind, detail) => {
+        if (kind === 'password') {
+          const stored = this.deps.readPassword(host.id)
+          if (stored != null) {
+            return stored
+          }
+        }
+        return base.onCredentialRequest?.(targetId, kind, detail) ?? null
+      }
+    }
+  }
+
+  private async connectDedicated(hostId: string, conn: SshConnection): Promise<SshConnection> {
     try {
       await conn.connect()
       return conn
     } catch (error) {
       // Drop the failed entry so the next call retries rather than reusing a dead promise.
-      if (this.dedicated.get(targetId)?.conn === conn) {
-        this.teardownEntry(targetId)
+      if (this.dedicated.get(hostId)?.conn === conn) {
+        this.teardownEntry(hostId)
       }
       throw toAccessFailure(conn, error)
     }
   }
 
-  private touch(targetId: string): void {
-    const entry = this.dedicated.get(targetId)
+  private touch(hostId: string): void {
+    const entry = this.dedicated.get(hostId)
     if (!entry) {
       return
     }
@@ -120,19 +126,19 @@ export class SftpConnectionPool {
     }
     // Why: never arm the reaper while a transfer holds the connection — it would tear the transport
     // out from under an in-flight upload/download.
-    if ((this.inUse.get(targetId) ?? 0) > 0) {
+    if ((this.inUse.get(hostId) ?? 0) > 0) {
       return
     }
     entry.idleTimer = setTimeout(() => {
-      void this.disconnect(targetId)
+      void this.disconnect(hostId)
     }, SFTP_IDLE_TEARDOWN_MS)
     entry.idleTimer.unref?.()
   }
 
-  /** Mark a target's connection in-use for a transfer so the idle reaper can't reap it mid-stream. */
-  retain(targetId: string): void {
-    this.inUse.set(targetId, (this.inUse.get(targetId) ?? 0) + 1)
-    const entry = this.dedicated.get(targetId)
+  /** Mark a host's connection in-use for a transfer so the idle reaper can't reap it mid-stream. */
+  retain(hostId: string): void {
+    this.inUse.set(hostId, (this.inUse.get(hostId) ?? 0) + 1)
+    const entry = this.dedicated.get(hostId)
     if (entry?.idleTimer) {
       clearTimeout(entry.idleTimer)
       entry.idleTimer = null
@@ -140,35 +146,35 @@ export class SftpConnectionPool {
   }
 
   /** Release a transfer's hold; when the last one drops, restart the idle countdown. */
-  release(targetId: string): void {
-    const next = (this.inUse.get(targetId) ?? 0) - 1
+  release(hostId: string): void {
+    const next = (this.inUse.get(hostId) ?? 0) - 1
     if (next > 0) {
-      this.inUse.set(targetId, next)
+      this.inUse.set(hostId, next)
       return
     }
-    this.inUse.delete(targetId)
-    this.touch(targetId)
+    this.inUse.delete(hostId)
+    this.touch(hostId)
   }
 
-  private teardownEntry(targetId: string): void {
-    const entry = this.dedicated.get(targetId)
+  private teardownEntry(hostId: string): void {
+    const entry = this.dedicated.get(hostId)
     if (!entry) {
       return
     }
     if (entry.idleTimer) {
       clearTimeout(entry.idleTimer)
     }
-    this.dedicated.delete(targetId)
+    this.dedicated.delete(hostId)
   }
 
-  /** Close and forget the dedicated connection for one target (idle timeout, target removal). */
-  async disconnect(targetId: string): Promise<void> {
-    const entry = this.dedicated.get(targetId)
+  /** Close and forget the dedicated connection for one host (idle timeout, host removal). */
+  async disconnect(hostId: string): Promise<void> {
+    const entry = this.dedicated.get(hostId)
     if (!entry) {
       return
     }
-    this.teardownEntry(targetId)
-    this.inUse.delete(targetId)
+    this.teardownEntry(hostId)
+    this.inUse.delete(hostId)
     await entry.conn.disconnect().catch(() => {})
   }
 
@@ -183,6 +189,21 @@ export class SftpConnectionPool {
     this.dedicated.clear()
     this.inUse.clear()
     await Promise.allSettled(entries.map((entry) => entry.conn.disconnect()))
+  }
+}
+
+// A dedicated SFTP connection reuses SshConnection, which is keyed on an SshTarget — map the SFTP host
+// onto the minimal target fields connect() needs (no ssh-config alias; password comes via callbacks).
+function sftpHostToSshTarget(host: SftpHost): SshTarget {
+  return {
+    id: host.id,
+    label: host.label,
+    host: host.host,
+    port: host.port,
+    username: host.username,
+    configHost: host.host,
+    source: 'manual',
+    ...(host.authType === 'key' && host.identityFile ? { identityFile: host.identityFile } : {})
   }
 }
 

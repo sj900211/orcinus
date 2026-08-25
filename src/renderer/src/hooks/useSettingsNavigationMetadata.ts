@@ -71,6 +71,7 @@ import {
   getWebRuntimeEnvironmentsSearchEntry
 } from '@/components/settings/runtime-environments-search'
 import { getSshPaneSearchEntries } from '@/components/settings/ssh-search'
+import { getRemoteHostsPaneSearchEntries } from '@/components/settings/remote-hosts-search'
 import { getMobileSettingsPaneSearchEntries } from '@/components/settings/mobile-settings-search'
 import { getMobileEmulatorSearchEntries } from '@/components/settings/mobile-emulator-search'
 import { getComputerUsePaneSearchEntries } from '@/components/settings/computer-use-search'
@@ -554,6 +555,17 @@ export function buildSettingsNavigationMetadata({
             ),
             icon: Cable,
             searchEntries: getSshPaneSearchEntries(),
+            group: 'remote'
+          },
+          {
+            id: 'sftp',
+            title: translate('auto.hooks.useSettingsNavigationMetadata.sftpTitle', 'SFTP Hosts'),
+            description: translate(
+              'auto.hooks.useSettingsNavigationMetadata.sftpDescription',
+              'Browse and transfer files on remote servers over SFTP.'
+            ),
+            icon: Files,
+            searchEntries: getRemoteHostsPaneSearchEntries(),
             group: 'remote'
           }
         ]

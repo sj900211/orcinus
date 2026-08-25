@@ -59,7 +59,9 @@ import { isSshPtyNotFoundError } from '../providers/ssh-pty-errors'
 import { toAppSshPtyId, toRelaySshPtyId } from '../providers/ssh-pty-id'
 import { registerSshBrowseHandler } from './ssh-browse'
 import { registerSftpTransferHandlers } from './sftp-transfer'
+import { registerSftpHostHandlers } from './sftp-host'
 import { SftpConnectionPool } from '../ssh/sftp-connection'
+import { getSftpHost, readSftpHostPassword } from '../ssh/sftp-host-store'
 import {
   getConnectionIdsForWorktree,
   enrichSshDetectedPorts,
@@ -148,8 +150,6 @@ export async function removeRegisteredSshTarget(targetId: string): Promise<void>
         `[ssh] Failed to disconnect removed target ${targetId}: ${err instanceof Error ? err.message : String(err)}`
       )
     }
-    // Why: drop any dedicated SFTP transport too, so a removed target leaves no raw connection behind.
-    await sftpConnectionPool?.disconnect(targetId).catch(() => {})
     persistedStore?.removeSshRemotePtyLeases(targetId)
     store.removeTarget(targetId)
   })
@@ -983,13 +983,14 @@ export function registerSshHandlers(
     connectionManager = new SshConnectionManager(callbacks)
   }
   // Why its own pool, not connectionManager: SFTP needs a relay-free raw transport so a plain SFTP
-  // server (no Node.js) works; the pool reuses a live relay client when one is up, else opens a
-  // dedicated raw connect(). getCallbacks resolves the current generation so re-registration (macOS
-  // re-activation) rewires prompts without a stale window reference.
+  // server (no Node.js) works. Hosts come from the standalone SFTP host registry (separate from
+  // worktree SSH targets); a password host's sealed password is read on demand for the auth flow.
+  // getBaseCallbacks resolves the current generation so re-registration (macOS re-activation) rewires
+  // prompts without a stale window reference.
   sftpConnectionPool ??= new SftpConnectionPool({
-    getConnectionManager: () => connectionManager,
-    getStore: () => getSshTargetRegistryStore(),
-    getCallbacks: () => createSshConnectionCallbacks()
+    getHost: (id) => getSftpHost(id),
+    readPassword: (id) => readSftpHostPassword(id),
+    getBaseCallbacks: () => createSshConnectionCallbacks()
   })
   portForwardManager ??= new SshPortForwardManager()
   portForwardManager.setCallbacks({
@@ -1011,6 +1012,10 @@ export function registerSshHandlers(
   registerSftpTransferHandlers((targetId) => sftpConnectionPool!.getConnection(targetId), {
     retain: (targetId) => sftpConnectionPool?.retain(targetId),
     release: (targetId) => sftpConnectionPool?.release(targetId)
+  })
+  registerSftpHostHandlers({
+    getConnection: (id) => sftpConnectionPool!.getConnection(id),
+    disconnect: (id) => sftpConnectionPool?.disconnect(id)
   })
 
   // ── Target CRUD ────────────────────────────────────────────────────

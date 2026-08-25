@@ -53,6 +53,7 @@ import { GitProviderApiBudgetPane } from './GitProviderApiBudgetPane'
 import { NotificationsPane } from './NotificationsPane'
 import { VoicePane } from './VoicePane'
 import { SshPane } from './SshPane'
+import { RemoteHostsPane } from './RemoteHostsPane'
 import { ExperimentalPane } from './ExperimentalPane'
 import { PluginsSettingsSection } from './PluginsSettingsSection'
 import { AgentsPane } from './AgentsPane'
@@ -1761,6 +1762,23 @@ function Settings(): React.JSX.Element {
                     {isSectionMounted('ssh') ? (
                       <SshPane addTargetIntentSignal={sshHostAddIntentSignal} />
                     ) : null}
+                  </SettingsSection>
+                ) : null}
+
+                {showDesktopOnlySettings ? (
+                  <SettingsSection
+                    id="sftp"
+                    title={translate(
+                      'auto.components.settings.Settings.sftpHostsTitle',
+                      'SFTP Hosts'
+                    )}
+                    description={translate(
+                      'auto.components.settings.Settings.sftpHostsDescription',
+                      'Browse and transfer files on remote servers over SFTP.'
+                    )}
+                    searchEntries={getSectionSearchEntries('sftp')}
+                  >
+                    {isSectionMounted('sftp') ? <RemoteHostsPane /> : null}
                   </SettingsSection>
                 ) : null}
 
