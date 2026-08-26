@@ -47,6 +47,17 @@ export type SftpApi = {
   readdir: (args: { targetId: string; path: string }) => Promise<SftpReaddirResult | SftpError>
   realpath: (args: { targetId: string; path: string }) => Promise<string | SftpError>
   mkdir: (args: { targetId: string; path: string }) => Promise<{ ok: true } | SftpError>
+  move: (args: {
+    targetId: string
+    sourcePath: string
+    destPath: string
+    overwrite?: boolean
+  }) => Promise<{ ok: true } | { conflict: true } | SftpError>
+  delete: (args: {
+    targetId: string
+    path: string
+    isDirectory: boolean
+  }) => Promise<{ ok: true } | SftpError>
   startUpload: (args: {
     targetId: string
     remoteDir: string

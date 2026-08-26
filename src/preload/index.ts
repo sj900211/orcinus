@@ -4898,6 +4898,20 @@ const api = {
     mkdir: (args: { targetId: string; path: string }): Promise<{ ok: true } | SftpError> =>
       ipcRenderer.invoke('sftp:mkdir', args),
 
+    move: (args: {
+      targetId: string
+      sourcePath: string
+      destPath: string
+      overwrite?: boolean
+    }): Promise<{ ok: true } | { conflict: true } | SftpError> =>
+      ipcRenderer.invoke('sftp:move', args),
+
+    delete: (args: {
+      targetId: string
+      path: string
+      isDirectory: boolean
+    }): Promise<{ ok: true } | SftpError> => ipcRenderer.invoke('sftp:delete', args),
+
     startUpload: (args: {
       targetId: string
       remoteDir: string

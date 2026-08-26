@@ -24,7 +24,8 @@ export function unlinkQuietSftp(sftp: SFTPWrapper, path: string): Promise<void> 
   })
 }
 
-function renameSftp(sftp: SFTPWrapper, src: string, dst: string): Promise<void> {
+// Plain rename (no-clobber: fails if the destination exists on standard servers). The move primitive.
+export function renameSftp(sftp: SFTPWrapper, src: string, dst: string): Promise<void> {
   return new Promise((resolve, reject) => {
     sftp.rename(src, dst, (err) => (err ? reject(err) : resolve()))
   })

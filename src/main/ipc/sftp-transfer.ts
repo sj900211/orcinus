@@ -5,6 +5,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { WebContents } from 'electron'
 import { readDirViaSftp } from '../providers/ssh-filesystem-provider-sftp'
 import { mkdirSftp, uploadFile } from '../ssh/sftp-upload'
+import { registerSftpFsMutationHandlers } from './sftp-fs-mutations'
 import { sanitizeLocalDownloadFilename } from '../local-download-filename'
 import {
   emitProgress,
@@ -40,7 +41,9 @@ const SFTP_IPC_CHANNELS = [
   'sftp:startUpload',
   'sftp:startDownload',
   'sftp:cancelTransfer',
-  'sftp:mkdir'
+  'sftp:mkdir',
+  'sftp:move',
+  'sftp:delete'
 ] as const
 
 type TransferSession = { controller: AbortController; senderId: number }
@@ -361,4 +364,6 @@ export function registerSftpTransferHandlers(
       return { ok: true }
     }
   )
+
+  registerSftpFsMutationHandlers(getSftpConnection)
 }

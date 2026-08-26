@@ -25,6 +25,8 @@ import { downloadServerFile, uploadToServerDir } from './server-explorer-transfe
 import { useServerExplorerTransferProgress } from './use-server-explorer-transfer-progress'
 import { ServerExplorerRowMenu } from './ServerExplorerRowMenu'
 import { ServerExplorerNewFolderDialog } from './ServerExplorerNewFolderDialog'
+import { useServerExplorerMutations } from './use-server-explorer-mutations'
+import { parentPosixDir } from './server-explorer-directory-listing'
 
 // Why: read-only tree never routes git status/ignore decoration; share one stable empty
 // identity so the virtual rows don't re-render on every parent commit.
@@ -35,11 +37,6 @@ const EMPTY_SELECTED = new Set<string>()
 const noop = (): void => {}
 
 const HOST_ID_STORAGE_KEY = 'orcinus.serverExplorer.hostId'
-
-function parentPosixDir(path: string): string {
-  const index = path.lastIndexOf('/')
-  return index <= 0 ? '/' : path.slice(0, index)
-}
 
 export default function ServerExplorer(): React.JSX.Element {
   const openSettingsPage = useAppStore((s) => s.openSettingsPage)
@@ -103,6 +100,7 @@ export default function ServerExplorer(): React.JSX.Element {
   }, [selectedHostId, configuredBasePath])
 
   const tree = useServerExplorerTree(selectedHostId, rootPath)
+  const mutations = useServerExplorerMutations(selectedHostId, rootPath, tree)
   const scrollRef = useRef<HTMLDivElement>(null)
   const rowProjection = createVisibleFileExplorerRowProjection(
     { dirCache: tree.dirCache, expanded: tree.expanded, worktreePath: rootPath },
@@ -269,6 +267,8 @@ export default function ServerExplorer(): React.JSX.Element {
           className="h-full min-h-0"
           viewportRef={scrollRef}
           viewportClassName="h-full min-h-0 py-2"
+          onDragOver={mutations.rootDropHandlers.onDragOver}
+          onDrop={mutations.rootDropHandlers.onDrop}
         >
           {isEmpty ? (
             <FileExplorerTreeStatus
@@ -311,17 +311,17 @@ export default function ServerExplorer(): React.JSX.Element {
               onAddFolderAsProject={noop}
               canAddFolderAsProject={() => false}
               onOpenInTerminal={noop}
-              onRequestDelete={noop}
+              onRequestDelete={mutations.handleDelete}
               onCollapseFolderSubtree={noop}
               onFindInFolder={noop}
-              onMoveDrop={noop}
-              onDragTargetChange={noop}
-              onDragSourceChange={noop}
-              onDragExpandDir={noop}
+              onMoveDrop={mutations.handleMove}
+              onDragTargetChange={mutations.setDropTargetDir}
+              onDragSourceChange={mutations.setDragSourcePath}
+              onDragExpandDir={mutations.handleDragExpand}
               onNativeDragTargetChange={noop}
               onNativeDragExpandDir={noop}
-              dropTargetDir={null}
-              dragSourcePath={null}
+              dropTargetDir={mutations.dropTargetDir}
+              dragSourcePath={mutations.dragSourcePath}
               nativeDropTargetDir={null}
               renderContextMenu={(node) => (
                 <ServerExplorerRowMenu
@@ -329,6 +329,7 @@ export default function ServerExplorer(): React.JSX.Element {
                   onDownload={handleDownload}
                   onUploadHere={handleUpload}
                   onCreateFolder={setNewFolderParent}
+                  onDelete={mutations.handleDelete}
                   onRefresh={handleRowRefresh}
                 />
               )}

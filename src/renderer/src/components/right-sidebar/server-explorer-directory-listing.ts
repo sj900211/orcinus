@@ -4,8 +4,19 @@ import type { SftpEntry } from '../../../../preload/api/sftp-api'
 import type { TreeNode } from './file-explorer-types'
 
 // Why: SFTP paths are always POSIX; local joinPath would pick '\\' on a Windows client.
-function joinPosix(dirPath: string, name: string): string {
+export function joinPosix(dirPath: string, name: string): string {
   return dirPath === '/' ? `/${name}` : `${dirPath}/${name}`
+}
+
+/** POSIX parent directory ('/' at the root). */
+export function parentPosixDir(path: string): string {
+  const index = path.lastIndexOf('/')
+  return index <= 0 ? '/' : path.slice(0, index)
+}
+
+/** POSIX leaf (final path segment). */
+export function posixBasename(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1)
 }
 
 /** Directories-first, then natural name order — mirrors the local File Explorer contract. */

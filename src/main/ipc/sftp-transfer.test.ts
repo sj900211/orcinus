@@ -9,6 +9,9 @@ const {
   fromWebContentsMock,
   uploadFileMock,
   mkdirSftpMock,
+  unlinkSftpMock,
+  removeDirectorySftpMock,
+  renameSftpMock,
   fastGetViaSftpMock,
   unlinkMock,
   renameMock,
@@ -21,6 +24,9 @@ const {
   fromWebContentsMock: vi.fn(() => null),
   uploadFileMock: vi.fn(async (..._args: unknown[]) => {}),
   mkdirSftpMock: vi.fn(async (..._args: unknown[]) => {}),
+  unlinkSftpMock: vi.fn(async (..._args: unknown[]) => {}),
+  removeDirectorySftpMock: vi.fn(async (..._args: unknown[]) => {}),
+  renameSftpMock: vi.fn(async (..._args: unknown[]) => {}),
   fastGetViaSftpMock: vi.fn(async (..._args: unknown[]) => {}),
   unlinkMock: vi.fn(async (..._args: unknown[]) => {}),
   renameMock: vi.fn(async (..._args: unknown[]) => {}),
@@ -39,7 +45,14 @@ vi.mock('node:fs/promises', () => ({
   stat: statMock
 }))
 
-vi.mock('../ssh/sftp-upload', () => ({ uploadFile: uploadFileMock, mkdirSftp: mkdirSftpMock }))
+vi.mock('../ssh/sftp-upload', () => ({
+  uploadFile: uploadFileMock,
+  mkdirSftp: mkdirSftpMock,
+  unlinkSftp: unlinkSftpMock,
+  removeDirectorySftp: removeDirectorySftpMock
+}))
+
+vi.mock('../ssh/sftp-rename', () => ({ renameSftp: renameSftpMock }))
 
 vi.mock('../providers/ssh-filesystem-provider-sftp', async () => {
   const actual = await vi.importActual<typeof SftpProviderModule>(
@@ -78,6 +91,10 @@ function createSftp(overrides: Record<string, unknown> = {}): Record<string, unk
         { filename: 'link', attrs: stats('symlink', 0, 300) },
         { filename: 'beta', attrs: stats('directory', 0, 400) }
       ])
+    ),
+    // Default: destination does not exist (move sees no conflict). Override for conflict tests.
+    lstat: vi.fn((_p: string, cb: (err: Error | null, stats: unknown) => void) =>
+      cb(new Error('ENOENT'), null)
     ),
     ...overrides
   }
@@ -124,6 +141,9 @@ describe('registerSftpTransferHandlers', () => {
     uploadFileMock.mockResolvedValue(undefined)
     fastGetViaSftpMock.mockResolvedValue(undefined)
     mkdirSftpMock.mockResolvedValue(undefined)
+    unlinkSftpMock.mockResolvedValue(undefined)
+    removeDirectorySftpMock.mockResolvedValue(undefined)
+    renameSftpMock.mockResolvedValue(undefined)
     renameMock.mockResolvedValue(undefined)
     unlinkMock.mockResolvedValue(undefined)
     statMock.mockResolvedValue({ size: 10 })
@@ -249,6 +269,261 @@ describe('registerSftpTransferHandlers', () => {
         { targetId: 'target-1', path: '/remote/dir/dup' }
       )
       expect(result).toEqual({ error: 'Failure' })
+    })
+  })
+
+  describe('sftp:move', () => {
+    it('renames source to destination when nothing is in the way', async () => {
+      const sftp = createSftp()
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'target-1', sourcePath: '/a/x', destPath: '/b/x' }
+      )
+      expect(result).toEqual({ ok: true })
+      expect(renameSftpMock).toHaveBeenCalledWith(sftp, '/a/x', '/b/x')
+      expect(unlinkSftpMock).not.toHaveBeenCalled()
+      expect(removeDirectorySftpMock).not.toHaveBeenCalled()
+      expect(sftp.end as ReturnType<typeof vi.fn>).toHaveBeenCalled()
+    })
+
+    it('reports a conflict (and does not rename) when the destination exists without overwrite', async () => {
+      const sftp = createSftp({
+        lstat: vi.fn((_p: string, cb: (err: Error | null, s: unknown) => void) =>
+          cb(null, stats('file'))
+        )
+      })
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'target-1', sourcePath: '/a/x', destPath: '/b/x' }
+      )
+      expect(result).toEqual({ conflict: true })
+      expect(renameSftpMock).not.toHaveBeenCalled()
+      // Safety: a conflict must not have touched the destination.
+      expect(unlinkSftpMock).not.toHaveBeenCalled()
+      expect(removeDirectorySftpMock).not.toHaveBeenCalled()
+    })
+
+    it('overwrite (file): backs the old file aside, renames the source in, then removes the backup', async () => {
+      const sftp = createSftp({
+        lstat: vi.fn((_p: string, cb: (err: Error | null, s: unknown) => void) =>
+          cb(null, stats('file'))
+        )
+      })
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'target-1', sourcePath: '/a/x', destPath: '/b/x', overwrite: true }
+      )
+      expect(result).toEqual({ ok: true })
+      const backup = expect.stringMatching(/^\/b\/x\.orcinus-replaced-/)
+      // Never delete the destination before the source lands: dest -> backup, source -> dest, rm backup.
+      expect(renameSftpMock).toHaveBeenCalledWith(sftp, '/b/x', backup)
+      expect(renameSftpMock).toHaveBeenCalledWith(sftp, '/a/x', '/b/x')
+      expect(unlinkSftpMock).toHaveBeenCalledWith(sftp, backup)
+      expect(removeDirectorySftpMock).not.toHaveBeenCalled()
+    })
+
+    it('overwrite (directory): backs the old dir aside, renames the source in, then removes the backup', async () => {
+      const sftp = createSftp({
+        lstat: vi.fn((_p: string, cb: (err: Error | null, s: unknown) => void) =>
+          cb(null, stats('directory'))
+        )
+      })
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'target-1', sourcePath: '/a/x', destPath: '/b/x', overwrite: true }
+      )
+      expect(result).toEqual({ ok: true })
+      const backup = expect.stringMatching(/^\/b\/x\.orcinus-replaced-/)
+      expect(renameSftpMock).toHaveBeenCalledWith(sftp, '/b/x', backup)
+      expect(renameSftpMock).toHaveBeenCalledWith(sftp, '/a/x', '/b/x')
+      expect(removeDirectorySftpMock).toHaveBeenCalledWith(sftp, backup)
+      expect(unlinkSftpMock).not.toHaveBeenCalled()
+    })
+
+    it('overwrite: a failed rename is surfaced as an error (destination is preserved, not lost)', async () => {
+      const sftp = createSftp({
+        lstat: vi.fn((_p: string, cb: (err: Error | null, s: unknown) => void) =>
+          cb(null, stats('file'))
+        )
+      })
+      // First rename (dest -> backup) succeeds; second (source -> dest) fails; third restores backup.
+      renameSftpMock
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('EXDEV'))
+        .mockResolvedValueOnce(undefined)
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'target-1', sourcePath: '/a/x', destPath: '/b/x', overwrite: true }
+      )
+      expect(result).toEqual({ error: 'EXDEV' })
+      // The old destination is renamed back from its backup rather than left deleted.
+      expect(renameSftpMock).toHaveBeenNthCalledWith(
+        3,
+        sftp,
+        expect.stringMatching(/^\/b\/x\.orcinus-replaced-/),
+        '/b/x'
+      )
+      // Backup cleanup never runs when the move failed.
+      expect(unlinkSftpMock).not.toHaveBeenCalled()
+      expect(removeDirectorySftpMock).not.toHaveBeenCalled()
+    })
+
+    it('rejects moving an item onto itself', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'target-1', sourcePath: '/a/x', destPath: '/a/x', overwrite: true }
+      )
+      expect(result).toEqual({ error: 'Cannot move an item into itself' })
+      expect(renameSftpMock).not.toHaveBeenCalled()
+      expect(removeDirectorySftpMock).not.toHaveBeenCalled()
+    })
+
+    it('rejects moving a folder into its own subtree', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'target-1', sourcePath: '/a/x', destPath: '/a/x/sub/x' }
+      )
+      expect(result).toEqual({ error: 'Cannot move an item into itself' })
+      expect(renameSftpMock).not.toHaveBeenCalled()
+    })
+
+    it('returns a typed error when sourcePath is missing', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'target-1', destPath: '/b/x' }
+      )
+      expect(result).toEqual({ error: 'sourcePath is required' })
+      expect(renameSftpMock).not.toHaveBeenCalled()
+    })
+
+    it('returns a typed error for an unknown targetId', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'nope', sourcePath: '/a/x', destPath: '/b/x' }
+      )
+      expect(result).toEqual({ error: 'SSH connection "nope" not found' })
+      expect(renameSftpMock).not.toHaveBeenCalled()
+    })
+
+    it('returns a typed error when destPath is missing', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'target-1', sourcePath: '/a/x' }
+      )
+      expect(result).toEqual({ error: 'destPath is required' })
+    })
+
+    it('surfaces a rename failure as a typed error', async () => {
+      renameSftpMock.mockRejectedValue(new Error('Permission denied'))
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:move')(
+        { sender: createSender() },
+        { targetId: 'target-1', sourcePath: '/a/x', destPath: '/b/x' }
+      )
+      expect(result).toEqual({ error: 'Permission denied' })
+    })
+  })
+
+  describe('sftp:delete', () => {
+    it('unlinks a file (non-recursive) and closes the channel', async () => {
+      const sftp = createSftp()
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:delete')(
+        { sender: createSender() },
+        { targetId: 'target-1', path: '/a/file.txt', isDirectory: false }
+      )
+      expect(result).toEqual({ ok: true })
+      expect(unlinkSftpMock).toHaveBeenCalledWith(sftp, '/a/file.txt')
+      expect(removeDirectorySftpMock).not.toHaveBeenCalled()
+      expect(sftp.end as ReturnType<typeof vi.fn>).toHaveBeenCalled()
+    })
+
+    it('recursively removes a directory', async () => {
+      const sftp = createSftp()
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:delete')(
+        { sender: createSender() },
+        { targetId: 'target-1', path: '/a/dir', isDirectory: true }
+      )
+      expect(result).toEqual({ ok: true })
+      expect(removeDirectorySftpMock).toHaveBeenCalledWith(sftp, '/a/dir')
+      expect(unlinkSftpMock).not.toHaveBeenCalled()
+    })
+
+    it('unlinks a symlink (never recurses into its target)', async () => {
+      // A symlink arrives as isDirectory:false, so it is unlinked (the link), not recursively removed.
+      const sftp = createSftp()
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:delete')(
+        { sender: createSender() },
+        { targetId: 'target-1', path: '/a/link', isDirectory: false }
+      )
+      expect(result).toEqual({ ok: true })
+      expect(unlinkSftpMock).toHaveBeenCalledWith(sftp, '/a/link')
+      expect(removeDirectorySftpMock).not.toHaveBeenCalled()
+    })
+
+    it('refuses to delete the root directory', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:delete')(
+        { sender: createSender() },
+        { targetId: 'target-1', path: '/', isDirectory: true }
+      )
+      expect(result).toEqual({ error: 'Refusing to delete the root directory' })
+      expect(removeDirectorySftpMock).not.toHaveBeenCalled()
+      expect(unlinkSftpMock).not.toHaveBeenCalled()
+    })
+
+    it.each(['//', '.', '~', '..'])(
+      'refuses to delete a root-equivalent path (%s)',
+      async (path) => {
+        registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+        const result = await getHandler('sftp:delete')(
+          { sender: createSender() },
+          { targetId: 'target-1', path, isDirectory: true }
+        )
+        expect(result).toEqual({ error: 'Refusing to delete the root directory' })
+        expect(removeDirectorySftpMock).not.toHaveBeenCalled()
+        expect(unlinkSftpMock).not.toHaveBeenCalled()
+      }
+    )
+
+    it('returns a typed error for an unknown targetId', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:delete')(
+        { sender: createSender() },
+        { targetId: 'nope', path: '/a/file.txt', isDirectory: false }
+      )
+      expect(result).toEqual({ error: 'SSH connection "nope" not found' })
+    })
+
+    it('returns a typed error when path is missing', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:delete')(
+        { sender: createSender() },
+        { targetId: 'target-1', isDirectory: false }
+      )
+      expect(result).toEqual({ error: 'path is required' })
+    })
+
+    it('surfaces a delete failure as a typed error', async () => {
+      unlinkSftpMock.mockRejectedValue(new Error('No such file'))
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:delete')(
+        { sender: createSender() },
+        { targetId: 'target-1', path: '/a/file.txt', isDirectory: false }
+      )
+      expect(result).toEqual({ error: 'No such file' })
     })
   })
 

@@ -15965,13 +15965,23 @@
           "transferFailed": "Transfer failed",
           "upload": "Upload here",
           "folderCreated": "Folder created",
-          "newFolder": "New folder"
+          "newFolder": "New folder",
+          "moveOverwriteTitle": "Replace \"{{value0}}\"?",
+          "moveOverwriteDesc": "An item named \"{{value0}}\" already exists in the destination. Replacing it cannot be undone.",
+          "replace": "Replace",
+          "moved": "Moved",
+          "deleteTitle": "Delete \"{{value0}}\"?",
+          "deleteFolderDesc": "This permanently deletes the folder and its contents on the server. This cannot be undone.",
+          "deleteFileDesc": "This permanently deletes the file on the server. This cannot be undone.",
+          "deleteConfirm": "Delete",
+          "deleted": "Deleted"
         },
         "ServerExplorerRowMenu": {
           "uploadHere": "Upload files here…",
           "download": "Download…",
           "refresh": "Refresh",
-          "newFolder": "New Folder…"
+          "newFolder": "New Folder…",
+          "delete": "Delete…"
         },
         "ServerExplorerNewFolderDialog": {
           "title": "New Folder",

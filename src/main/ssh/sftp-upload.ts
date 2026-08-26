@@ -272,7 +272,7 @@ function readdirSftp(sftp: SFTPWrapper, remoteDir: string): Promise<SftpDirector
   })
 }
 
-function unlinkSftp(sftp: SFTPWrapper, remotePath: string): Promise<void> {
+export function unlinkSftp(sftp: SFTPWrapper, remotePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     sftp.unlink(remotePath, (err) => {
       if (err) {

@@ -1,4 +1,4 @@
-import { Download, FolderPlus, RefreshCw, Upload } from 'lucide-react'
+import { Download, FolderPlus, RefreshCw, Trash2, Upload } from 'lucide-react'
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -14,6 +14,7 @@ type ServerExplorerRowMenuProps = {
   onDownload: (remotePath: string, fileName: string) => void
   onUploadHere: (remoteDir: string) => void
   onCreateFolder: (parentDir: string) => void
+  onDelete: (node: TreeNode) => void
   onRefresh: (node: TreeNode) => void
 }
 
@@ -22,6 +23,7 @@ export function ServerExplorerRowMenu({
   onDownload,
   onUploadHere,
   onCreateFolder,
+  onDelete,
   onRefresh
 }: ServerExplorerRowMenuProps): React.JSX.Element {
   return (
@@ -49,6 +51,11 @@ export function ServerExplorerRowMenu({
           {translate('auto.components.right-sidebar.ServerExplorerRowMenu.download', 'Download…')}
         </ContextMenuItem>
       )}
+      <ContextMenuSeparator />
+      <ContextMenuItem variant="destructive" onSelect={() => onDelete(node)}>
+        <Trash2 className="size-3.5" />
+        {translate('auto.components.right-sidebar.ServerExplorerRowMenu.delete', 'Delete…')}
+      </ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem onSelect={() => onRefresh(node)}>
         <RefreshCw className="size-3.5" />
