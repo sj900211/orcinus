@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { RefreshCw, Server, Upload } from 'lucide-react'
+import { FolderPlus, RefreshCw, Server, Upload } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
@@ -23,6 +24,7 @@ import { useServerExplorerVirtualizer } from './use-server-explorer-virtualizer'
 import { downloadServerFile, uploadToServerDir } from './server-explorer-transfers'
 import { useServerExplorerTransferProgress } from './use-server-explorer-transfer-progress'
 import { ServerExplorerRowMenu } from './ServerExplorerRowMenu'
+import { ServerExplorerNewFolderDialog } from './ServerExplorerNewFolderDialog'
 
 // Why: read-only tree never routes git status/ignore decoration; share one stable empty
 // identity so the virtual rows don't re-render on every parent commit.
@@ -49,6 +51,7 @@ export default function ServerExplorer(): React.JSX.Element {
   )
   const [rootPath, setRootPath] = useState<string | null>(null)
   const [rootResolveError, setRootResolveError] = useState<string | null>(null)
+  const [newFolderParent, setNewFolderParent] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -153,6 +156,27 @@ export default function ServerExplorer(): React.JSX.Element {
     },
     [tree]
   )
+  const submitNewFolder = useCallback(
+    (name: string) => {
+      const parent = newFolderParent
+      setNewFolderParent(null)
+      if (!selectedHostId || !parent) {
+        return
+      }
+      const path = `${parent.replace(/\/+$/, '')}/${name}`
+      void window.api.sftp.mkdir({ targetId: selectedHostId, path }).then((result) => {
+        if ('error' in result) {
+          toast.error(result.error)
+          return
+        }
+        tree.refreshDir(parent)
+        toast.success(
+          translate('auto.components.right-sidebar.ServerExplorer.folderCreated', 'Folder created')
+        )
+      })
+    },
+    [newFolderParent, selectedHostId, tree]
+  )
 
   if (hostsLoaded && hosts.length === 0) {
     return <NoHostsState onOpenSettings={openSftpSettings} />
@@ -201,6 +225,24 @@ export default function ServerExplorer(): React.JSX.Element {
           )}
         >
           <Upload size={14} />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            if (rootPath) {
+              setNewFolderParent(rootPath)
+            }
+          }}
+          disabled={!rootPath}
+          aria-label={translate(
+            'auto.components.right-sidebar.ServerExplorer.newFolder',
+            'New folder'
+          )}
+        >
+          <FolderPlus size={14} />
         </Button>
         <Button
           type="button"
@@ -286,6 +328,7 @@ export default function ServerExplorer(): React.JSX.Element {
                   node={node}
                   onDownload={handleDownload}
                   onUploadHere={handleUpload}
+                  onCreateFolder={setNewFolderParent}
                   onRefresh={handleRowRefresh}
                 />
               )}
@@ -293,6 +336,17 @@ export default function ServerExplorer(): React.JSX.Element {
           )}
         </ScrollArea>
       )}
+      <ServerExplorerNewFolderDialog
+        key={newFolderParent ?? 'closed'}
+        open={newFolderParent != null}
+        parentDir={newFolderParent ?? ''}
+        onSubmit={submitNewFolder}
+        onOpenChange={(open) => {
+          if (!open) {
+            setNewFolderParent(null)
+          }
+        }}
+      />
     </div>
   )
 }

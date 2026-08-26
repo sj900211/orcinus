@@ -4895,6 +4895,9 @@ const api = {
     realpath: (args: { targetId: string; path: string }): Promise<string | SftpError> =>
       ipcRenderer.invoke('sftp:realpath', args),
 
+    mkdir: (args: { targetId: string; path: string }): Promise<{ ok: true } | SftpError> =>
+      ipcRenderer.invoke('sftp:mkdir', args),
+
     startUpload: (args: {
       targetId: string
       remoteDir: string

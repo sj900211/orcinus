@@ -46,6 +46,7 @@ export type SftpProbeConnectionInput = {
 export type SftpApi = {
   readdir: (args: { targetId: string; path: string }) => Promise<SftpReaddirResult | SftpError>
   realpath: (args: { targetId: string; path: string }) => Promise<string | SftpError>
+  mkdir: (args: { targetId: string; path: string }) => Promise<{ ok: true } | SftpError>
   startUpload: (args: {
     targetId: string
     remoteDir: string

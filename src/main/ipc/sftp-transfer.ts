@@ -4,7 +4,7 @@ import { basename, posix as pathPosix } from 'node:path'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { WebContents } from 'electron'
 import { readDirViaSftp } from '../providers/ssh-filesystem-provider-sftp'
-import { uploadFile } from '../ssh/sftp-upload'
+import { mkdirSftp, uploadFile } from '../ssh/sftp-upload'
 import { sanitizeLocalDownloadFilename } from '../local-download-filename'
 import {
   emitProgress,
@@ -39,7 +39,8 @@ const SFTP_IPC_CHANNELS = [
   'sftp:realpath',
   'sftp:startUpload',
   'sftp:startDownload',
-  'sftp:cancelTransfer'
+  'sftp:cancelTransfer',
+  'sftp:mkdir'
 ] as const
 
 type TransferSession = { controller: AbortController; senderId: number }
@@ -106,6 +107,33 @@ export function registerSftpTransferHandlers(
           const rawEntries = await readDirViaSftp(sftp, resolvedPath)
           return { entries: mapAndSortSftpEntries(rawEntries), resolvedPath }
         })
+      } catch (error) {
+        return { error: transferErrorMessage(error) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'sftp:mkdir',
+    async (
+      _event,
+      args: { targetId?: string; path?: string }
+    ): Promise<{ ok: true } | SftpError> => {
+      const resolved = await resolveConnection(getSftpConnection, args?.targetId)
+      if ('error' in resolved) {
+        return resolved
+      }
+      let path: string
+      try {
+        path = validateString(args?.path, 'path')
+      } catch (error) {
+        return { error: toErrorMessage(error) }
+      }
+      try {
+        await withSftpChannel(resolved.conn, (sftp) =>
+          mkdirSftp(sftp, path, { allowExisting: false })
+        )
+        return { ok: true }
       } catch (error) {
         return { error: transferErrorMessage(error) }
       }

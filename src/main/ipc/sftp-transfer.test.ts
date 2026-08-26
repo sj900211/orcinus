@@ -8,6 +8,7 @@ const {
   showSaveDialogMock,
   fromWebContentsMock,
   uploadFileMock,
+  mkdirSftpMock,
   fastGetViaSftpMock,
   unlinkMock,
   renameMock,
@@ -19,6 +20,7 @@ const {
   showSaveDialogMock: vi.fn(),
   fromWebContentsMock: vi.fn(() => null),
   uploadFileMock: vi.fn(async (..._args: unknown[]) => {}),
+  mkdirSftpMock: vi.fn(async (..._args: unknown[]) => {}),
   fastGetViaSftpMock: vi.fn(async (..._args: unknown[]) => {}),
   unlinkMock: vi.fn(async (..._args: unknown[]) => {}),
   renameMock: vi.fn(async (..._args: unknown[]) => {}),
@@ -37,7 +39,7 @@ vi.mock('node:fs/promises', () => ({
   stat: statMock
 }))
 
-vi.mock('../ssh/sftp-upload', () => ({ uploadFile: uploadFileMock }))
+vi.mock('../ssh/sftp-upload', () => ({ uploadFile: uploadFileMock, mkdirSftp: mkdirSftpMock }))
 
 vi.mock('../providers/ssh-filesystem-provider-sftp', async () => {
   const actual = await vi.importActual<typeof SftpProviderModule>(
@@ -121,6 +123,7 @@ describe('registerSftpTransferHandlers', () => {
     fromWebContentsMock.mockReturnValue(null)
     uploadFileMock.mockResolvedValue(undefined)
     fastGetViaSftpMock.mockResolvedValue(undefined)
+    mkdirSftpMock.mockResolvedValue(undefined)
     renameMock.mockResolvedValue(undefined)
     unlinkMock.mockResolvedValue(undefined)
     statMock.mockResolvedValue({ size: 10 })
@@ -203,6 +206,49 @@ describe('registerSftpTransferHandlers', () => {
         }
       )
       expect(result).toBe('/home/user')
+    })
+  })
+
+  describe('sftp:mkdir', () => {
+    it('creates the folder (never allowing an existing target) and closes the channel', async () => {
+      const sftp = createSftp()
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:mkdir')(
+        { sender: createSender() },
+        { targetId: 'target-1', path: '/remote/dir/new' }
+      )
+      expect(result).toEqual({ ok: true })
+      expect(mkdirSftpMock).toHaveBeenCalledWith(sftp, '/remote/dir/new', { allowExisting: false })
+      expect(sftp.end as ReturnType<typeof vi.fn>).toHaveBeenCalled()
+    })
+
+    it('returns a typed error for an unknown targetId', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:mkdir')(
+        { sender: createSender() },
+        { targetId: 'nope', path: '/remote/dir/new' }
+      )
+      expect(result).toEqual({ error: 'SSH connection "nope" not found' })
+      expect(mkdirSftpMock).not.toHaveBeenCalled()
+    })
+
+    it('returns a typed error when path is missing', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:mkdir')(
+        { sender: createSender() },
+        { targetId: 'target-1' }
+      )
+      expect(result).toEqual({ error: 'path is required' })
+    })
+
+    it('surfaces a mkdir failure (e.g. already exists) as a typed error', async () => {
+      mkdirSftpMock.mockRejectedValue(new Error('Failure'))
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:mkdir')(
+        { sender: createSender() },
+        { targetId: 'target-1', path: '/remote/dir/dup' }
+      )
+      expect(result).toEqual({ error: 'Failure' })
     })
   })
 

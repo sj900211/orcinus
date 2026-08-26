@@ -1,4 +1,4 @@
-import { Download, RefreshCw, Upload } from 'lucide-react'
+import { Download, FolderPlus, RefreshCw, Upload } from 'lucide-react'
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -13,6 +13,7 @@ type ServerExplorerRowMenuProps = {
   node: TreeNode
   onDownload: (remotePath: string, fileName: string) => void
   onUploadHere: (remoteDir: string) => void
+  onCreateFolder: (parentDir: string) => void
   onRefresh: (node: TreeNode) => void
 }
 
@@ -20,18 +21,28 @@ export function ServerExplorerRowMenu({
   node,
   onDownload,
   onUploadHere,
+  onCreateFolder,
   onRefresh
 }: ServerExplorerRowMenuProps): React.JSX.Element {
   return (
     <ContextMenuContent className="w-52">
       {node.isDirectory ? (
-        <ContextMenuItem onSelect={() => onUploadHere(node.path)}>
-          <Upload className="size-3.5" />
-          {translate(
-            'auto.components.right-sidebar.ServerExplorerRowMenu.uploadHere',
-            'Upload files here…'
-          )}
-        </ContextMenuItem>
+        <>
+          <ContextMenuItem onSelect={() => onUploadHere(node.path)}>
+            <Upload className="size-3.5" />
+            {translate(
+              'auto.components.right-sidebar.ServerExplorerRowMenu.uploadHere',
+              'Upload files here…'
+            )}
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => onCreateFolder(node.path)}>
+            <FolderPlus className="size-3.5" />
+            {translate(
+              'auto.components.right-sidebar.ServerExplorerRowMenu.newFolder',
+              'New Folder…'
+            )}
+          </ContextMenuItem>
+        </>
       ) : (
         <ContextMenuItem onSelect={() => onDownload(node.path, node.name)}>
           <Download className="size-3.5" />

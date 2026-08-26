@@ -15963,12 +15963,21 @@
           "uploaded": "Uploaded to {{value0}}",
           "cancelTransfer": "Cancel",
           "transferFailed": "Transfer failed",
-          "upload": "Upload here"
+          "upload": "Upload here",
+          "folderCreated": "Folder created",
+          "newFolder": "New folder"
         },
         "ServerExplorerRowMenu": {
           "uploadHere": "Upload files here…",
           "download": "Download…",
-          "refresh": "Refresh"
+          "refresh": "Refresh",
+          "newFolder": "New Folder…"
+        },
+        "ServerExplorerNewFolderDialog": {
+          "title": "New Folder",
+          "namePlaceholder": "Folder name",
+          "cancel": "Cancel",
+          "create": "Create"
         }
       }
     },
