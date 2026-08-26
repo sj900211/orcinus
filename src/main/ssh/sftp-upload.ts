@@ -2,8 +2,10 @@ import { constants } from 'node:fs'
 import type { ReadStream } from 'node:fs'
 import { lstat, open, readdir, realpath } from 'node:fs/promises'
 import { isAbsolute, join as pathJoin, relative, sep } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { finished } from 'node:stream/promises'
 import type { SFTPWrapper } from 'ssh2'
+import { publishTempUpload, unlinkQuietSftp } from './sftp-rename'
 
 export function mkdirSftp(
   sftp: SFTPWrapper,
@@ -55,6 +57,10 @@ async function uploadFileAndJoinTeardown(
     handleClose ??= handle.close()
     return handleClose
   }
+  // Why: stream to a per-file temp path and publish (rename) only on success, so a canceled or failed
+  // upload never leaves a partial file — and an overwrite never clobbers the original until it lands.
+  const tempPath = `${remotePath}.orcinus-part-${randomUUID()}`
+  let published = false
   try {
     options?.signal?.throwIfAborted()
     const statResult = await lstat(localPath)
@@ -70,10 +76,7 @@ async function uploadFileAndJoinTeardown(
     ) {
       throw new Error(`File changed during upload: ${localPath}`)
     }
-    // Why: rejected local sources must not leave an empty remote file.
-    writeStream = sftp.createWriteStream(remotePath, {
-      flags: options?.exclusive ? 'wx' : 'w'
-    })
+    writeStream = sftp.createWriteStream(tempPath, { flags: 'w' })
     readStream = handle.createReadStream({ autoClose: false })
     if (options?.onProgress) {
       const onProgress = options.onProgress
@@ -116,10 +119,17 @@ async function uploadFileAndJoinTeardown(
     } finally {
       options?.signal?.removeEventListener('abort', abortTransfer)
     }
+    // Streams finished cleanly — publish the temp file onto the real path.
+    await publishTempUpload(sftp, tempPath, remotePath, options?.exclusive ?? false)
+    published = true
   } finally {
     readStream?.destroy()
     writeStream?.destroy()
     await closeHandle()
+    // Only ever remove our own temp file — the real path is untouched unless publish succeeded.
+    if (!published) {
+      await unlinkQuietSftp(sftp, tempPath)
+    }
   }
 }
 
