@@ -12,6 +12,7 @@ const {
   unlinkSftpMock,
   removeDirectorySftpMock,
   renameSftpMock,
+  uploadDirectoriesIntoMock,
   fastGetViaSftpMock,
   unlinkMock,
   renameMock,
@@ -27,6 +28,7 @@ const {
   unlinkSftpMock: vi.fn(async (..._args: unknown[]) => {}),
   removeDirectorySftpMock: vi.fn(async (..._args: unknown[]) => {}),
   renameSftpMock: vi.fn(async (..._args: unknown[]) => {}),
+  uploadDirectoriesIntoMock: vi.fn(async (..._args: unknown[]) => {}),
   fastGetViaSftpMock: vi.fn(async (..._args: unknown[]) => {}),
   unlinkMock: vi.fn(async (..._args: unknown[]) => {}),
   renameMock: vi.fn(async (..._args: unknown[]) => {}),
@@ -53,6 +55,8 @@ vi.mock('../ssh/sftp-upload', () => ({
 }))
 
 vi.mock('../ssh/sftp-rename', () => ({ renameSftp: renameSftpMock }))
+
+vi.mock('../ssh/sftp-upload-batch', () => ({ uploadDirectoriesInto: uploadDirectoriesIntoMock }))
 
 vi.mock('../providers/ssh-filesystem-provider-sftp', async () => {
   const actual = await vi.importActual<typeof SftpProviderModule>(
@@ -144,6 +148,7 @@ describe('registerSftpTransferHandlers', () => {
     unlinkSftpMock.mockResolvedValue(undefined)
     removeDirectorySftpMock.mockResolvedValue(undefined)
     renameSftpMock.mockResolvedValue(undefined)
+    uploadDirectoriesIntoMock.mockResolvedValue(undefined)
     renameMock.mockResolvedValue(undefined)
     unlinkMock.mockResolvedValue(undefined)
     statMock.mockResolvedValue({ size: 10 })
@@ -599,6 +604,38 @@ describe('registerSftpTransferHandlers', () => {
         '/remote/dir/a.txt',
         expect.objectContaining({ exclusive: false })
       )
+    })
+
+    it('directories mode: picks folders and recurses each via uploadDirectoriesInto', async () => {
+      showOpenDialogMock.mockResolvedValue({
+        canceled: false,
+        filePaths: ['/local/folder-a', '/local/folder-b']
+      })
+      const sftp = createSftp()
+      const sender = createSender()
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = (await getHandler('sftp:startUpload')(
+        { sender },
+        { targetId: 'target-1', remoteDir: '/remote/dir', directories: true }
+      )) as { transferId: string }
+
+      expect(typeof result.transferId).toBe('string')
+      await new Promise((r) => setImmediate(r))
+
+      // Folder mode opens a directory picker, not a file picker.
+      expect(showOpenDialogMock).toHaveBeenCalledWith(
+        expect.objectContaining({ properties: ['openDirectory', 'multiSelections'] })
+      )
+      expect(uploadDirectoriesIntoMock).toHaveBeenCalledWith(
+        sftp,
+        ['/local/folder-a', '/local/folder-b'],
+        '/remote/dir',
+        expect.objectContaining({ exclusive: true })
+      )
+      expect(uploadFileMock).not.toHaveBeenCalled()
+      const phases = sender.send.mock.calls.map((c) => (c[1] as { phase: string }).phase)
+      expect(phases).toContain('start')
+      expect(phases).toContain('done')
     })
 
     it('cancel aborts the in-flight upload signal', async () => {

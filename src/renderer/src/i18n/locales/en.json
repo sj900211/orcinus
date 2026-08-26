@@ -15974,14 +15974,16 @@
           "deleteFolderDesc": "This permanently deletes the folder and its contents on the server. This cannot be undone.",
           "deleteFileDesc": "This permanently deletes the file on the server. This cannot be undone.",
           "deleteConfirm": "Delete",
-          "deleted": "Deleted"
+          "deleted": "Deleted",
+          "uploadFolder": "Upload folder here"
         },
         "ServerExplorerRowMenu": {
           "uploadHere": "Upload files here…",
           "download": "Download…",
           "refresh": "Refresh",
           "newFolder": "New Folder…",
-          "delete": "Delete…"
+          "delete": "Delete…",
+          "uploadFolderHere": "Upload folder here…"
         },
         "ServerExplorerNewFolderDialog": {
           "title": "New Folder",

@@ -62,6 +62,7 @@ export type SftpApi = {
     targetId: string
     remoteDir: string
     overwrite?: boolean
+    directories?: boolean
   }) => Promise<{ transferId: string } | { canceled: true } | SftpError>
   startDownload: (args: {
     targetId: string

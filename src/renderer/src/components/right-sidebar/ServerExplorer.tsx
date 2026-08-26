@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { FolderPlus, RefreshCw, Server, Upload } from 'lucide-react'
+import { FolderPlus, FolderUp, RefreshCw, Server, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
@@ -21,7 +21,11 @@ import type { TreeNode } from './file-explorer-types'
 import { createVisibleFileExplorerRowProjection } from './useFileExplorerVisibleRowProjection'
 import { useServerExplorerTree } from './useServerExplorerTree'
 import { useServerExplorerVirtualizer } from './use-server-explorer-virtualizer'
-import { downloadServerFile, uploadToServerDir } from './server-explorer-transfers'
+import {
+  downloadServerFile,
+  uploadFolderToServerDir,
+  uploadToServerDir
+} from './server-explorer-transfers'
 import { useServerExplorerTransferProgress } from './use-server-explorer-transfer-progress'
 import { ServerExplorerRowMenu } from './ServerExplorerRowMenu'
 import { ServerExplorerNewFolderDialog } from './ServerExplorerNewFolderDialog'
@@ -148,6 +152,14 @@ export default function ServerExplorer(): React.JSX.Element {
     },
     [selectedHostId]
   )
+  const handleUploadFolder = useCallback(
+    (remoteDir: string) => {
+      if (selectedHostId) {
+        void uploadFolderToServerDir(selectedHostId, remoteDir)
+      }
+    },
+    [selectedHostId]
+  )
   const handleRowRefresh = useCallback(
     (node: TreeNode) => {
       tree.refreshDir(node.isDirectory ? node.path : parentPosixDir(node.path))
@@ -223,6 +235,24 @@ export default function ServerExplorer(): React.JSX.Element {
           )}
         >
           <Upload size={14} />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            if (rootPath) {
+              handleUploadFolder(rootPath)
+            }
+          }}
+          disabled={!rootPath}
+          aria-label={translate(
+            'auto.components.right-sidebar.ServerExplorer.uploadFolder',
+            'Upload folder here'
+          )}
+        >
+          <FolderUp size={14} />
         </Button>
         <Button
           type="button"
@@ -328,6 +358,7 @@ export default function ServerExplorer(): React.JSX.Element {
                   node={node}
                   onDownload={handleDownload}
                   onUploadHere={handleUpload}
+                  onUploadFolderHere={handleUploadFolder}
                   onCreateFolder={setNewFolderParent}
                   onDelete={mutations.handleDelete}
                   onRefresh={handleRowRefresh}

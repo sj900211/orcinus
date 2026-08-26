@@ -4916,6 +4916,7 @@ const api = {
       targetId: string
       remoteDir: string
       overwrite?: boolean
+      directories?: boolean
     }): Promise<{ transferId: string } | { canceled: true } | SftpError> =>
       ipcRenderer.invoke('sftp:startUpload', args),
 

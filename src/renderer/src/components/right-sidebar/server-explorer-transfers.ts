@@ -102,9 +102,21 @@ export async function downloadServerFile(
 }
 
 export async function uploadToServerDir(targetId: string, remoteDir: string): Promise<void> {
-  // Interim (dungeon 7-A): exclusive upload — never clobber an existing remote file, so a canceled
-  // upload can't corrupt one. Dungeon 8 adds the overwrite/rename conflict prompt + atomic temp-rename.
-  const result = await window.api.sftp.startUpload({ targetId, remoteDir })
+  // Exclusive upload — never clobber an existing remote file, so a canceled upload can't corrupt one.
+  await startServerUpload(targetId, remoteDir, false)
+}
+
+/** Upload whole local folders (recursively) into the remote directory. */
+export async function uploadFolderToServerDir(targetId: string, remoteDir: string): Promise<void> {
+  await startServerUpload(targetId, remoteDir, true)
+}
+
+async function startServerUpload(
+  targetId: string,
+  remoteDir: string,
+  directories: boolean
+): Promise<void> {
+  const result = await window.api.sftp.startUpload({ targetId, remoteDir, directories })
   if ('canceled' in result) {
     return
   }

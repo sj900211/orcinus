@@ -5,6 +5,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { WebContents } from 'electron'
 import { readDirViaSftp } from '../providers/ssh-filesystem-provider-sftp'
 import { mkdirSftp, uploadFile } from '../ssh/sftp-upload'
+import { uploadDirectoriesInto } from '../ssh/sftp-upload-batch'
 import { registerSftpFsMutationHandlers } from './sftp-fs-mutations'
 import { sanitizeLocalDownloadFilename } from '../local-download-filename'
 import {
@@ -168,7 +169,7 @@ export function registerSftpTransferHandlers(
     'sftp:startUpload',
     async (
       event,
-      args: { targetId?: string; remoteDir?: string; overwrite?: boolean }
+      args: { targetId?: string; remoteDir?: string; overwrite?: boolean; directories?: boolean }
     ): Promise<{ transferId: string } | { canceled: true } | SftpError> => {
       const resolved = await resolveConnection(getSftpConnection, args?.targetId)
       if ('error' in resolved) {
@@ -181,10 +182,15 @@ export function registerSftpTransferHandlers(
         return { error: toErrorMessage(error) }
       }
 
+      // Windows/Linux open dialogs can't mix file + directory selection, so folder upload is a
+      // distinct mode (openDirectory) rather than one combined picker.
+      const properties: Array<'openFile' | 'openDirectory' | 'multiSelections'> = args?.directories
+        ? ['openDirectory', 'multiSelections']
+        : ['openFile', 'multiSelections']
       const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined
       const dialogResult = await (parentWindow
-        ? dialog.showOpenDialog(parentWindow, { properties: ['openFile', 'multiSelections'] })
-        : dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] }))
+        ? dialog.showOpenDialog(parentWindow, { properties })
+        : dialog.showOpenDialog({ properties }))
       if (dialogResult.canceled || dialogResult.filePaths.length === 0) {
         return { canceled: true }
       }
@@ -208,6 +214,23 @@ export function registerSftpTransferHandlers(
           totalBytes: 0
         })
         try {
+          if (args?.directories) {
+            // Folder upload: recurse each picked directory. Progress is indeterminate (the toast
+            // shows a spinner until done); the finally block below still runs on the early return.
+            await withSftpChannel(resolved.conn, (sftp) =>
+              uploadDirectoriesInto(sftp, localPaths, remoteDir, {
+                exclusive: !overwrite,
+                signal: controller.signal
+              })
+            )
+            emitProgress(webContents, {
+              transferId,
+              phase: 'done',
+              bytesTransferred: 0,
+              totalBytes: 0
+            })
+            return
+          }
           // Pre-stat the batch so multi-file progress stays monotonic against one stable total instead
           // of resetting per file; best-effort (a stat failure yields 0 — uploadFile surfaces the real error).
           const fileSizes = await Promise.all(
