@@ -101,22 +101,64 @@ export async function downloadServerFile(
   showPending(result.transferId, 'download', fileName)
 }
 
-export async function uploadToServerDir(targetId: string, remoteDir: string): Promise<void> {
-  // Exclusive upload — never clobber an existing remote file, so a canceled upload can't corrupt one.
-  await startServerUpload(targetId, remoteDir, false)
-}
+export type UploadConflictResolution =
+  | { action: 'overwrite' }
+  | { action: 'skip' }
+  | { action: 'rename'; newName: string }
+  | { action: 'cancel' }
 
-/** Upload whole local folders (recursively) into the remote directory. */
-export async function uploadFolderToServerDir(targetId: string, remoteDir: string): Promise<void> {
-  await startServerUpload(targetId, remoteDir, true)
-}
-
-async function startServerUpload(
+/**
+ * Upload local files, resolving remote name collisions via `resolveConflict` (overwrite / rename /
+ * skip / cancel). Two-phase: plan (pick + detect conflicts) → prompt per conflict → perform.
+ */
+export async function uploadFilesToServerDir(
   targetId: string,
   remoteDir: string,
-  directories: boolean
+  resolveConflict: (name: string) => Promise<UploadConflictResolution>
 ): Promise<void> {
-  const result = await window.api.sftp.startUpload({ targetId, remoteDir, directories })
+  const plan = await window.api.sftp.planUpload({ targetId, remoteDir })
+  if ('canceled' in plan) {
+    return
+  }
+  if ('error' in plan) {
+    toast.error(plan.error)
+    return
+  }
+  const uploads: Array<{ localPath: string; remoteName: string; overwrite: boolean }> = []
+  for (const item of plan.items) {
+    if (!item.conflict) {
+      uploads.push({ localPath: item.localPath, remoteName: item.name, overwrite: false })
+      continue
+    }
+    const resolution = await resolveConflict(item.name)
+    if (resolution.action === 'cancel') {
+      return
+    }
+    if (resolution.action === 'skip') {
+      continue
+    }
+    if (resolution.action === 'overwrite') {
+      uploads.push({ localPath: item.localPath, remoteName: item.name, overwrite: true })
+    } else {
+      uploads.push({ localPath: item.localPath, remoteName: resolution.newName, overwrite: false })
+    }
+  }
+  if (uploads.length === 0) {
+    return
+  }
+  const result = await window.api.sftp.performUpload({ targetId, remoteDir, uploads })
+  if ('error' in result) {
+    toast.error(result.error)
+    return
+  }
+  const label = posixBasename(remoteDir) || remoteDir
+  tracked.set(result.transferId, { kind: 'upload', label })
+  showPending(result.transferId, 'upload', label)
+}
+
+/** Upload whole local folders (recursively) into the remote directory (exclusive, no conflict prompt). */
+export async function uploadFolderToServerDir(targetId: string, remoteDir: string): Promise<void> {
+  const result = await window.api.sftp.startUpload({ targetId, remoteDir, directories: true })
   if ('canceled' in result) {
     return
   }

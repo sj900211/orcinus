@@ -4920,6 +4920,22 @@ const api = {
     }): Promise<{ transferId: string } | { canceled: true } | SftpError> =>
       ipcRenderer.invoke('sftp:startUpload', args),
 
+    planUpload: (args: {
+      targetId: string
+      remoteDir: string
+    }): Promise<
+      | { items: Array<{ name: string; localPath: string; conflict: boolean }> }
+      | { canceled: true }
+      | SftpError
+    > => ipcRenderer.invoke('sftp:planUpload', args),
+
+    performUpload: (args: {
+      targetId: string
+      remoteDir: string
+      uploads: Array<{ localPath: string; remoteName: string; overwrite: boolean }>
+    }): Promise<{ transferId: string } | SftpError> =>
+      ipcRenderer.invoke('sftp:performUpload', args),
+
     startDownload: (args: {
       targetId: string
       remotePath: string

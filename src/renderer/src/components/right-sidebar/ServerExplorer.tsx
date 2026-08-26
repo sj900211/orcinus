@@ -21,15 +21,13 @@ import type { TreeNode } from './file-explorer-types'
 import { createVisibleFileExplorerRowProjection } from './useFileExplorerVisibleRowProjection'
 import { useServerExplorerTree } from './useServerExplorerTree'
 import { useServerExplorerVirtualizer } from './use-server-explorer-virtualizer'
-import {
-  downloadServerFile,
-  uploadFolderToServerDir,
-  uploadToServerDir
-} from './server-explorer-transfers'
+import { downloadServerFile, uploadFolderToServerDir } from './server-explorer-transfers'
 import { useServerExplorerTransferProgress } from './use-server-explorer-transfer-progress'
 import { ServerExplorerRowMenu } from './ServerExplorerRowMenu'
 import { ServerExplorerNewFolderDialog } from './ServerExplorerNewFolderDialog'
+import { ServerExplorerUploadConflictDialog } from './ServerExplorerUploadConflictDialog'
 import { useServerExplorerMutations } from './use-server-explorer-mutations'
+import { useServerExplorerUpload } from './use-server-explorer-upload'
 import { parentPosixDir } from './server-explorer-directory-listing'
 
 // Why: read-only tree never routes git status/ignore decoration; share one stable empty
@@ -105,6 +103,7 @@ export default function ServerExplorer(): React.JSX.Element {
 
   const tree = useServerExplorerTree(selectedHostId, rootPath)
   const mutations = useServerExplorerMutations(selectedHostId, rootPath, tree)
+  const upload = useServerExplorerUpload(selectedHostId)
   const scrollRef = useRef<HTMLDivElement>(null)
   const rowProjection = createVisibleFileExplorerRowProjection(
     { dirCache: tree.dirCache, expanded: tree.expanded, worktreePath: rootPath },
@@ -140,14 +139,6 @@ export default function ServerExplorer(): React.JSX.Element {
     (remotePath: string, fileName: string) => {
       if (selectedHostId) {
         void downloadServerFile(selectedHostId, remotePath, fileName)
-      }
-    },
-    [selectedHostId]
-  )
-  const handleUpload = useCallback(
-    (remoteDir: string) => {
-      if (selectedHostId) {
-        void uploadToServerDir(selectedHostId, remoteDir)
       }
     },
     [selectedHostId]
@@ -225,7 +216,7 @@ export default function ServerExplorer(): React.JSX.Element {
           className="text-muted-foreground hover:text-foreground"
           onClick={() => {
             if (rootPath) {
-              handleUpload(rootPath)
+              upload.uploadFiles(rootPath)
             }
           }}
           disabled={!rootPath}
@@ -357,7 +348,7 @@ export default function ServerExplorer(): React.JSX.Element {
                 <ServerExplorerRowMenu
                   node={node}
                   onDownload={handleDownload}
-                  onUploadHere={handleUpload}
+                  onUploadHere={upload.uploadFiles}
                   onUploadFolderHere={handleUploadFolder}
                   onCreateFolder={setNewFolderParent}
                   onDelete={mutations.handleDelete}
@@ -378,6 +369,11 @@ export default function ServerExplorer(): React.JSX.Element {
             setNewFolderParent(null)
           }
         }}
+      />
+      <ServerExplorerUploadConflictDialog
+        key={upload.conflictName ?? 'closed'}
+        name={upload.conflictName}
+        onResolve={upload.resolveConflict}
       />
     </div>
   )

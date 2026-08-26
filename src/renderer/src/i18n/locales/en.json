@@ -15990,6 +15990,14 @@
           "namePlaceholder": "Folder name",
           "cancel": "Cancel",
           "create": "Create"
+        },
+        "ServerExplorerUploadConflictDialog": {
+          "title": "File already exists",
+          "body": "\"{{value0}}\" already exists in this folder. Replace it, upload under a new name, or skip it.",
+          "namePlaceholder": "New name",
+          "rename": "Rename",
+          "skip": "Skip",
+          "overwrite": "Overwrite"
         }
       }
     },
