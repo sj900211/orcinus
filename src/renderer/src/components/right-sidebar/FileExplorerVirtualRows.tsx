@@ -54,6 +54,7 @@ type FileExplorerVirtualRowsProps = {
   dropTargetDir: string | null
   dragSourcePath: string | null
   nativeDropTargetDir: string | null
+  renderContextMenu?: (node: TreeNode) => React.ReactNode
 }
 
 export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): React.JSX.Element {
@@ -100,7 +101,8 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
     onNativeDragExpandDir,
     dropTargetDir,
     dragSourcePath,
-    nativeDropTargetDir
+    nativeDropTargetDir,
+    renderContextMenu
   } = props
 
   const visibleSelectionCount = rowProjection.countVisiblePaths(selectedPaths)
@@ -207,6 +209,7 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
               onDragExpandDir={onDragExpandDir}
               onNativeDragTargetChange={onNativeDragTargetChange}
               onNativeDragExpandDir={onNativeDragExpandDir}
+              renderContextMenu={renderContextMenu}
             />
           </div>
         )

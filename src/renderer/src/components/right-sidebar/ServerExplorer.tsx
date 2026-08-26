@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { RefreshCw, Server } from 'lucide-react'
+import { RefreshCw, Server, Upload } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
@@ -20,6 +20,9 @@ import type { TreeNode } from './file-explorer-types'
 import { createVisibleFileExplorerRowProjection } from './useFileExplorerVisibleRowProjection'
 import { useServerExplorerTree } from './useServerExplorerTree'
 import { useServerExplorerVirtualizer } from './use-server-explorer-virtualizer'
+import { downloadServerFile, uploadToServerDir } from './server-explorer-transfers'
+import { useServerExplorerTransferProgress } from './use-server-explorer-transfer-progress'
+import { ServerExplorerRowMenu } from './ServerExplorerRowMenu'
 
 // Why: read-only tree never routes git status/ignore decoration; share one stable empty
 // identity so the virtual rows don't re-render on every parent commit.
@@ -30,6 +33,11 @@ const EMPTY_SELECTED = new Set<string>()
 const noop = (): void => {}
 
 const HOST_ID_STORAGE_KEY = 'orcinus.serverExplorer.hostId'
+
+function parentPosixDir(path: string): string {
+  const index = path.lastIndexOf('/')
+  return index <= 0 ? '/' : path.slice(0, index)
+}
 
 export default function ServerExplorer(): React.JSX.Element {
   const openSettingsPage = useAppStore((s) => s.openSettingsPage)
@@ -122,6 +130,30 @@ export default function ServerExplorer(): React.JSX.Element {
     openSettingsTarget({ pane: 'sftp', repoId: null })
   }, [openSettingsPage, openSettingsTarget])
 
+  useServerExplorerTransferProgress()
+  const handleDownload = useCallback(
+    (remotePath: string, fileName: string) => {
+      if (selectedHostId) {
+        void downloadServerFile(selectedHostId, remotePath, fileName)
+      }
+    },
+    [selectedHostId]
+  )
+  const handleUpload = useCallback(
+    (remoteDir: string) => {
+      if (selectedHostId) {
+        void uploadToServerDir(selectedHostId, remoteDir)
+      }
+    },
+    [selectedHostId]
+  )
+  const handleRowRefresh = useCallback(
+    (node: TreeNode) => {
+      tree.refreshDir(node.isDirectory ? node.path : parentPosixDir(node.path))
+    },
+    [tree]
+  )
+
   if (hostsLoaded && hosts.length === 0) {
     return <NoHostsState onOpenSettings={openSftpSettings} />
   }
@@ -152,6 +184,24 @@ export default function ServerExplorer(): React.JSX.Element {
             ))}
           </SelectContent>
         </Select>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            if (rootPath) {
+              handleUpload(rootPath)
+            }
+          }}
+          disabled={!rootPath}
+          aria-label={translate(
+            'auto.components.right-sidebar.ServerExplorer.upload',
+            'Upload here'
+          )}
+        >
+          <Upload size={14} />
+        </Button>
         <Button
           type="button"
           variant="ghost"
@@ -231,6 +281,14 @@ export default function ServerExplorer(): React.JSX.Element {
               dropTargetDir={null}
               dragSourcePath={null}
               nativeDropTargetDir={null}
+              renderContextMenu={(node) => (
+                <ServerExplorerRowMenu
+                  node={node}
+                  onDownload={handleDownload}
+                  onUploadHere={handleUpload}
+                  onRefresh={handleRowRefresh}
+                />
+              )}
             />
           )}
         </ScrollArea>

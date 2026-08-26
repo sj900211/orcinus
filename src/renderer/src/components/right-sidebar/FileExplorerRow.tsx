@@ -60,6 +60,9 @@ export type FileExplorerRowProps = {
   onDragExpandDir: (dirPath: string) => void
   onNativeDragTargetChange: (dir: string | null) => void
   onNativeDragExpandDir: (dirPath: string) => void
+  /** Opt-in: render a custom context menu (e.g. SFTP actions) instead of the default. The local
+   *  File Explorer omits it, so its behavior is unchanged. */
+  renderContextMenu?: (node: TreeNode) => React.ReactNode
 }
 
 export function FileExplorerRow({
@@ -100,7 +103,8 @@ export function FileExplorerRow({
   onDragSourceChange,
   onDragExpandDir,
   onNativeDragTargetChange,
-  onNativeDragExpandDir
+  onNativeDragExpandDir,
+  renderContextMenu
 }: FileExplorerRowProps): React.JSX.Element {
   const FileIcon = getFileTypeIcon(node.relativePath || node.name)
   const rowDropDir = node.isDirectory ? node.path : targetDir
@@ -247,30 +251,34 @@ export function FileExplorerRow({
           ) : null}
         </button>
       </ContextMenuTrigger>
-      <FileExplorerRowContextMenu
-        node={node}
-        isExpanded={isExpanded}
-        deleteShortcutLabel={deleteShortcutLabel}
-        connectionId={connectionId}
-        runtimeDownloadContext={runtimeDownloadContext}
-        supportsFolderDownload={supportsFolderDownload}
-        canOpenInOrcaBrowser={canOpenInOrcaBrowser}
-        canCollapseFolderSubtree={canCollapseFolderSubtree}
-        targetDir={targetDir}
-        targetDepth={targetDepth}
-        selectionSize={selectionSize}
-        onViewFile={onViewFile}
-        onCopyPaths={onCopyPaths}
-        onStartNew={onStartNew}
-        onStartRename={onStartRename}
-        onDuplicate={onDuplicate}
-        onAddFolderAsProject={onAddFolderAsProject}
-        canAddAsProject={canAddAsProject}
-        onOpenInTerminal={onOpenInTerminal}
-        onRequestDelete={onRequestDelete}
-        onCollapseFolderSubtree={onCollapseFolderSubtree}
-        onFindInFolder={onFindInFolder}
-      />
+      {renderContextMenu ? (
+        renderContextMenu(node)
+      ) : (
+        <FileExplorerRowContextMenu
+          node={node}
+          isExpanded={isExpanded}
+          deleteShortcutLabel={deleteShortcutLabel}
+          connectionId={connectionId}
+          runtimeDownloadContext={runtimeDownloadContext}
+          supportsFolderDownload={supportsFolderDownload}
+          canOpenInOrcaBrowser={canOpenInOrcaBrowser}
+          canCollapseFolderSubtree={canCollapseFolderSubtree}
+          targetDir={targetDir}
+          targetDepth={targetDepth}
+          selectionSize={selectionSize}
+          onViewFile={onViewFile}
+          onCopyPaths={onCopyPaths}
+          onStartNew={onStartNew}
+          onStartRename={onStartRename}
+          onDuplicate={onDuplicate}
+          onAddFolderAsProject={onAddFolderAsProject}
+          canAddAsProject={canAddAsProject}
+          onOpenInTerminal={onOpenInTerminal}
+          onRequestDelete={onRequestDelete}
+          onCollapseFolderSubtree={onCollapseFolderSubtree}
+          onFindInFolder={onFindInFolder}
+        />
+      )}
     </ContextMenu>
   )
 }

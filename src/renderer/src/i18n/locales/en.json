@@ -15956,7 +15956,19 @@
           "emptyDir": "This directory is empty",
           "noHosts": "No SFTP hosts configured",
           "addHost": "Add an SFTP host",
-          "activityTitle": "Server Explorer"
+          "activityTitle": "Server Explorer",
+          "downloading": "Downloading {{value0}}…",
+          "uploading": "Uploading to {{value0}}…",
+          "downloaded": "Downloaded {{value0}}",
+          "uploaded": "Uploaded to {{value0}}",
+          "cancelTransfer": "Cancel",
+          "transferFailed": "Transfer failed",
+          "upload": "Upload here"
+        },
+        "ServerExplorerRowMenu": {
+          "uploadHere": "Upload files here…",
+          "download": "Download…",
+          "refresh": "Refresh"
         }
       }
     },
