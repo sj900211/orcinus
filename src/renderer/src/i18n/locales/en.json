@@ -11332,7 +11332,8 @@
           "passwordHint": "Stored encrypted with your OS keychain.",
           "cancel": "Cancel",
           "save": "Save Changes",
-          "add": "Add Host"
+          "add": "Add Host",
+          "noConnection": "No connection"
         },
         "RemoteHostsPane": {
           "loadFailed": "Failed to load SFTP hosts",
@@ -11356,6 +11357,13 @@
           "removeTitle": "Remove SFTP host?",
           "removeBody": "Remove \"{{value0}}\"? Its saved password is deleted. You can add it again later.",
           "cancel": "Cancel"
+        },
+        "SftpBasePathField": {
+          "label": "Explorer start path",
+          "placeholder": "/home/user/project (empty = server root /)",
+          "needsConnection": "Enter connection details to validate the path.",
+          "invalid": "This directory does not exist on the server.",
+          "hint": "Directory the Server Explorer opens at. Leave empty for the server root (/)."
         }
       },
       "right": {

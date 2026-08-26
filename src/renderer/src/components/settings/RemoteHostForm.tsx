@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react'
 import { FileKey, KeyRound } from 'lucide-react'
 import { Button } from '../ui/button'
 import {
@@ -11,6 +12,7 @@ import {
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { translate } from '@/i18n/i18n'
+import { SftpBasePathField, type SftpDirListing } from './SftpBasePathField'
 
 export type SftpHostFormState = {
   label: string
@@ -20,6 +22,7 @@ export type SftpHostFormState = {
   authType: 'key' | 'password'
   identityFile: string
   password: string
+  basePath: string
 }
 
 export const EMPTY_SFTP_HOST_FORM: SftpHostFormState = {
@@ -29,7 +32,8 @@ export const EMPTY_SFTP_HOST_FORM: SftpHostFormState = {
   port: '22',
   authType: 'key',
   identityFile: '',
-  password: ''
+  password: '',
+  basePath: ''
 }
 
 type RemoteHostFormProps = {
@@ -54,6 +58,58 @@ export function RemoteHostForm({
   onOpenChange
 }: RemoteHostFormProps): React.JSX.Element {
   const isEditing = editingId != null
+  // The path field reports its own validity (via onValidityChange) on mount and every value change.
+  const [basePathValid, setBasePathValid] = useState(true)
+
+  const passwordEntered = form.password.trim().length > 0
+  // A draft probe reaches the server for key auth (file/agent) or once a password is typed; otherwise
+  // fall back to the saved host's sealed connection (editing without re-entering the password).
+  const canDraftProbe =
+    form.host.trim().length > 0 &&
+    form.username.trim().length > 0 &&
+    (form.authType === 'key' || passwordEntered)
+  const canProbe = canDraftProbe || (isEditing && form.host.trim().length > 0)
+
+  const listDirectory = useCallback(
+    async (path: string): Promise<SftpDirListing | { error: string }> => {
+      if (canDraftProbe) {
+        return window.api.sftp.probe.list({
+          connection: {
+            host: form.host.trim(),
+            port: Number.parseInt(form.port, 10) || 22,
+            username: form.username.trim(),
+            authType: form.authType,
+            identityFile:
+              form.authType === 'key' && form.identityFile.trim()
+                ? form.identityFile.trim()
+                : undefined,
+            password: form.authType === 'password' && form.password ? form.password : undefined
+          },
+          path
+        })
+      }
+      if (editingId) {
+        const result = await window.api.sftp.readdir({ targetId: editingId, path })
+        return 'error' in result
+          ? result
+          : { resolvedPath: result.resolvedPath, entries: result.entries }
+      }
+      return {
+        error: translate('auto.components.settings.RemoteHostForm.noConnection', 'No connection')
+      }
+    },
+    [
+      canDraftProbe,
+      editingId,
+      form.host,
+      form.port,
+      form.username,
+      form.authType,
+      form.identityFile,
+      form.password
+    ]
+  )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[calc(100vh-3rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
@@ -233,6 +289,14 @@ export function RemoteHostForm({
                   </p>
                 </div>
               )}
+
+              <SftpBasePathField
+                value={form.basePath}
+                onChange={(next) => onFormChange((f) => ({ ...f, basePath: next }))}
+                onValidityChange={setBasePathValid}
+                canProbe={canProbe}
+                listDirectory={listDirectory}
+              />
             </div>
           </div>
 
@@ -240,7 +304,7 @@ export function RemoteHostForm({
             <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
               {translate('auto.components.settings.RemoteHostForm.cancel', 'Cancel')}
             </Button>
-            <Button type="submit" size="sm" disabled={saving}>
+            <Button type="submit" size="sm" disabled={saving || !basePathValid}>
               {isEditing
                 ? translate('auto.components.settings.RemoteHostForm.save', 'Save Changes')
                 : translate('auto.components.settings.RemoteHostForm.add', 'Add Host')}

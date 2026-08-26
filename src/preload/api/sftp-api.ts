@@ -1,4 +1,9 @@
-import type { SftpHost, SftpHostInput, SftpHostView } from '../../shared/sftp-host-types'
+import type {
+  SftpHost,
+  SftpHostAuthType,
+  SftpHostInput,
+  SftpHostView
+} from '../../shared/sftp-host-types'
 export type { SftpHost, SftpHostInput, SftpHostView } from '../../shared/sftp-host-types'
 
 export type SftpEntryType = 'file' | 'directory' | 'symlink'
@@ -25,6 +30,19 @@ export type SftpTransferProgress = {
   error?: string
 }
 
+export type SftpProbeEntry = { name: string; type: SftpEntryType }
+export type SftpProbeListing = { resolvedPath: string; entries: SftpProbeEntry[] }
+
+/** Draft connection the add/edit form probes with, before the host is saved. */
+export type SftpProbeConnectionInput = {
+  host: string
+  port: number
+  username: string
+  authType: SftpHostAuthType
+  identityFile?: string
+  password?: string
+}
+
 export type SftpApi = {
   readdir: (args: { targetId: string; path: string }) => Promise<SftpReaddirResult | SftpError>
   realpath: (args: { targetId: string; path: string }) => Promise<string | SftpError>
@@ -45,5 +63,11 @@ export type SftpApi = {
     update: (args: { id: string; input: SftpHostInput }) => Promise<SftpHost | SftpError>
     remove: (args: { id: string }) => Promise<{ ok: true } | SftpError>
     test: (args: { id: string }) => Promise<{ ok: true } | SftpError>
+  }
+  probe: {
+    list: (args: {
+      connection: SftpProbeConnectionInput
+      path: string
+    }) => Promise<SftpProbeListing | SftpError>
   }
 }

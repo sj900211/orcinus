@@ -55,7 +55,8 @@ function normalizeHost(input: unknown): SftpHost | null {
     authType: r.authType === 'password' ? 'password' : 'key',
     ...(typeof r.identityFile === 'string' && r.identityFile.length > 0
       ? { identityFile: r.identityFile }
-      : {})
+      : {}),
+    ...(typeof r.basePath === 'string' && r.basePath.length > 0 ? { basePath: r.basePath } : {})
   }
 }
 
@@ -94,7 +95,10 @@ function hostFromInput(id: string, input: SftpHostInput): SftpHost {
     port: input.port,
     username: input.username,
     authType: input.authType,
-    ...(input.authType === 'key' && input.identityFile ? { identityFile: input.identityFile } : {})
+    ...(input.authType === 'key' && input.identityFile ? { identityFile: input.identityFile } : {}),
+    ...(input.basePath && input.basePath.trim().length > 0
+      ? { basePath: input.basePath.trim() }
+      : {})
   }
 }
 

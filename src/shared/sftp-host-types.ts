@@ -13,6 +13,8 @@ export type SftpHost = {
   authType: SftpHostAuthType
   /** Path to a private key file, when authType === 'key'. */
   identityFile?: string
+  /** Directory the Server Explorer opens at. Empty = the server root (/). */
+  basePath?: string
 }
 
 /** Create/update payload from the renderer. The password is write-only: supplied here on save,
@@ -24,6 +26,8 @@ export type SftpHostInput = {
   username: string
   authType: SftpHostAuthType
   identityFile?: string
+  /** Directory the Server Explorer opens at; validated to exist before save. Empty = the server root (/). */
+  basePath?: string
   /** Plaintext password for authType === 'password'; encrypted at rest, never echoed back. */
   password?: string
 }

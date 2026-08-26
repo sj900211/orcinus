@@ -173,4 +173,21 @@ describe('sftp-host-store', () => {
       updateSftpHost('nope', { label: 'h', host: 'x', port: 22, username: 'u', authType: 'key' })
     ).toBeNull()
   })
+
+  it('persists basePath across a fresh read and clears it when omitted', () => {
+    const host = addSftpHost({
+      label: 'h',
+      host: 'x',
+      port: 22,
+      username: 'u',
+      authType: 'key',
+      basePath: '/srv/app'
+    })
+    expect(host.basePath).toBe('/srv/app')
+    _resetSftpHostStoreCacheForTests()
+    installFakeSecretStore()
+    expect(getSftpHost(host.id)?.basePath).toBe('/srv/app')
+    updateSftpHost(host.id, { label: 'h', host: 'x', port: 22, username: 'u', authType: 'key' })
+    expect(getSftpHost(host.id)?.basePath).toBeUndefined()
+  })
 })

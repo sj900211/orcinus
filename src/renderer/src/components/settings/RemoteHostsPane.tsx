@@ -25,7 +25,8 @@ function toSftpHostInput(form: SftpHostFormState): SftpHostInput {
     authType: form.authType,
     identityFile:
       form.authType === 'key' && form.identityFile.trim() ? form.identityFile.trim() : undefined,
-    password: form.authType === 'password' && form.password ? form.password : undefined
+    password: form.authType === 'password' && form.password ? form.password : undefined,
+    basePath: form.basePath.trim() ? form.basePath.trim() : undefined
   }
 }
 
@@ -84,7 +85,8 @@ export function RemoteHostsPane(): React.JSX.Element {
       port: String(host.port),
       authType: host.authType,
       identityFile: host.identityFile ?? '',
-      password: ''
+      password: '',
+      basePath: host.basePath ?? ''
     })
     setShowForm(true)
   }

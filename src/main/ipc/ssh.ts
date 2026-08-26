@@ -61,6 +61,7 @@ import { registerSshBrowseHandler } from './ssh-browse'
 import { registerSftpTransferHandlers } from './sftp-transfer'
 import { registerSftpHostHandlers } from './sftp-host'
 import { SftpConnectionPool } from '../ssh/sftp-connection'
+import { SftpProbePool } from '../ssh/sftp-probe'
 import { getSftpHost, readSftpHostPassword } from '../ssh/sftp-host-store'
 import {
   getConnectionIdsForWorktree,
@@ -90,6 +91,7 @@ import {
 
 let connectionManager: SshConnectionManager | null = null
 let sftpConnectionPool: SftpConnectionPool | null = null
+let sftpProbePool: SftpProbePool | null = null
 let portForwardManager: SshPortForwardManager | null = null
 let persistedStore: Store | null = null
 let advertisedUrlWatcherUnsubscribe: (() => void) | null = null
@@ -992,6 +994,11 @@ export function registerSshHandlers(
     readPassword: (id) => readSftpHostPassword(id),
     getBaseCallbacks: () => createSshConnectionCallbacks()
   })
+  // Why separate from the pool: probes use the FORM's draft credentials (not a saved host id) so the
+  // add/edit form can validate a base path + drive autocomplete before the host is saved.
+  sftpProbePool ??= new SftpProbePool({
+    getBaseCallbacks: () => createSshConnectionCallbacks()
+  })
   portForwardManager ??= new SshPortForwardManager()
   portForwardManager.setCallbacks({
     onForwardClosed: (entry, reason) => {
@@ -1015,7 +1022,8 @@ export function registerSshHandlers(
   })
   registerSftpHostHandlers({
     getConnection: (id) => sftpConnectionPool!.getConnection(id),
-    disconnect: (id) => sftpConnectionPool?.disconnect(id)
+    disconnect: (id) => sftpConnectionPool?.disconnect(id),
+    probeList: (connection, path) => sftpProbePool!.list(connection, path)
   })
 
   // ── Target CRUD ────────────────────────────────────────────────────
@@ -1696,7 +1704,8 @@ function sshShutdownTasks(targetIds: readonly string[]): SshShutdownTask[] {
         promise: teardownActiveSshSession(targetId, (session) => session.detachAndPersist())
       })),
     { targetId: '*transports', promise: connectionManager?.disconnectAll() ?? Promise.resolve() },
-    { targetId: '*sftp', promise: sftpConnectionPool?.disconnectAll() ?? Promise.resolve() }
+    { targetId: '*sftp', promise: sftpConnectionPool?.disconnectAll() ?? Promise.resolve() },
+    { targetId: '*sftp-probe', promise: sftpProbePool?.disconnectAll() ?? Promise.resolve() }
   ]
 }
 
@@ -1817,9 +1826,11 @@ export async function resetSshHandlerStateForTests(): Promise<void> {
 
   await connectionManager?.disconnectAll()
   await sftpConnectionPool?.disconnectAll()
+  await sftpProbePool?.disconnectAll()
   portForwardManager?.dispose()
   connectionManager = null
   sftpConnectionPool = null
+  sftpProbePool = null
   portForwardManager = null
   setSshTargetRegistryStore(null)
   persistedStore = null

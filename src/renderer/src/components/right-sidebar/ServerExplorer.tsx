@@ -67,6 +67,8 @@ export default function ServerExplorer(): React.JSX.Element {
 
   // Why: resolve the home directory ('.') to an absolute root before feeding the tree, so
   // child paths join against a real absolute POSIX path.
+  // Why: open the tree at the host's configured base path (validated at save time); empty = server root.
+  const configuredBasePath = hosts.find((host) => host.id === selectedHostId)?.basePath ?? ''
   const resolveGenerationRef = useRef(0)
   useEffect(() => {
     setRootPath(null)
@@ -75,17 +77,19 @@ export default function ServerExplorer(): React.JSX.Element {
       return
     }
     const generation = (resolveGenerationRef.current += 1)
-    void window.api.sftp.realpath({ targetId: selectedHostId, path: '.' }).then((result) => {
-      if (generation !== resolveGenerationRef.current) {
-        return
-      }
-      if (typeof result === 'string') {
-        setRootPath(result)
-      } else {
-        setRootResolveError(result.error)
-      }
-    })
-  }, [selectedHostId])
+    void window.api.sftp
+      .realpath({ targetId: selectedHostId, path: configuredBasePath || '/' })
+      .then((result) => {
+        if (generation !== resolveGenerationRef.current) {
+          return
+        }
+        if (typeof result === 'string') {
+          setRootPath(result)
+        } else {
+          setRootResolveError(result.error)
+        }
+      })
+  }, [selectedHostId, configuredBasePath])
 
   const tree = useServerExplorerTree(selectedHostId, rootPath)
   const scrollRef = useRef<HTMLDivElement>(null)

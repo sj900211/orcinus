@@ -32,7 +32,8 @@ function getHandler(channel: string): Handler {
 describe('registerSftpHostHandlers', () => {
   const pool: SftpHostPoolAccess = {
     getConnection: vi.fn(),
-    disconnect: vi.fn()
+    disconnect: vi.fn(),
+    probeList: vi.fn()
   }
 
   beforeEach(() => {
@@ -154,5 +155,51 @@ describe('registerSftpHostHandlers', () => {
       error: 'SFTP host not found'
     })
     expect(pool.getConnection).not.toHaveBeenCalled()
+  })
+
+  it('probe validates the connection and path before touching the pool', async () => {
+    registerSftpHostHandlers(pool)
+    expect(
+      await getHandler('sftp:probe:list')({}, { connection: { username: 'u' }, path: '/x' })
+    ).toEqual({ error: 'Host is required' })
+    expect(
+      await getHandler('sftp:probe:list')(
+        {},
+        { connection: { host: 'h', username: 'u' }, path: '' }
+      )
+    ).toEqual({ error: 'path is required' })
+    expect(pool.probeList).not.toHaveBeenCalled()
+  })
+
+  it('probe forwards a normalized draft connection to the pool', async () => {
+    ;(pool.probeList as ReturnType<typeof vi.fn>).mockResolvedValue({
+      resolvedPath: '/home/u',
+      entries: [{ name: 'a', type: 'directory' }]
+    })
+    registerSftpHostHandlers(pool)
+    const result = await getHandler('sftp:probe:list')(
+      {},
+      {
+        connection: {
+          host: ' h ',
+          username: ' u ',
+          port: 2222,
+          authType: 'password',
+          password: 'p'
+        },
+        path: '/home/u'
+      }
+    )
+    expect(pool.probeList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: 'h',
+        username: 'u',
+        port: 2222,
+        authType: 'password',
+        password: 'p'
+      }),
+      '/home/u'
+    )
+    expect(result).toEqual({ resolvedPath: '/home/u', entries: [{ name: 'a', type: 'directory' }] })
   })
 })

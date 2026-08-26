@@ -265,7 +265,9 @@ import type {
   SftpTransferProgress,
   SftpHost,
   SftpHostInput,
-  SftpHostView
+  SftpHostView,
+  SftpProbeListing,
+  SftpProbeConnectionInput
 } from './api/sftp-api'
 import type { AgentKind, LaunchSource, RequestKind } from '../shared/telemetry-events'
 import {
@@ -4926,6 +4928,13 @@ const api = {
         ipcRenderer.invoke('sftp:host:remove', args),
       test: (args: { id: string }): Promise<{ ok: true } | SftpError> =>
         ipcRenderer.invoke('sftp:host:test', args)
+    },
+
+    probe: {
+      list: (args: {
+        connection: SftpProbeConnectionInput
+        path: string
+      }): Promise<SftpProbeListing | SftpError> => ipcRenderer.invoke('sftp:probe:list', args)
     }
   },
 
