@@ -118,7 +118,7 @@ export function useServerExplorerMutations(
           description: node.isDirectory
             ? translate(
                 'auto.components.right-sidebar.ServerExplorer.deleteFolderDesc',
-                'This permanently deletes the folder and its contents on the server. This cannot be undone.'
+                'This permanently deletes the directory and its contents on the server. This cannot be undone.'
               )
             : translate(
                 'auto.components.right-sidebar.ServerExplorer.deleteFileDesc',
@@ -141,6 +141,10 @@ export function useServerExplorerMutations(
         if ('error' in result) {
           toast.error(result.error)
           return
+        }
+        // Drop the removed subtree's cache so a same-named dir created later doesn't show stale children.
+        if (node.isDirectory) {
+          tree.invalidateDir(node.path)
         }
         tree.refreshDir(parentPosixDir(node.path))
         toast.success(translate('auto.components.right-sidebar.ServerExplorer.deleted', 'Deleted'))

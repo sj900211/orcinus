@@ -43,14 +43,14 @@ export function ServerExplorerRowMenu({
             <FolderUp className="size-3.5" />
             {translate(
               'auto.components.right-sidebar.ServerExplorerRowMenu.uploadFolderHere',
-              'Upload folder here…'
+              'Upload directory here…'
             )}
           </ContextMenuItem>
           <ContextMenuItem onSelect={() => onCreateFolder(node.path)}>
             <FolderPlus className="size-3.5" />
             {translate(
               'auto.components.right-sidebar.ServerExplorerRowMenu.newFolder',
-              'New Folder…'
+              'New Directory…'
             )}
           </ContextMenuItem>
         </>

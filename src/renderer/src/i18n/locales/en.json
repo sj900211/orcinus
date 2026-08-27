@@ -15964,36 +15964,36 @@
           "cancelTransfer": "Cancel",
           "transferFailed": "Transfer failed",
           "upload": "Upload here",
-          "folderCreated": "Folder created",
-          "newFolder": "New folder",
+          "folderCreated": "Directory created",
+          "newFolder": "New directory",
           "moveOverwriteTitle": "Replace \"{{value0}}\"?",
           "moveOverwriteDesc": "An item named \"{{value0}}\" already exists in the destination. Replacing it cannot be undone.",
           "replace": "Replace",
           "moved": "Moved",
           "deleteTitle": "Delete \"{{value0}}\"?",
-          "deleteFolderDesc": "This permanently deletes the folder and its contents on the server. This cannot be undone.",
+          "deleteFolderDesc": "This permanently deletes the directory and its contents on the server. This cannot be undone.",
           "deleteFileDesc": "This permanently deletes the file on the server. This cannot be undone.",
           "deleteConfirm": "Delete",
           "deleted": "Deleted",
-          "uploadFolder": "Upload folder here"
+          "uploadFolder": "Upload directory here"
         },
         "ServerExplorerRowMenu": {
           "uploadHere": "Upload files here…",
           "download": "Download…",
           "refresh": "Refresh",
-          "newFolder": "New Folder…",
+          "newFolder": "New Directory…",
           "delete": "Delete…",
-          "uploadFolderHere": "Upload folder here…"
+          "uploadFolderHere": "Upload directory here…"
         },
         "ServerExplorerNewFolderDialog": {
-          "title": "New Folder",
-          "namePlaceholder": "Folder name",
+          "title": "New Directory",
+          "namePlaceholder": "Directory name",
           "cancel": "Cancel",
           "create": "Create"
         },
         "ServerExplorerUploadConflictDialog": {
           "title": "File already exists",
-          "body": "\"{{value0}}\" already exists in this folder. Replace it, upload under a new name, or skip it.",
+          "body": "\"{{value0}}\" already exists in this directory. Replace it, upload under a new name, or skip it.",
           "namePlaceholder": "New name",
           "rename": "Rename",
           "skip": "Skip",

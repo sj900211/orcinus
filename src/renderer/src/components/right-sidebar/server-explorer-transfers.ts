@@ -7,7 +7,7 @@ import { translate } from '@/i18n/i18n'
 // self-contained so the panel only has to subscribe onTransferProgress once and call these.
 
 type TransferKind = 'download' | 'upload'
-const tracked = new Map<string, { kind: TransferKind; label: string }>()
+const tracked = new Map<string, { kind: TransferKind; label: string; remoteDir: string }>()
 
 function posixBasename(path: string): string {
   const trimmed = path.replace(/\/+$/, '')
@@ -57,8 +57,15 @@ function showPending(transferId: string, kind: TransferKind, label: string, suff
   })
 }
 
-/** Dispatch one progress event to its tracked toast; resolves + forgets on a terminal phase. */
-export function handleTransferProgress(event: SftpTransferProgress): void {
+/**
+ * Dispatch one progress event to its tracked toast; resolves + forgets on a terminal phase. On any
+ * terminal phase of an upload, `onUploadSettled(remoteDir)` fires so the tree can refresh the
+ * destination (uploaded files/dirs would otherwise not appear until a manual refresh).
+ */
+export function handleTransferProgress(
+  event: SftpTransferProgress,
+  onUploadSettled?: (remoteDir: string) => void
+): void {
   const entry = tracked.get(event.transferId)
   if (!entry) {
     return
@@ -71,6 +78,9 @@ export function handleTransferProgress(event: SftpTransferProgress): void {
     return
   }
   tracked.delete(event.transferId)
+  if (entry.kind === 'upload') {
+    onUploadSettled?.(entry.remoteDir)
+  }
   if (event.phase === 'done') {
     toast.success(successLabel(entry.kind, entry.label), { id: event.transferId })
   } else if (event.phase === 'canceled') {
@@ -97,7 +107,7 @@ export async function downloadServerFile(
     toast.error(result.error)
     return
   }
-  tracked.set(result.transferId, { kind: 'download', label: fileName })
+  tracked.set(result.transferId, { kind: 'download', label: fileName, remoteDir: '' })
   showPending(result.transferId, 'download', fileName)
 }
 
@@ -152,7 +162,7 @@ export async function uploadFilesToServerDir(
     return
   }
   const label = posixBasename(remoteDir) || remoteDir
-  tracked.set(result.transferId, { kind: 'upload', label })
+  tracked.set(result.transferId, { kind: 'upload', label, remoteDir })
   showPending(result.transferId, 'upload', label)
 }
 
@@ -167,6 +177,6 @@ export async function uploadFolderToServerDir(targetId: string, remoteDir: strin
     return
   }
   const label = posixBasename(remoteDir) || remoteDir
-  tracked.set(result.transferId, { kind: 'upload', label })
+  tracked.set(result.transferId, { kind: 'upload', label, remoteDir })
   showPending(result.transferId, 'upload', label)
 }

@@ -13,6 +13,7 @@ type UseServerExplorerTreeResult = {
   loadDir: (dirPath: string, depth: number, options?: { force?: boolean }) => Promise<boolean>
   toggleDir: (dirPath: string) => void
   refreshDir: (dirPath: string) => void
+  invalidateDir: (dirPath: string) => void
   reset: () => void
 }
 
@@ -107,6 +108,31 @@ export function useServerExplorerTree(
     [loadDir]
   )
 
+  // Drop a directory's cached listing and that of its whole subtree (and collapse them), so a later
+  // expand re-fetches instead of serving a stale cache — e.g. after deleting then re-creating a dir.
+  const invalidateDir = useCallback((dirPath: string) => {
+    const prefix = `${dirPath}/`
+    const matches = (key: string): boolean => key === dirPath || key.startsWith(prefix)
+    setDirCache((prev) => {
+      const next = { ...prev }
+      for (const key of Object.keys(next)) {
+        if (matches(key)) {
+          delete next[key]
+        }
+      }
+      return next
+    })
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      for (const key of Array.from(next)) {
+        if (matches(key)) {
+          next.delete(key)
+        }
+      }
+      return next
+    })
+  }, [])
+
   const reset = useCallback(() => {
     generationRef.current += 1
     setDirCache({})
@@ -133,6 +159,7 @@ export function useServerExplorerTree(
     loadDir,
     toggleDir,
     refreshDir,
+    invalidateDir,
     reset
   }
 }

@@ -43,7 +43,7 @@ export function ServerExplorerNewFolderDialog({
             <DialogTitle>
               {translate(
                 'auto.components.right-sidebar.ServerExplorerNewFolderDialog.title',
-                'New Folder'
+                'New Directory'
               )}
             </DialogTitle>
             <DialogDescription className="truncate">{parentDir}</DialogDescription>
@@ -55,7 +55,7 @@ export function ServerExplorerNewFolderDialog({
               onChange={(event) => setName(event.target.value)}
               placeholder={translate(
                 'auto.components.right-sidebar.ServerExplorerNewFolderDialog.namePlaceholder',
-                'Folder name'
+                'Directory name'
               )}
             />
           </div>

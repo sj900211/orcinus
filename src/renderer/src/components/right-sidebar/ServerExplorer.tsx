@@ -134,7 +134,7 @@ export default function ServerExplorer(): React.JSX.Element {
     openSettingsTarget({ pane: 'sftp', repoId: null })
   }, [openSettingsPage, openSettingsTarget])
 
-  useServerExplorerTransferProgress()
+  useServerExplorerTransferProgress(tree.refreshDir)
   const handleDownload = useCallback(
     (remotePath: string, fileName: string) => {
       if (selectedHostId) {
@@ -172,7 +172,10 @@ export default function ServerExplorer(): React.JSX.Element {
         }
         tree.refreshDir(parent)
         toast.success(
-          translate('auto.components.right-sidebar.ServerExplorer.folderCreated', 'Folder created')
+          translate(
+            'auto.components.right-sidebar.ServerExplorer.folderCreated',
+            'Directory created'
+          )
         )
       })
     },
@@ -240,7 +243,7 @@ export default function ServerExplorer(): React.JSX.Element {
           disabled={!rootPath}
           aria-label={translate(
             'auto.components.right-sidebar.ServerExplorer.uploadFolder',
-            'Upload folder here'
+            'Upload directory here'
           )}
         >
           <FolderUp size={14} />
@@ -258,7 +261,7 @@ export default function ServerExplorer(): React.JSX.Element {
           disabled={!rootPath}
           aria-label={translate(
             'auto.components.right-sidebar.ServerExplorer.newFolder',
-            'New folder'
+            'New directory'
           )}
         >
           <FolderPlus size={14} />

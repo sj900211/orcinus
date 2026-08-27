@@ -46,7 +46,7 @@ export function ServerExplorerUploadConflictDialog({
           <DialogDescription className="break-all">
             {translate(
               'auto.components.right-sidebar.ServerExplorerUploadConflictDialog.body',
-              '"{{value0}}" already exists in this folder. Replace it, upload under a new name, or skip it.',
+              '"{{value0}}" already exists in this directory. Replace it, upload under a new name, or skip it.',
               { value0: name ?? '' }
             )}
           </DialogDescription>
