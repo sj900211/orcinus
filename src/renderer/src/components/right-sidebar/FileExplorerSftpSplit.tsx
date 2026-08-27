@@ -70,7 +70,9 @@ export function FileExplorerSftpSplit(): React.JSX.Element {
 
   return (
     <div ref={containerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="min-h-0 flex-1 overflow-hidden">
+      {/* Must be a flex column: FileExplorer's root uses flex-1 + h-full descendants, so a plain
+          block parent leaves its ScrollArea unbounded (no scroll, rows clipped when SFTP opens). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <FileExplorer />
       </div>
       {open ? (
