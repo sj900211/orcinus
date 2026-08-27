@@ -15975,7 +15975,8 @@
           "deleteFileDesc": "This permanently deletes the file on the server. This cannot be undone.",
           "deleteConfirm": "Delete",
           "deleted": "Deleted",
-          "uploadFolder": "Upload directory here"
+          "uploadFolder": "Upload directory here",
+          "previewNeedsWorkspace": "Open a workspace to preview remote files."
         },
         "ServerExplorerRowMenu": {
           "uploadHere": "Upload files here…",

@@ -1,6 +1,5 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Server } from 'lucide-react'
-import { lazyWithRetry } from '@/lib/lazy-with-retry'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
@@ -30,16 +29,7 @@ import { useServerExplorerUpload } from './use-server-explorer-upload'
 import { parentPosixDir } from './server-explorer-directory-listing'
 import { formatMtime, formatPosixMode } from './sftp-file-metadata'
 import { formatBytes } from '@/components/status-bar/workspace-space-format'
-import type { ServerExplorerViewFile } from './ServerExplorerFileViewerDialog'
-
-// Lazy so Monaco is pulled only when the user first opens a remote file, not on panel mount.
-const ServerExplorerFileViewerDialog = lazyWithRetry(
-  () =>
-    import('./ServerExplorerFileViewerDialog').then((module) => ({
-      default: module.ServerExplorerFileViewerDialog
-    })),
-  { reloadKey: 'server-explorer-file-viewer' }
-)
+import { openServerFilePreview } from './server-explorer-open-preview'
 
 // Why: read-only tree never routes git status/ignore decoration; share one stable empty
 // identity so the virtual rows don't re-render on every parent commit.
@@ -83,7 +73,6 @@ export default function ServerExplorer(): React.JSX.Element {
   const [rootPath, setRootPath] = useState<string | null>(null)
   const [rootResolveError, setRootResolveError] = useState<string | null>(null)
   const [newFolderParent, setNewFolderParent] = useState<string | null>(null)
-  const [viewingFile, setViewingFile] = useState<ServerExplorerViewFile | null>(null)
 
   useEffect(() => {
     let active = true
@@ -163,9 +152,15 @@ export default function ServerExplorer(): React.JSX.Element {
     },
     [selection, tree]
   )
-  const handlePreview = useCallback((node: TreeNode) => {
-    setViewingFile({ path: node.path, name: node.name })
-  }, [])
+  // Open a remote file as a read-only tab in the main workspace editor (same Monaco as local files).
+  const handlePreview = useCallback(
+    (node: TreeNode) => {
+      if (selectedHostId && !node.isDirectory) {
+        openServerFilePreview(selectedHostId, node.path, node.name)
+      }
+    },
+    [selectedHostId]
+  )
   const handleRowDoubleClick = useCallback(
     (node: TreeNode) => {
       if (!node.isDirectory) {
@@ -394,15 +389,6 @@ export default function ServerExplorer(): React.JSX.Element {
         name={upload.conflictName}
         onResolve={upload.resolveConflict}
       />
-      {viewingFile && selectedHostId ? (
-        <Suspense fallback={null}>
-          <ServerExplorerFileViewerDialog
-            targetId={selectedHostId}
-            file={viewingFile}
-            onClose={() => setViewingFile(null)}
-          />
-        </Suspense>
-      ) : null}
     </div>
   )
 }

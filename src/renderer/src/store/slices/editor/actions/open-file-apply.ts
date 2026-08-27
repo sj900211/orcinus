@@ -9,6 +9,7 @@ import {
   type OpenFile
 } from '../types/open-file'
 import {
+  buildSftpEditorFileId,
   canReuseLocalWslAlias,
   getReusableOpenFileModes,
   isSameEditorOwner,
@@ -74,6 +75,10 @@ export function applyOpenFileToState(
     (f) =>
       matchesEditorMode(f, reusableOpenFileModes) &&
       isSameEditorOwner(f, worktreeId, runtimeEnvironmentId) &&
+      // Why: an SFTP preview tab and a same-path local/SSH tab share the same worktree+null-runtime
+      // owner, so gate reuse on the SFTP host too or the read-only remote tab collapses with the
+      // editable local one.
+      (f.sftpTargetId ?? undefined) === (file.sftpTargetId ?? undefined) &&
       (f.filePath === file.filePath || canReuseLocalWslAlias(s, f, file, runtimeEnvironmentId))
   )
   // Why: a snapshot's reopenId can be a stale shape — the same path is bare in whichever worktree opened it first and namespaced elsewhere — so honoring it while this owner's tab is already open would strand activeFileId and the unified tab on an id no OpenFile has.
@@ -81,13 +86,16 @@ export function applyOpenFileToState(
     ? existing.id
     : options?.reopenId && !s.openFiles.some((candidate) => candidate.id === options.reopenId)
       ? options.reopenId
-      : resolveEditorFileIdForOwner(
-          s,
-          file.filePath,
-          worktreeId,
-          runtimeEnvironmentId,
-          reusableOpenFileModes
-        )
+      : file.sftpTargetId
+        ? // SFTP tabs get a host-namespaced id so they never resolve to the bare-path id a local file claims.
+          buildSftpEditorFileId(file.sftpTargetId, worktreeId, file.filePath)
+        : resolveEditorFileIdForOwner(
+            s,
+            file.filePath,
+            worktreeId,
+            runtimeEnvironmentId,
+            reusableOpenFileModes
+          )
   scratch.editorItemFileId = id
   const isPreview = options?.preview ?? false
   const recordReplacedPreview = options?.recordReplacedPreview ?? false

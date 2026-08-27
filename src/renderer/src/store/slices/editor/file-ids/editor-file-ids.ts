@@ -46,6 +46,28 @@ export function buildOwnedEditorFileId(
   return `editor:${encodeURIComponent(worktreeId)}:${encodeURIComponent(runtimeKey)}:${encodeURIComponent(filePath)}`
 }
 
+/** Marks an SFTP preview tab's editor id (dungeon 11). Kept explicit so persistence can exclude
+ *  these tabs by id without re-deriving SFTP-ness. */
+export const SFTP_EDITOR_FILE_ID_PREFIX = 'sftp:'
+
+/**
+ * Namespaced id for an SFTP read-only preview tab. An SFTP host and a local/SSH workspace can expose
+ * the SAME absolute POSIX path under the same worktree with a null runtime, so the bare-path id would
+ * collide (the read-only remote tab would hijack — or be hijacked by — the editable local tab).
+ * Scoping by host keeps them distinct.
+ */
+export function buildSftpEditorFileId(
+  sftpTargetId: string,
+  worktreeId: string,
+  filePath: string
+): string {
+  return `${SFTP_EDITOR_FILE_ID_PREFIX}${encodeURIComponent(sftpTargetId)}:${encodeURIComponent(worktreeId)}:${encodeURIComponent(filePath)}`
+}
+
+export function isSftpEditorFileId(id: string): boolean {
+  return id.startsWith(SFTP_EDITOR_FILE_ID_PREFIX)
+}
+
 export function buildDiffEditorFileId(
   worktreeId: string,
   diffSource: DiffSource,

@@ -110,7 +110,9 @@ export function buildEditorSessionData(
   | 'activeTabTypeByWorktree'
   | 'markdownFrontmatterVisible'
 > {
-  const editFiles = openFiles.filter((f) => f.mode === 'edit')
+  // SFTP preview tabs (dungeon 11) are not persisted — Phase 1 doesn't restore them, and their
+  // synthetic remote path has no worktree-scoped owner to rehydrate against.
+  const editFiles = openFiles.filter((f) => f.mode === 'edit' && !f.sftpTargetId)
   const byWorktree: Record<string, PersistedOpenFile[]> = {}
   const editFileIdsByWorktree: Record<string, Set<string>> = {}
   for (const f of editFiles) {

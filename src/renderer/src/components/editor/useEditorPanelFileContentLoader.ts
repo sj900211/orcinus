@@ -82,9 +82,28 @@ export function useEditorPanelFileContentLoader({
       fileReadGenerationRef.current[id] = generation
       outstandingFileReadsRef.current[id] = generation
       try {
+        const restoredOpenFile = openFilesRef.current.find((file) => file.id === id)
+        // SFTP preview tab (dungeon 11): read over the SFTP host connection and bypass all
+        // worktree/local/SSH/runtime routing — the SFTP targetId is none of those owners. Read-only,
+        // so truncated content is shown as-is (the writable runtime path throws on truncation).
+        if (restoredOpenFile?.sftpTargetId) {
+          const sftpResult = await window.api.sftp.readFile({
+            targetId: restoredOpenFile.sftpTargetId,
+            path: filePath
+          })
+          if (fileReadGenerationRef.current[id] !== generation) {
+            return
+          }
+          delete fileLoadRetryAttemptsRef.current[id]
+          const content: FileContent =
+            'error' in sftpResult
+              ? { content: '', isBinary: false, loadError: sftpResult.error }
+              : { content: sftpResult.content, isBinary: sftpResult.isBinary }
+          setFileContents((prev) => ({ ...prev, [id]: content }))
+          return
+        }
         const resolvedConnectionId = getConnectionIdForFile(worktreeId ?? null, filePath)
         const connectionId = resolvedConnectionId ?? undefined
-        const restoredOpenFile = openFilesRef.current.find((file) => file.id === id)
         const activeSettings = useAppStore.getState().settings
         const readSettings = settingsForRuntimeOwner(
           activeSettings,

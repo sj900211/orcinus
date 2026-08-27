@@ -1,6 +1,7 @@
 import type { Tab, TabGroup, TabGroupLayoutNode } from '../../../shared/tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { WorkspaceSessionSnapshot } from './workspace-session'
+import { isSftpEditorFileId } from '../store/slices/editor/file-ids/editor-file-ids'
 
 type PersistedUnifiedTabSessionData = Pick<
   WorkspaceSessionState,
@@ -80,7 +81,11 @@ export function buildPersistedUnifiedTabSessionData(
   ])
 
   for (const worktreeId of worktreeIds) {
-    const tabs = sourceTabs[worktreeId] ?? []
+    // Why: an SFTP preview tab's backing OpenFile is excluded from persistence (Phase 1), so persist
+    // its unified tab too or hydration keeps an orphan editor tab pointing at a non-existent entity.
+    const tabs = (sourceTabs[worktreeId] ?? []).filter(
+      (tab) => !(tab.contentType === 'editor' && isSftpEditorFileId(tab.entityId ?? ''))
+    )
     if (tabs.length === 0) {
       continue
     }
