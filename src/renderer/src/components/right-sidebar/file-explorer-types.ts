@@ -18,6 +18,8 @@ export type TreeNode = {
   /** Optional file metadata (SFTP Server Explorer); the local explorer leaves these unset. */
   size?: number
   mode?: number
+  /** Last-modified time in epoch milliseconds. */
+  mtime?: number
 }
 
 export type DirCache = {

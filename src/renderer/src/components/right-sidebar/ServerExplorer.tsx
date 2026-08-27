@@ -34,7 +34,7 @@ import { ServerExplorerUploadConflictDialog } from './ServerExplorerUploadConfli
 import { useServerExplorerMutations } from './use-server-explorer-mutations'
 import { useServerExplorerUpload } from './use-server-explorer-upload'
 import { parentPosixDir } from './server-explorer-directory-listing'
-import { formatPosixMode } from './sftp-file-metadata'
+import { formatMtime, formatPosixMode } from './sftp-file-metadata'
 import { formatBytes } from '@/components/status-bar/workspace-space-format'
 import type { ServerExplorerViewFile } from './ServerExplorerFileViewerDialog'
 
@@ -62,6 +62,9 @@ function renderRowMeta(node: TreeNode): React.ReactNode {
   const parts: string[] = []
   if (!node.isDirectory && node.size != null) {
     parts.push(formatBytes(node.size))
+  }
+  if (node.mtime != null) {
+    parts.push(formatMtime(node.mtime))
   }
   if (node.mode != null) {
     parts.push(formatPosixMode(node.mode))

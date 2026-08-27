@@ -40,6 +40,7 @@ export function sftpEntriesToTreeNodes(
       isSymlink: entry.type === 'symlink',
       depth: depth + 1,
       size: entry.size,
+      mtime: entry.mtime,
       ...(typeof entry.mode === 'number' ? { mode: entry.mode } : {})
     } satisfies TreeNode
   })
