@@ -1,14 +1,28 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { handleMock, showOpenDialogMock, fromWebContentsMock, uploadFilesIntoMock } = vi.hoisted(
-  () => ({
-    handleMock: vi.fn(),
-    showOpenDialogMock: vi.fn(),
-    fromWebContentsMock: vi.fn(() => null),
-    uploadFilesIntoMock: vi.fn(async (..._args: unknown[]) => {})
-  })
-)
+const {
+  handleMock,
+  showOpenDialogMock,
+  fromWebContentsMock,
+  uploadFilesIntoMock,
+  uploadDirectoriesIntoMock,
+  lstatMock
+} = vi.hoisted(() => ({
+  handleMock: vi.fn(),
+  showOpenDialogMock: vi.fn(),
+  fromWebContentsMock: vi.fn(() => null),
+  uploadFilesIntoMock: vi.fn(async (..._args: unknown[]) => {}),
+  uploadDirectoriesIntoMock: vi.fn(async (..._args: unknown[]) => {}),
+  lstatMock: vi.fn(
+    async (
+      _path: string
+    ): Promise<{ isDirectory: () => boolean; isSymbolicLink: () => boolean }> => ({
+      isDirectory: () => false,
+      isSymbolicLink: () => false
+    })
+  )
+}))
 
 vi.mock('electron', () => ({
   ipcMain: { handle: handleMock, removeHandler: vi.fn() },
@@ -16,7 +30,15 @@ vi.mock('electron', () => ({
   BrowserWindow: { fromWebContents: fromWebContentsMock }
 }))
 
-vi.mock('../ssh/sftp-upload-batch', () => ({ uploadFilesInto: uploadFilesIntoMock }))
+vi.mock('../ssh/sftp-upload-batch', () => ({
+  uploadFilesInto: uploadFilesIntoMock,
+  uploadDirectoriesInto: uploadDirectoriesIntoMock
+}))
+
+vi.mock('node:fs/promises', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  lstat: lstatMock
+}))
 
 import { registerSftpUploadHandlers } from './sftp-upload-handlers'
 import { SftpConnectionAccessFailure } from '../ssh/sftp-connection'
@@ -179,6 +201,118 @@ describe('sftp:performUpload', () => {
         remoteDir: '/remote/dir',
         uploads: [{ localPath: '/local/a.txt', remoteName: 'a.txt', overwrite: false }]
       }
+    )
+    expect(result).toEqual({ error: 'SSH connection "nope" not found' })
+  })
+})
+
+describe('sftp:uploadPaths (dialog-less drag&drop upload)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    fromWebContentsMock.mockReturnValue(null)
+    uploadFilesIntoMock.mockResolvedValue(undefined)
+    uploadDirectoriesIntoMock.mockResolvedValue(undefined)
+    lstatMock.mockImplementation(async (_path: string) => ({
+      isDirectory: () => false,
+      isSymbolicLink: () => false
+    }))
+  })
+
+  it('uploads dropped files exclusively under their local basename, emits start + done', async () => {
+    const sftp = createSftp()
+    const sender = createSender()
+    register(sftp)
+    const result = (await getHandler('sftp:uploadPaths')(
+      { sender },
+      { targetId: 'target-1', remoteDir: '/remote/dir', paths: ['/local/a.txt', '/local/sub/b.md'] }
+    )) as { transferId: string }
+
+    expect(typeof result.transferId).toBe('string')
+    await new Promise((r) => setImmediate(r))
+
+    expect(uploadFilesIntoMock).toHaveBeenCalledWith(
+      sftp,
+      [
+        { localPath: '/local/a.txt', remoteName: 'a.txt', overwrite: false },
+        { localPath: '/local/sub/b.md', remoteName: 'b.md', overwrite: false }
+      ],
+      '/remote/dir',
+      expect.objectContaining({ onProgress: expect.any(Function) })
+    )
+    expect(uploadDirectoriesIntoMock).not.toHaveBeenCalled()
+    const phases = sender.send.mock.calls.map((c) => (c[1] as { phase: string }).phase)
+    expect(phases).toContain('start')
+    expect(phases).toContain('done')
+  })
+
+  it('routes dropped directories to uploadDirectoriesInto (exclusive), files stay separate', async () => {
+    const sftp = createSftp()
+    register(sftp)
+    lstatMock.mockImplementation(async (path: string) => ({
+      isDirectory: () => path === '/local/folder',
+      isSymbolicLink: () => false
+    }))
+    await getHandler('sftp:uploadPaths')(
+      { sender: createSender() },
+      { targetId: 'target-1', remoteDir: '/remote/dir', paths: ['/local/folder', '/local/a.txt'] }
+    )
+    await new Promise((r) => setImmediate(r))
+
+    expect(uploadDirectoriesIntoMock).toHaveBeenCalledWith(
+      sftp,
+      ['/local/folder'],
+      '/remote/dir',
+      expect.objectContaining({ exclusive: true })
+    )
+    expect(uploadFilesIntoMock).toHaveBeenCalledWith(
+      sftp,
+      [{ localPath: '/local/a.txt', remoteName: 'a.txt', overwrite: false }],
+      '/remote/dir',
+      expect.any(Object)
+    )
+  })
+
+  it('refuses a top-level symlink (no upload) so a symlinked dir cannot exfiltrate its target', async () => {
+    const sender = createSender()
+    register(createSftp())
+    lstatMock.mockImplementation(async (path: string) => ({
+      isDirectory: () => path === '/local/link',
+      isSymbolicLink: () => path === '/local/link'
+    }))
+    await getHandler('sftp:uploadPaths')(
+      { sender },
+      { targetId: 'target-1', remoteDir: '/remote/dir', paths: ['/local/link', '/local/a.txt'] }
+    )
+    await new Promise((r) => setImmediate(r))
+
+    expect(uploadFilesIntoMock).not.toHaveBeenCalled()
+    expect(uploadDirectoriesIntoMock).not.toHaveBeenCalled()
+    const phases = sender.send.mock.calls.map((c) => (c[1] as { phase: string }).phase)
+    expect(phases).toContain('error')
+  })
+
+  it('rejects an empty or non-string paths list', async () => {
+    register(createSftp())
+    expect(
+      await getHandler('sftp:uploadPaths')(
+        { sender: createSender() },
+        { targetId: 'target-1', remoteDir: '/remote/dir', paths: [] }
+      )
+    ).toEqual({ error: 'No paths to upload' })
+    expect(
+      await getHandler('sftp:uploadPaths')(
+        { sender: createSender() },
+        { targetId: 'target-1', remoteDir: '/remote/dir', paths: ['/ok', ''] }
+      )
+    ).toEqual({ error: 'No paths to upload' })
+    expect(uploadFilesIntoMock).not.toHaveBeenCalled()
+  })
+
+  it('returns a typed error for an unknown targetId', async () => {
+    register(createSftp())
+    const result = await getHandler('sftp:uploadPaths')(
+      { sender: createSender() },
+      { targetId: 'nope', remoteDir: '/remote/dir', paths: ['/local/a.txt'] }
     )
     expect(result).toEqual({ error: 'SSH connection "nope" not found' })
   })

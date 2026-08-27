@@ -188,6 +188,28 @@ export async function uploadFilesToServerDir(
   showPending(result.transferId, 'upload', label)
 }
 
+/**
+ * Upload dropped local paths (files and/or directories) into a remote directory — the dialog-less
+ * path used by cross-panel drag&drop (dungeon 11-2). Exclusive: a name collision fails the transfer.
+ */
+export async function uploadLocalPathsToServerDir(
+  targetId: string,
+  remoteDir: string,
+  paths: string[]
+): Promise<void> {
+  if (paths.length === 0) {
+    return
+  }
+  const result = await window.api.sftp.uploadPaths({ targetId, remoteDir, paths })
+  if ('error' in result) {
+    toast.error(result.error)
+    return
+  }
+  const label = posixBasename(remoteDir) || remoteDir
+  tracked.set(result.transferId, { kind: 'upload', label, remoteDir })
+  showPending(result.transferId, 'upload', label)
+}
+
 /** Upload whole local folders (recursively) into the remote directory (exclusive, no conflict prompt). */
 export async function uploadFolderToServerDir(targetId: string, remoteDir: string): Promise<void> {
   const result = await window.api.sftp.startUpload({ targetId, remoteDir, directories: true })

@@ -54,6 +54,8 @@ type FileExplorerVirtualRowsProps = {
   dropTargetDir: string | null
   dragSourcePath: string | null
   nativeDropTargetDir: string | null
+  sftpDragHostId?: string
+  onExternalPathsDrop?: (destDir: string, dataTransfer: DataTransfer) => boolean
   renderContextMenu?: (node: TreeNode) => React.ReactNode
   renderRowMeta?: (node: TreeNode) => React.ReactNode
 }
@@ -103,6 +105,8 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
     dropTargetDir,
     dragSourcePath,
     nativeDropTargetDir,
+    sftpDragHostId,
+    onExternalPathsDrop,
     renderContextMenu,
     renderRowMeta
   } = props
@@ -211,6 +215,8 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
               onDragExpandDir={onDragExpandDir}
               onNativeDragTargetChange={onNativeDragTargetChange}
               onNativeDragExpandDir={onNativeDragExpandDir}
+              sftpDragHostId={sftpDragHostId}
+              onExternalPathsDrop={onExternalPathsDrop}
               renderContextMenu={renderContextMenu}
               renderRowMeta={renderRowMeta}
             />

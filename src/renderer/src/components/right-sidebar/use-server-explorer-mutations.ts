@@ -2,10 +2,17 @@ import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
-import { WORKSPACE_FILE_PATH_MIME } from '@/lib/workspace-file-drag'
+import {
+  getWorkspaceFileDragPaths,
+  getWorkspaceFileDragRejectionMessage,
+  readWorkspaceFileDragPaths,
+  WORKSPACE_FILE_PATH_MIME
+} from '@/lib/workspace-file-drag'
+import { hasSftpFileDrag } from '@/lib/sftp-file-drag'
 import type { TreeNode } from './file-explorer-types'
 import type { useServerExplorerTree } from './useServerExplorerTree'
 import { joinPosix, parentPosixDir, posixBasename } from './server-explorer-directory-listing'
+import { uploadLocalPathsToServerDir } from './server-explorer-transfers'
 
 type ServerExplorerTree = ReturnType<typeof useServerExplorerTree>
 
@@ -21,6 +28,7 @@ export type ServerExplorerMutations = {
   setDragSourcePath: (path: string | null) => void
   handleDragExpand: (dir: string) => void
   handleMove: (sourcePath: string, destDir: string) => void
+  handleExternalDrop: (destDir: string, dataTransfer: DataTransfer) => boolean
   handleDelete: (node: TreeNode) => void
   rootDropHandlers: RootDropHandlers
 }
@@ -153,9 +161,28 @@ export function useServerExplorerMutations(
     [selectedHostId, confirm, tree]
   )
 
-  // Drop onto the empty tree background (or an opened-empty folder's area) moves the item to the
-  // root. Row drops stopPropagation, so this only fires for background drops. SFTP rows are
-  // single-select, so the single-path MIME is sufficient.
+  // A cross-panel drag ORIGINATES locally (from the top panel) when it carries the workspace file
+  // MIME but NOT the SFTP MIME — those get uploaded into destDir. A drag with the SFTP MIME is a
+  // remote-origin intra-panel move and is left to handleMove. Returns true when it claimed the drop.
+  const handleExternalDrop = useCallback(
+    (destDir: string, dataTransfer: DataTransfer): boolean => {
+      if (!selectedHostId || hasSftpFileDrag(dataTransfer)) {
+        return false
+      }
+      const paths = getWorkspaceFileDragPaths(dataTransfer)
+      if (paths.length === 0) {
+        return false
+      }
+      void uploadLocalPathsToServerDir(selectedHostId, destDir, paths)
+      return true
+    },
+    [selectedHostId]
+  )
+
+  // Drop onto the empty tree background (or an opened-empty folder's area): a local-origin drag
+  // uploads to the root, otherwise every selected item moves to the root. Row drops stopPropagation,
+  // so this only fires for background drops. Read the multi-path MIME so a multi-selection isn't
+  // truncated to its drag-origin item.
   const rootDropHandlers = useMemo<RootDropHandlers>(
     () => ({
       onDragOver: (event) => {
@@ -163,22 +190,28 @@ export function useServerExplorerMutations(
           return
         }
         event.preventDefault()
-        event.dataTransfer.dropEffect = 'move'
+        event.dataTransfer.dropEffect = hasSftpFileDrag(event.dataTransfer) ? 'move' : 'copy'
       },
       onDrop: (event) => {
         if (!rootPath) {
           return
         }
-        const sourcePath = event.dataTransfer.getData(WORKSPACE_FILE_PATH_MIME)
-        if (!sourcePath) {
-          return
-        }
         event.preventDefault()
         setDropTargetDir(null)
-        handleMove(sourcePath, rootPath)
+        if (handleExternalDrop(rootPath, event.dataTransfer)) {
+          return
+        }
+        const dragPaths = readWorkspaceFileDragPaths(event.dataTransfer)
+        if (dragPaths.status === 'rejected') {
+          toast.error(getWorkspaceFileDragRejectionMessage(dragPaths.reason))
+          return
+        }
+        for (const sourcePath of dragPaths.paths) {
+          handleMove(sourcePath, rootPath)
+        }
       }
     }),
-    [rootPath, handleMove]
+    [rootPath, handleMove, handleExternalDrop]
   )
 
   return {
@@ -188,6 +221,7 @@ export function useServerExplorerMutations(
     setDragSourcePath,
     handleDragExpand,
     handleMove,
+    handleExternalDrop,
     handleDelete,
     rootDropHandlers
   }

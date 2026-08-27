@@ -81,6 +81,11 @@ export type SftpApi = {
     remoteDir: string
     uploads: Array<{ localPath: string; remoteName: string; overwrite: boolean }>
   }) => Promise<{ transferId: string } | SftpError>
+  uploadPaths: (args: {
+    targetId: string
+    remoteDir: string
+    paths: string[]
+  }) => Promise<{ transferId: string } | SftpError>
   startDownload: (args: {
     targetId: string
     remotePath: string

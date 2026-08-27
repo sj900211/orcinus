@@ -4942,6 +4942,13 @@ const api = {
     }): Promise<{ transferId: string } | SftpError> =>
       ipcRenderer.invoke('sftp:performUpload', args),
 
+    uploadPaths: (args: {
+      targetId: string
+      remoteDir: string
+      paths: string[]
+    }): Promise<{ transferId: string } | SftpError> =>
+      ipcRenderer.invoke('sftp:uploadPaths', args),
+
     startDownload: (args: {
       targetId: string
       remotePath: string

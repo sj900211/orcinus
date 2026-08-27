@@ -51,6 +51,7 @@ const SFTP_IPC_CHANNELS = [
   'sftp:delete',
   'sftp:planUpload',
   'sftp:performUpload',
+  'sftp:uploadPaths',
   'sftp:downloadArchive'
 ] as const
 

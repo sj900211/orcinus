@@ -8,6 +8,7 @@ import {
   WORKSPACE_FILE_PATH_MIME,
   WORKSPACE_FILE_PATHS_MIME
 } from '@/lib/workspace-file-drag'
+import { encodeSftpFileDrag, SFTP_FILE_DRAG_MIME } from '@/lib/sftp-file-drag'
 import type { GitFileStatus } from '../../../../shared/git-status-types'
 import { STATUS_LABELS } from './status-display'
 import { RENAME_HOTSPOT_ATTR } from './file-explorer-dir-toggle-timing'
@@ -60,6 +61,12 @@ export type FileExplorerRowProps = {
   onDragExpandDir: (dirPath: string) => void
   onNativeDragTargetChange: (dir: string | null) => void
   onNativeDragExpandDir: (dirPath: string) => void
+  /** Opt-in (SFTP only): tags this row's drag with SFTP_FILE_DRAG_MIME carrying {hostId, paths} so a
+   *  cross-panel drop can recognize a remote-origin drag. Omitted by the local File Explorer. */
+  sftpDragHostId?: string
+  /** Opt-in (SFTP): claim a cross-panel drop of external paths onto this row (returns true if
+   *  handled, skipping the internal move). Omitted by the local File Explorer. */
+  onExternalPathsDrop?: (destDir: string, dataTransfer: DataTransfer) => boolean
   /** Opt-in: render a custom context menu (e.g. SFTP actions) instead of the default. The local
    *  File Explorer omits it, so its behavior is unchanged. */
   renderContextMenu?: (node: TreeNode) => React.ReactNode
@@ -107,6 +114,8 @@ export function FileExplorerRow({
   onDragExpandDir,
   onNativeDragTargetChange,
   onNativeDragExpandDir,
+  sftpDragHostId,
+  onExternalPathsDrop,
   renderContextMenu,
   renderRowMeta
 }: FileExplorerRowProps): React.JSX.Element {
@@ -122,7 +131,8 @@ export function FileExplorerRow({
       onDragExpandDir,
       onNativeDragTargetChange,
       onNativeDragExpandDir,
-      onMoveDrop
+      onMoveDrop,
+      onExternalPathsDrop
     })
 
   return (
@@ -160,6 +170,14 @@ export function FileExplorerRow({
             event.dataTransfer.setData(WORKSPACE_FILE_PATH_MIME, node.path)
             if (paths.length > 1) {
               event.dataTransfer.setData(WORKSPACE_FILE_PATHS_MIME, encodeWorkspaceFilePaths(paths))
+            }
+            // SFTP rows also tag the drag with their origin host so a cross-panel drop can tell this
+            // is a remote-origin drag (local rows never set this).
+            if (sftpDragHostId) {
+              event.dataTransfer.setData(
+                SFTP_FILE_DRAG_MIME,
+                encodeSftpFileDrag({ hostId: sftpDragHostId, paths })
+              )
             }
             event.dataTransfer.effectAllowed = 'copyMove'
             onDragSourceChange(node.path)

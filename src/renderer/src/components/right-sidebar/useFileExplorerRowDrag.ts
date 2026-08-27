@@ -18,6 +18,9 @@ type UseFileExplorerRowDragParams = {
   onNativeDragTargetChange: (dir: string | null) => void
   onNativeDragExpandDir: (dirPath: string) => void
   onMoveDrop: (sourcePath: string, destDir: string) => void
+  /** Opt-in (SFTP): handle a cross-panel drop of external paths onto this row. Returns true when it
+   *  claimed the drop, which skips the internal move loop. Omitted by the local File Explorer. */
+  onExternalPathsDrop?: (destDir: string, dataTransfer: DataTransfer) => boolean
 }
 
 type RowDragHandlers = {
@@ -37,7 +40,8 @@ export function useFileExplorerRowDrag({
   onDragExpandDir,
   onNativeDragTargetChange,
   onNativeDragExpandDir,
-  onMoveDrop
+  onMoveDrop,
+  onExternalPathsDrop
 }: UseFileExplorerRowDragParams): RowDragHandlers {
   const expandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dragCounterRef = useRef(0)
@@ -166,6 +170,10 @@ export function useFileExplorerRowDrag({
       clearNativeExpandTimer()
       onDragTargetChange(null)
       onNativeDragTargetChange(null)
+      // A cross-panel (SFTP) drop of external paths is claimed here before the internal move loop.
+      if (onExternalPathsDrop?.(rowDropDir, e.dataTransfer)) {
+        return
+      }
       const dragPaths = readWorkspaceFileDragPaths(e.dataTransfer)
       if (dragPaths.status === 'rejected') {
         toast.error(getWorkspaceFileDragRejectionMessage(dragPaths.reason))
@@ -180,6 +188,7 @@ export function useFileExplorerRowDrag({
     [
       rowDropDir,
       onMoveDrop,
+      onExternalPathsDrop,
       onDragTargetChange,
       onNativeDragTargetChange,
       clearExpandTimer,

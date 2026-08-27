@@ -356,6 +356,8 @@ export default function ServerExplorer(): React.JSX.Element {
               dropTargetDir={mutations.dropTargetDir}
               dragSourcePath={mutations.dragSourcePath}
               nativeDropTargetDir={null}
+              sftpDragHostId={selectedHostId ?? undefined}
+              onExternalPathsDrop={mutations.handleExternalDrop}
               renderContextMenu={(node) => (
                 <ServerExplorerRowMenu
                   node={node}
