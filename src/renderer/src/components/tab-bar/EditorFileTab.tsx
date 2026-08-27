@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
-import { GitCompareArrows, Eye, ShieldAlert, Pin, ListChecks } from 'lucide-react'
+import { GitCompareArrows, Eye, ShieldAlert, Pin, ListChecks, Server } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { basename, normalizeRelativePath } from '@/lib/path'
@@ -88,6 +88,8 @@ export default function EditorFileTab({
   const isConflictReview = file.mode === 'conflict-review'
   const isCheckDetails = file.mode === 'check-details'
   const isMarkdownPreviewTab = file.mode === 'markdown-preview'
+  // Why: a remote SFTP preview tab swaps the file-type icon for a server glyph so it reads as remote.
+  const isSftp = Boolean(file.sftpTargetId)
   // Why: only deleted/renamed mean the file is gone from its path, which is
   // what strikethrough conveys. 'changed' keeps a normal label — its surface
   // is the changed-on-disk banner inside the editor.
@@ -277,6 +279,10 @@ export default function EditorFileTab({
       ) : isMarkdownPreviewTab ? (
         <Eye
           className={`w-3.5 h-3.5 mr-1.5 shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
+        />
+      ) : isSftp ? (
+        <Server
+          className={`w-3 h-3 mr-1 shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
         />
       ) : (
         <FileIcon

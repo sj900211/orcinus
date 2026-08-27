@@ -112,6 +112,9 @@ vi.mock('lucide-react', () => ({
   ShieldAlert: function ShieldAlert(props: Record<string, unknown>) {
     return { type: 'ShieldAlert', props }
   },
+  Server: function Server(props: Record<string, unknown>) {
+    return { type: 'Server', props }
+  },
   X: function X(props: Record<string, unknown>) {
     return { type: 'X', props }
   }
@@ -376,6 +379,34 @@ function pressInputKey(
   ;(input.props.onKeyDown as (nextEvent: typeof event) => void)(event)
   return event
 }
+
+describe('EditorFileTab remote (SFTP) icon', () => {
+  beforeEach(() => {
+    reactHookRuntime.states = []
+    reactHookRuntime.index = 0
+    vi.clearAllMocks()
+    vi.resetModules()
+    vi.stubGlobal('navigator', { userAgent: 'Mac' })
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+  })
+
+  it('shows a Server icon (not the file-type icon) for an SFTP tab', async () => {
+    const file = baseFile({ sftpTargetId: 'host-1' })
+    const rendered = expandNode((await renderEditorFileTab(file)).element)
+    expect(findElementsByType(rendered, 'Server')).toHaveLength(1)
+    expect(findElementsByType(rendered, 'FileIcon')).toHaveLength(0)
+  })
+
+  it('keeps the file-type icon (no Server icon) for a normal local tab', async () => {
+    const rendered = expandNode((await renderEditorFileTab(baseFile())).element)
+    expect(findElementsByType(rendered, 'Server')).toHaveLength(0)
+    expect(findElementsByType(rendered, 'FileIcon')).toHaveLength(1)
+  })
+})
 
 describe('EditorFileTab rename menu', () => {
   beforeEach(() => {
