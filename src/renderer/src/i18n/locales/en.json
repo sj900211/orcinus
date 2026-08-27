@@ -16004,6 +16004,10 @@
           "truncated": "Large file — showing the first 10 MB.",
           "loading": "Loading…",
           "binary": "Can't preview a binary file"
+        },
+        "FileExplorerSftpSplit": {
+          "hide": "Hide SFTP",
+          "show": "Show SFTP"
         }
       }
     },
