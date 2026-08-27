@@ -19,8 +19,10 @@ import { translate } from '@/i18n/i18n'
 // `renderContextMenu` prop so the shared local-explorer menu is untouched.
 type ServerExplorerRowMenuProps = {
   node: TreeNode
+  selectedPaths: Set<string>
   onDownload: (remotePath: string, fileName: string) => void
   onDownloadArchive: (remotePath: string, name: string) => void
+  onDownloadArchiveMultiple: (remotePaths: string[]) => void
   onUploadHere: (remoteDir: string) => void
   onUploadFolderHere: (remoteDir: string) => void
   onCreateFolder: (parentDir: string) => void
@@ -30,16 +32,33 @@ type ServerExplorerRowMenuProps = {
 
 export function ServerExplorerRowMenu({
   node,
+  selectedPaths,
   onDownload,
   onDownloadArchive,
+  onDownloadArchiveMultiple,
   onUploadHere,
   onUploadFolderHere,
   onCreateFolder,
   onDelete,
   onRefresh
 }: ServerExplorerRowMenuProps): React.JSX.Element {
+  // Right-clicking inside a multi-selection archives the whole set (files + directories together).
+  const multiSelected = selectedPaths.has(node.path) && selectedPaths.size > 1
   return (
     <ContextMenuContent className="w-52">
+      {multiSelected ? (
+        <>
+          <ContextMenuItem onSelect={() => onDownloadArchiveMultiple([...selectedPaths])}>
+            <FileArchive className="size-3.5" />
+            {translate(
+              'auto.components.right-sidebar.ServerExplorerRowMenu.downloadArchiveMultiple',
+              'Download {{value0}} items as archive…',
+              { value0: selectedPaths.size }
+            )}
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+        </>
+      ) : null}
       {node.isDirectory ? (
         <>
           <ContextMenuItem onSelect={() => onDownloadArchive(node.path, node.name)}>

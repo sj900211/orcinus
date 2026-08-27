@@ -55,6 +55,24 @@ function makeChannel(exitCode = 0): EventEmitter & Record<string, unknown> {
   return channel
 }
 
+// A channel whose remote tar is killed by a signal (ssh2 emits exit as (null, signalName)) after
+// streaming a partial archive — used to prove a signal termination is treated as failure.
+function makeSignalKilledChannel(signalName = 'SIGKILL'): EventEmitter & Record<string, unknown> {
+  const channel = new EventEmitter() as EventEmitter & Record<string, unknown>
+  channel.stderr = new EventEmitter()
+  channel.close = vi.fn()
+  channel.pipe = vi.fn((ws: EventEmitter) => {
+    setImmediate(() => {
+      channel.emit('data', Buffer.from('partial'))
+      channel.emit('exit', null, signalName)
+      ws.emit('finish')
+      channel.emit('close')
+    })
+    return ws
+  })
+  return channel
+}
+
 // A channel that streams but never finishes on its own — used to exercise mid-stream cancel.
 function makeHangingChannel(): EventEmitter & Record<string, unknown> {
   const channel = new EventEmitter() as EventEmitter & Record<string, unknown>
@@ -120,7 +138,7 @@ describe('sftp:downloadArchive', () => {
     register(vi.fn(async () => makeChannel()))
     const result = await getHandler('sftp:downloadArchive')(
       { sender: createSender() },
-      { targetId: 'target-1', remotePath: '/remote/images' }
+      { targetId: 'target-1', remotePaths: ['/remote/images'] }
     )
     expect(result).toEqual({ canceled: true })
   })
@@ -132,16 +150,17 @@ describe('sftp:downloadArchive', () => {
     register(execMock)
     const result = (await getHandler('sftp:downloadArchive')(
       { sender },
-      { targetId: 'target-1', remotePath: '/remote/images' }
+      { targetId: 'target-1', remotePaths: ['/remote/images'] }
     )) as { transferId: string }
 
     expect(typeof result.transferId).toBe('string')
     await new Promise((r) => setImmediate(r))
     await new Promise((r) => setImmediate(r))
 
-    // -C <parent> keeps members relative; both parent and name are single-quoted (injection guard).
+    // -C <parent> keeps members relative; `--` stops tar from reading a dash-named member as an
+    // option; both parent and name are single-quoted (shell-injection guard).
     expect(execMock).toHaveBeenCalledWith(
-      "tar -czf - -C '/remote' 'images'",
+      "tar -czf - -C '/remote' -- 'images'",
       expect.objectContaining({ signal: expect.any(Object) })
     )
     expect(renameMock).toHaveBeenCalledWith(
@@ -153,13 +172,66 @@ describe('sftp:downloadArchive', () => {
     expect(phases).toContain('done')
   })
 
+  it('archives multiple items relative to their common ancestor, named archive.tar.gz', async () => {
+    showSaveDialogMock.mockResolvedValue({ canceled: false, filePath: '/local/archive.tar.gz' })
+    const execMock = vi.fn(async () => makeChannel(0))
+    register(execMock)
+    await getHandler('sftp:downloadArchive')(
+      { sender: createSender() },
+      { targetId: 'target-1', remotePaths: ['/remote/images', '/remote/docs/notes.txt'] }
+    )
+    await new Promise((r) => setImmediate(r))
+    await new Promise((r) => setImmediate(r))
+
+    // Common ancestor '/remote' → members stay relative; each argument is single-quoted.
+    expect(execMock).toHaveBeenCalledWith(
+      "tar -czf - -C '/remote' -- 'images' 'docs/notes.txt'",
+      expect.objectContaining({ signal: expect.any(Object) })
+    )
+    // Multi-item archive defaults to a generic name (no single basename to inherit).
+    expect(showSaveDialogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: 'archive.tar.gz' })
+    )
+  })
+
+  it('drops a selected path already contained by another (no double-archiving)', async () => {
+    showSaveDialogMock.mockResolvedValue({ canceled: false, filePath: '/local/archive.tar.gz' })
+    const execMock = vi.fn(async () => makeChannel(0))
+    register(execMock)
+    await getHandler('sftp:downloadArchive')(
+      { sender: createSender() },
+      { targetId: 'target-1', remotePaths: ['/remote/images', '/remote/images/sub'] }
+    )
+    await new Promise((r) => setImmediate(r))
+    await new Promise((r) => setImmediate(r))
+
+    expect(execMock).toHaveBeenCalledWith(
+      "tar -czf - -C '/remote' -- 'images'",
+      expect.objectContaining({ signal: expect.any(Object) })
+    )
+  })
+
+  it('rejects an empty or non-string remotePaths list', async () => {
+    register(vi.fn(async () => makeChannel()))
+    const empty = await getHandler('sftp:downloadArchive')(
+      { sender: createSender() },
+      { targetId: 'target-1', remotePaths: [] }
+    )
+    expect(empty).toEqual({ error: 'remotePaths is required' })
+    const badItem = await getHandler('sftp:downloadArchive')(
+      { sender: createSender() },
+      { targetId: 'target-1', remotePaths: ['/ok', ''] }
+    )
+    expect(badItem).toEqual({ error: 'remotePaths is required' })
+  })
+
   it('surfaces a non-zero tar exit as an error and removes the temp file (no rename)', async () => {
     showSaveDialogMock.mockResolvedValue({ canceled: false, filePath: '/local/images.tar.gz' })
     const sender = createSender()
     register(vi.fn(async () => makeChannel(2)))
     await getHandler('sftp:downloadArchive')(
       { sender },
-      { targetId: 'target-1', remotePath: '/remote/images' }
+      { targetId: 'target-1', remotePaths: ['/remote/images'] }
     )
     await new Promise((r) => setImmediate(r))
     await new Promise((r) => setImmediate(r))
@@ -174,11 +246,30 @@ describe('sftp:downloadArchive', () => {
     expect(errorPhase).toBeDefined()
   })
 
+  it('treats a signal-killed tar as failure: no rename, removes the temp file, emits error', async () => {
+    showSaveDialogMock.mockResolvedValue({ canceled: false, filePath: '/local/images.tar.gz' })
+    const sender = createSender()
+    register(vi.fn(async () => makeSignalKilledChannel('SIGKILL')))
+    await getHandler('sftp:downloadArchive')(
+      { sender },
+      { targetId: 'target-1', remotePaths: ['/remote/images'] }
+    )
+    await new Promise((r) => setImmediate(r))
+    await new Promise((r) => setImmediate(r))
+
+    expect(renameMock).not.toHaveBeenCalled()
+    expect(unlinkMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/local\/images\.tar\.gz\.orcinus-part-/)
+    )
+    const phases = sender.send.mock.calls.map((c) => (c[1] as { phase: string }).phase)
+    expect(phases).toContain('error')
+  })
+
   it('returns a typed error for an unknown targetId', async () => {
     register(vi.fn(async () => makeChannel()))
     const result = await getHandler('sftp:downloadArchive')(
       { sender: createSender() },
-      { targetId: 'nope', remotePath: '/remote/images' }
+      { targetId: 'nope', remotePaths: ['/remote/images'] }
     )
     expect(result).toEqual({ error: 'SSH connection "nope" not found' })
   })
@@ -194,7 +285,7 @@ describe('sftp:downloadArchive', () => {
     })
     const result = (await getHandler('sftp:downloadArchive')(
       { sender },
-      { targetId: 'target-1', remotePath: '/remote/images' }
+      { targetId: 'target-1', remotePaths: ['/remote/images'] }
     )) as { transferId: string }
     await new Promise((r) => setImmediate(r))
 

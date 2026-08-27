@@ -87,7 +87,7 @@ export type SftpApi = {
   }) => Promise<{ transferId: string } | { canceled: true } | SftpError>
   downloadArchive: (args: {
     targetId: string
-    remotePath: string
+    remotePaths: string[]
   }) => Promise<{ transferId: string } | { canceled: true } | SftpError>
   cancelTransfer: (args: { transferId: string }) => Promise<{ ok: true } | SftpError>
   onTransferProgress: (callback: (data: SftpTransferProgress) => void) => () => void

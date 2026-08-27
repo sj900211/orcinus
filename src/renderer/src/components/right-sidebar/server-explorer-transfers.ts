@@ -111,13 +111,16 @@ export async function downloadServerFile(
   showPending(result.transferId, 'download', fileName)
 }
 
-/** Download a remote directory as a single .tar.gz archive (streamed via `tar` over exec). */
+/**
+ * Download one or more remote paths as a single .tar.gz archive (streamed via `tar` over exec).
+ * `name` labels the toast: a single item's basename, or "N items" for a multi-selection.
+ */
 export async function downloadServerArchive(
   targetId: string,
-  remotePath: string,
+  remotePaths: string[],
   name: string
 ): Promise<void> {
-  const result = await window.api.sftp.downloadArchive({ targetId, remotePath })
+  const result = await window.api.sftp.downloadArchive({ targetId, remotePaths })
   if ('canceled' in result) {
     return
   }

@@ -4950,7 +4950,7 @@ const api = {
 
     downloadArchive: (args: {
       targetId: string
-      remotePath: string
+      remotePaths: string[]
     }): Promise<{ transferId: string } | { canceled: true } | SftpError> =>
       ipcRenderer.invoke('sftp:downloadArchive', args),
 

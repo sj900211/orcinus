@@ -11,8 +11,6 @@ import {
   emitProgress,
   emitTransferFailure,
   resolveConnection,
-  toErrorMessage,
-  validateString,
   type GetSftpConnection,
   type SftpError
 } from './sftp-transfer-operations'
@@ -31,31 +29,62 @@ export type SftpArchiveHandlerDeps = {
   ensureDestroyedCleanup: (sender: WebContents) => void
 }
 
-// Pipe `tar -czf -` of one remote directory into tempDest. shellEscape guards against a crafted path
-// (a directory literally named "; rm -rf ~" must not become shell). -C <parent> keeps archive members
-// relative to the folder instead of absolute.
+// Deepest common POSIX directory of the paths (segment-wise, so /foo and /foobar don't share /foo).
+function commonAncestorDir(paths: string[]): string {
+  if (paths.length === 1) {
+    return pathPosix.dirname(paths[0]!)
+  }
+  const segmentLists = paths.map((path) => path.split('/'))
+  const first = segmentLists[0]!
+  let shared = 0
+  while (
+    shared < first.length &&
+    segmentLists.every((segments) => segments[shared] === first[shared])
+  ) {
+    shared += 1
+  }
+  return first.slice(0, shared).join('/') || '/'
+}
+
+// Drop any path contained by another selected path so tar doesn't archive it twice.
+function dropNestedPaths(paths: string[]): string[] {
+  return paths.filter(
+    (path) => !paths.some((other) => other !== path && path.startsWith(`${other}/`))
+  )
+}
+
+// Pipe `tar -czf -` of the selected remote paths into tempDest. shellEscape guards each argument (a
+// path literally named "; rm -rf ~" must not become shell). -C <commonAncestor> keeps archive members
+// relative, preserving structure across items in different directories. The `--` before the members
+// stops tar from parsing a file literally named like `--checkpoint-action=exec=…` as an option
+// (shellEscape blocks shell injection but still delivers such a name to tar as a distinct argv word).
 async function streamTarToFile(
   conn: SshConnection,
-  remotePath: string,
+  remotePaths: string[],
   tempDest: string,
   signal: AbortSignal,
   onBytes: (delta: number) => void
 ): Promise<void> {
-  const parent = pathPosix.dirname(remotePath)
-  const name = pathPosix.basename(remotePath)
-  const channel = await conn.exec(`tar -czf - -C ${shellEscape(parent)} ${shellEscape(name)}`, {
-    signal
-  })
+  const kept = dropNestedPaths([...new Set(remotePaths)])
+  const ancestor = commonAncestorDir(kept)
+  const members = kept.map((path) => pathPosix.relative(ancestor, path))
+  const command = `tar -czf - -C ${shellEscape(ancestor)} -- ${members.map(shellEscape).join(' ')}`
+  const channel = await conn.exec(command, { signal })
   let stderr = ''
   let exitCode: number | null = null
+  let exitSignal: string | null = null
   channel.stderr.on('data', (chunk: Buffer) => {
     if (stderr.length < 4096) {
       stderr += chunk.toString()
     }
   })
-  channel.on('exit', (code: number | null) => {
+  // ssh2 emits exit as (code) on a clean exit, or (null, signalName) when the remote tar is killed —
+  // a signal must be treated as failure so a truncated archive is never renamed onto the destination.
+  channel.on('exit', (code: number | null, signalName?: string | null) => {
     if (typeof code === 'number') {
       exitCode = code
+    } else if (signalName) {
+      exitSignal = signalName
     }
   })
   channel.on('data', (chunk: Buffer) => onBytes(chunk.length))
@@ -97,6 +126,9 @@ async function streamTarToFile(
   } finally {
     signal.removeEventListener('abort', onAbort)
   }
+  if (exitSignal) {
+    throw new Error(stderr.trim() || `tar terminated by signal ${exitSignal}`)
+  }
   if (exitCode !== null && exitCode !== 0) {
     throw new Error(stderr.trim() || `tar exited with code ${String(exitCode)}`)
   }
@@ -109,20 +141,24 @@ export function registerSftpArchiveHandlers(deps: SftpArchiveHandlerDeps): void 
     'sftp:downloadArchive',
     async (
       event,
-      args: { targetId?: string; remotePath?: string }
+      args: { targetId?: string; remotePaths?: string[] }
     ): Promise<{ transferId: string } | { canceled: true } | SftpError> => {
       const resolved = await resolveConnection(getSftpConnection, args?.targetId)
       if ('error' in resolved) {
         return resolved
       }
-      let remotePath: string
-      try {
-        remotePath = validateString(args?.remotePath, 'remotePath')
-      } catch (error) {
-        return { error: toErrorMessage(error) }
+      const remotePaths = Array.isArray(args?.remotePaths) ? args.remotePaths : []
+      if (
+        remotePaths.length === 0 ||
+        remotePaths.some((path) => typeof path !== 'string' || path.length === 0)
+      ) {
+        return { error: 'remotePaths is required' }
       }
 
-      const defaultPath = sanitizeLocalDownloadFilename(`${pathPosix.basename(remotePath)}.tar.gz`)
+      // Single item keeps its own name; a multi-item archive is just "archive.tar.gz".
+      const defaultBase =
+        remotePaths.length === 1 ? pathPosix.basename(remotePaths[0]!) : 'archive'
+      const defaultPath = sanitizeLocalDownloadFilename(`${defaultBase}.tar.gz`)
       const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined
       const dialogResult = await (parentWindow
         ? dialog.showSaveDialog(parentWindow, { defaultPath })
@@ -153,7 +189,7 @@ export function registerSftpArchiveHandlers(deps: SftpArchiveHandlerDeps): void 
         let succeeded = false
         let bytes = 0
         try {
-          await streamTarToFile(resolved.conn, remotePath, tempDest, controller.signal, (delta) => {
+          await streamTarToFile(resolved.conn, remotePaths, tempDest, controller.signal, (delta) => {
             bytes += delta
             emitProgress(webContents, {
               transferId,

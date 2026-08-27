@@ -1,25 +1,18 @@
-import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { FolderPlus, FolderUp, RefreshCw, Server, Upload } from 'lucide-react'
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Server } from 'lucide-react'
 import { lazyWithRetry } from '@/lib/lazy-with-retry'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
-import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
 import type { GitFileStatus } from '../../../../shared/git-status-types'
 import type { SftpHostView } from '../../../../shared/sftp-host-types'
 import { FileExplorerTreeStatus } from './FileExplorerTreeStatus'
 import { FileExplorerVirtualRows } from './FileExplorerVirtualRows'
 import type { TreeNode } from './file-explorer-types'
 import { createVisibleFileExplorerRowProjection } from './useFileExplorerVisibleRowProjection'
+import { useFileExplorerSelection } from './useFileExplorerSelection'
 import { useServerExplorerTree } from './useServerExplorerTree'
 import { useServerExplorerVirtualizer } from './use-server-explorer-virtualizer'
 import {
@@ -29,6 +22,7 @@ import {
 } from './server-explorer-transfers'
 import { useServerExplorerTransferProgress } from './use-server-explorer-transfer-progress'
 import { ServerExplorerRowMenu } from './ServerExplorerRowMenu'
+import { ServerExplorerToolbar } from './ServerExplorerToolbar'
 import { ServerExplorerNewFolderDialog } from './ServerExplorerNewFolderDialog'
 import { ServerExplorerUploadConflictDialog } from './ServerExplorerUploadConflictDialog'
 import { useServerExplorerMutations } from './use-server-explorer-mutations'
@@ -52,7 +46,6 @@ const ServerExplorerFileViewerDialog = lazyWithRetry(
 const EMPTY_STATUS = new Map<string, GitFileStatus>()
 const EMPTY_FOLDER_STATUS = new Map<string, GitFileStatus | null>()
 const EMPTY_IGNORED = new Set<string>()
-const EMPTY_SELECTED = new Set<string>()
 const noop = (): void => {}
 
 const HOST_ID_STORAGE_KEY = 'orcinus.serverExplorer.hostId'
@@ -154,16 +147,23 @@ export default function ServerExplorer(): React.JSX.Element {
     }
   )
   const virtualizer = useServerExplorerVirtualizer(scrollRef, rowProjection)
+  const isMac = useMemo(() => navigator.userAgent.includes('Mac'), [])
+  const selection = useFileExplorerSelection(rowProjection, isMac)
 
   const handleRowClick = useCallback(
-    (node: TreeNode) => {
-      if (node.isDirectory) {
-        tree.toggleDir(node.path)
-      } else {
-        setViewingFile({ path: node.path, name: node.name })
-      }
+    (node: TreeNode, event: React.MouseEvent<HTMLButtonElement>) => {
+      // Ctrl/Cmd/Shift build a multi-selection; a plain click replaces it with this row, then
+      // toggles the directory or opens the file.
+      selection.selectRowWithModifiers(node, event, (target) => {
+        selection.setSelectedPaths(new Set([target.path]))
+        if (target.isDirectory) {
+          tree.toggleDir(target.path)
+        } else {
+          setViewingFile({ path: target.path, name: target.name })
+        }
+      })
     },
-    [tree]
+    [selection, tree]
   )
   const handleRefresh = useCallback(() => {
     if (rootPath) {
@@ -188,7 +188,15 @@ export default function ServerExplorer(): React.JSX.Element {
   const handleDownloadArchive = useCallback(
     (remotePath: string, name: string) => {
       if (selectedHostId) {
-        void downloadServerArchive(selectedHostId, remotePath, name)
+        void downloadServerArchive(selectedHostId, [remotePath], name)
+      }
+    },
+    [selectedHostId]
+  )
+  const handleDownloadArchiveMultiple = useCallback(
+    (remotePaths: string[]) => {
+      if (selectedHostId && remotePaths.length > 0) {
+        void downloadServerArchive(selectedHostId, remotePaths, 'archive')
       }
     },
     [selectedHostId]
@@ -244,90 +252,29 @@ export default function ServerExplorer(): React.JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <Select value={selectedHostId ?? undefined} onValueChange={handleSelectHost}>
-          <SelectTrigger size="sm" className="min-w-0 flex-1">
-            <SelectValue
-              placeholder={translate(
-                'auto.components.right-sidebar.ServerExplorer.selectHost',
-                'Select an SFTP host'
-              )}
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {hosts.map((host) => (
-              <SelectItem key={host.id} value={host.id}>
-                {host.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            if (rootPath) {
-              upload.uploadFiles(rootPath)
-            }
-          }}
-          disabled={!rootPath}
-          aria-label={translate(
-            'auto.components.right-sidebar.ServerExplorer.upload',
-            'Upload here'
-          )}
-        >
-          <Upload size={14} />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            if (rootPath) {
-              handleUploadFolder(rootPath)
-            }
-          }}
-          disabled={!rootPath}
-          aria-label={translate(
-            'auto.components.right-sidebar.ServerExplorer.uploadFolder',
-            'Upload directory here'
-          )}
-        >
-          <FolderUp size={14} />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            if (rootPath) {
-              setNewFolderParent(rootPath)
-            }
-          }}
-          disabled={!rootPath}
-          aria-label={translate(
-            'auto.components.right-sidebar.ServerExplorer.newFolder',
-            'New directory'
-          )}
-        >
-          <FolderPlus size={14} />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={handleRefresh}
-          disabled={!rootPath}
-          aria-label={translate('auto.components.right-sidebar.ServerExplorer.refresh', 'Refresh')}
-        >
-          <RefreshCw size={14} className={cn(isLoading && 'animate-spin')} />
-        </Button>
-      </div>
+      <ServerExplorerToolbar
+        hosts={hosts}
+        selectedHostId={selectedHostId}
+        onSelectHost={handleSelectHost}
+        canOperate={Boolean(rootPath)}
+        isLoading={isLoading}
+        onUploadFiles={() => {
+          if (rootPath) {
+            upload.uploadFiles(rootPath)
+          }
+        }}
+        onUploadFolder={() => {
+          if (rootPath) {
+            handleUploadFolder(rootPath)
+          }
+        }}
+        onNewFolder={() => {
+          if (rootPath) {
+            setNewFolderParent(rootPath)
+          }
+        }}
+        onRefresh={handleRefresh}
+      />
 
       {!selectedHostId ? (
         <div className="flex h-full items-center justify-center px-4 text-center text-[11px] text-muted-foreground">
@@ -367,7 +314,7 @@ export default function ServerExplorer(): React.JSX.Element {
               ignoredByRelativePath={EMPTY_IGNORED}
               expanded={tree.expanded}
               dirCache={tree.dirCache}
-              selectedPaths={EMPTY_SELECTED}
+              selectedPaths={selection.selectedPaths}
               activeFileId={null}
               flashingPath={null}
               deleteShortcutLabel=""
@@ -377,7 +324,7 @@ export default function ServerExplorer(): React.JSX.Element {
               onClick={handleRowClick}
               onDoubleClick={noop}
               onViewFile={noop}
-              onContextMenuSelect={noop}
+              onContextMenuSelect={selection.preserveSelectionForContextMenu}
               onCopyPaths={noop}
               onStartNew={noop}
               onStartRename={noop}
@@ -400,8 +347,10 @@ export default function ServerExplorer(): React.JSX.Element {
               renderContextMenu={(node) => (
                 <ServerExplorerRowMenu
                   node={node}
+                  selectedPaths={selection.selectedPaths}
                   onDownload={handleDownload}
                   onDownloadArchive={handleDownloadArchive}
+                  onDownloadArchiveMultiple={handleDownloadArchiveMultiple}
                   onUploadHere={upload.uploadFiles}
                   onUploadFolderHere={handleUploadFolder}
                   onCreateFolder={setNewFolderParent}
