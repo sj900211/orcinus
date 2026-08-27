@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { FolderPlus, FolderUp, RefreshCw, Server, Upload } from 'lucide-react'
+import { lazyWithRetry } from '@/lib/lazy-with-retry'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
@@ -35,6 +36,16 @@ import { useServerExplorerUpload } from './use-server-explorer-upload'
 import { parentPosixDir } from './server-explorer-directory-listing'
 import { formatPosixMode } from './sftp-file-metadata'
 import { formatBytes } from '@/components/status-bar/workspace-space-format'
+import type { ServerExplorerViewFile } from './ServerExplorerFileViewerDialog'
+
+// Lazy so Monaco is pulled only when the user first opens a remote file, not on panel mount.
+const ServerExplorerFileViewerDialog = lazyWithRetry(
+  () =>
+    import('./ServerExplorerFileViewerDialog').then((module) => ({
+      default: module.ServerExplorerFileViewerDialog
+    })),
+  { reloadKey: 'server-explorer-file-viewer' }
+)
 
 // Why: read-only tree never routes git status/ignore decoration; share one stable empty
 // identity so the virtual rows don't re-render on every parent commit.
@@ -76,6 +87,7 @@ export default function ServerExplorer(): React.JSX.Element {
   const [rootPath, setRootPath] = useState<string | null>(null)
   const [rootResolveError, setRootResolveError] = useState<string | null>(null)
   const [newFolderParent, setNewFolderParent] = useState<string | null>(null)
+  const [viewingFile, setViewingFile] = useState<ServerExplorerViewFile | null>(null)
 
   useEffect(() => {
     let active = true
@@ -144,6 +156,8 @@ export default function ServerExplorer(): React.JSX.Element {
     (node: TreeNode) => {
       if (node.isDirectory) {
         tree.toggleDir(node.path)
+      } else {
+        setViewingFile({ path: node.path, name: node.name })
       }
     },
     [tree]
@@ -413,6 +427,15 @@ export default function ServerExplorer(): React.JSX.Element {
         name={upload.conflictName}
         onResolve={upload.resolveConflict}
       />
+      {viewingFile && selectedHostId ? (
+        <Suspense fallback={null}>
+          <ServerExplorerFileViewerDialog
+            targetId={selectedHostId}
+            file={viewingFile}
+            onClose={() => setViewingFile(null)}
+          />
+        </Suspense>
+      ) : null}
     </div>
   )
 }

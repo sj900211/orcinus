@@ -118,3 +118,37 @@ export function statViaSftp(
 ): Promise<Stats> {
   return waitForSftpCallback<Stats>((callback) => sftp.stat(filePath, callback), options)
 }
+
+// Read up to `cap` bytes of a remote file into memory (for the read-only viewer). Uses a capped
+// stream — never sftp.readFile, which is unbounded and would OOM the main process on a huge file.
+export function readFileCappedViaSftp(
+  sftp: SFTPWrapper,
+  filePath: string,
+  cap: number
+): Promise<{ buffer: Buffer; truncated: boolean }> {
+  return new Promise((resolve, reject) => {
+    // `end` is inclusive, so this pulls at most cap+1 bytes off the wire even for a giant file.
+    const stream = sftp.createReadStream(filePath, { start: 0, end: cap })
+    const chunks: Buffer[] = []
+    let total = 0
+    let truncated = false
+    stream.on('data', (chunk: Buffer) => {
+      // destroy() is async, so more buffered 'data' events can fire after we hit the cap; ignore them
+      // (a naive clip would go negative and overshoot the cap).
+      if (truncated) {
+        return
+      }
+      total += chunk.length
+      if (total > cap) {
+        truncated = true
+        const keep = Math.max(0, chunk.length - (total - cap))
+        chunks.push(chunk.subarray(0, keep))
+        stream.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+    stream.once('error', reject)
+    stream.once('close', () => resolve({ buffer: Buffer.concat(chunks), truncated }))
+  })
+}

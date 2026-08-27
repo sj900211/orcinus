@@ -234,6 +234,73 @@ describe('registerSftpTransferHandlers', () => {
     })
   })
 
+  describe('sftp:readFile', () => {
+    const makeReadStream = (buffer: Buffer): EventEmitter & { destroy: () => void } => {
+      const stream = Object.assign(new EventEmitter(), { destroy: vi.fn() })
+      setImmediate(() => {
+        stream.emit('data', buffer)
+        stream.emit('close')
+      })
+      return stream
+    }
+
+    it('returns decoded utf-8 text for a text file', async () => {
+      const sftp = createSftp({
+        createReadStream: vi.fn(() => makeReadStream(Buffer.from('hello remote')))
+      })
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:readFile')(
+        { sender: createSender() },
+        { targetId: 'target-1', path: '/a/readme.txt' }
+      )
+      expect(result).toEqual({ content: 'hello remote', isBinary: false, truncated: false })
+      expect(sftp.end as ReturnType<typeof vi.fn>).toHaveBeenCalled()
+    })
+
+    it('flags a binary file and never decodes its bytes', async () => {
+      const sftp = createSftp({
+        createReadStream: vi.fn(() => makeReadStream(Buffer.from([0x68, 0x00, 0x69])))
+      })
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const result = await getHandler('sftp:readFile')(
+        { sender: createSender() },
+        { targetId: 'target-1', path: '/a/blob.bin' }
+      )
+      expect(result).toEqual({ content: '', isBinary: true, truncated: false })
+    })
+
+    it('returns a typed error for an unknown targetId', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:readFile')(
+        { sender: createSender() },
+        { targetId: 'nope', path: '/a/readme.txt' }
+      )
+      expect(result).toEqual({ error: 'SSH connection "nope" not found' })
+    })
+
+    it('returns a typed error when path is missing', async () => {
+      registerSftpTransferHandlers(createGetSftpConnection(createSftp()) as never)
+      const result = await getHandler('sftp:readFile')(
+        { sender: createSender() },
+        { targetId: 'target-1' }
+      )
+      expect(result).toEqual({ error: 'path is required' })
+    })
+
+    it('surfaces a read stream error as a typed error', async () => {
+      const stream = Object.assign(new EventEmitter(), { destroy: vi.fn() })
+      const sftp = createSftp({ createReadStream: vi.fn(() => stream) })
+      registerSftpTransferHandlers(createGetSftpConnection(sftp) as never)
+      const pending = getHandler('sftp:readFile')(
+        { sender: createSender() },
+        { targetId: 'target-1', path: '/a/x' }
+      )
+      await new Promise((r) => setImmediate(r))
+      stream.emit('error', new Error('EACCES'))
+      expect(await pending).toEqual({ error: 'EACCES' })
+    })
+  })
+
   describe('sftp:mkdir', () => {
     it('creates the folder (never allowing an existing target) and closes the channel', async () => {
       const sftp = createSftp()

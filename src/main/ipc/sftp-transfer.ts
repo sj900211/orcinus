@@ -3,7 +3,8 @@ import { rename, stat, unlink } from 'node:fs/promises'
 import { basename, posix as pathPosix } from 'node:path'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { WebContents } from 'electron'
-import { readDirViaSftp } from '../providers/ssh-filesystem-provider-sftp'
+import { readDirViaSftp, readFileCappedViaSftp } from '../providers/ssh-filesystem-provider-sftp'
+import { isBinaryBuffer } from '../../shared/binary-buffer'
 import { mkdirSftp, uploadFile } from '../ssh/sftp-upload'
 import { uploadDirectoriesInto } from '../ssh/sftp-upload-batch'
 import { registerSftpFsMutationHandlers } from './sftp-fs-mutations'
@@ -41,6 +42,7 @@ export type {
 const SFTP_IPC_CHANNELS = [
   'sftp:readdir',
   'sftp:realpath',
+  'sftp:readFile',
   'sftp:startUpload',
   'sftp:startDownload',
   'sftp:cancelTransfer',
@@ -51,6 +53,9 @@ const SFTP_IPC_CHANNELS = [
   'sftp:performUpload',
   'sftp:downloadArchive'
 ] as const
+
+// Viewer read cap — matches the relay text-file cap (ssh-file-stream-read-cap.ts MAX_TEXT_FILE_SIZE).
+const SFTP_READ_MAX_BYTES = 10 * 1024 * 1024
 
 type TransferSession = { controller: AbortController; senderId: number }
 
@@ -164,6 +169,35 @@ export function registerSftpTransferHandlers(
       }
       try {
         return await withSftpChannel(resolved.conn, (sftp) => realpathViaSftp(sftp, path))
+      } catch (error) {
+        return { error: transferErrorMessage(error) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'sftp:readFile',
+    async (
+      _event,
+      args: { targetId?: string; path?: string }
+    ): Promise<{ content: string; isBinary: boolean; truncated: boolean } | SftpError> => {
+      const resolved = await resolveConnection(getSftpConnection, args?.targetId)
+      if ('error' in resolved) {
+        return resolved
+      }
+      let path: string
+      try {
+        path = validateString(args?.path, 'path')
+      } catch (error) {
+        return { error: toErrorMessage(error) }
+      }
+      try {
+        return await withSftpChannel(resolved.conn, async (sftp) => {
+          const { buffer, truncated } = await readFileCappedViaSftp(sftp, path, SFTP_READ_MAX_BYTES)
+          const isBinary = isBinaryBuffer(buffer)
+          // Never decode a binary blob into the text viewer; the renderer shows a "binary" notice.
+          return { content: isBinary ? '' : buffer.toString('utf-8'), isBinary, truncated }
+        })
       } catch (error) {
         return { error: transferErrorMessage(error) }
       }

@@ -15999,6 +15999,11 @@
           "rename": "Rename",
           "skip": "Skip",
           "overwrite": "Overwrite"
+        },
+        "ServerExplorerFileViewerDialog": {
+          "truncated": "Large file — showing the first 10 MB.",
+          "loading": "Loading…",
+          "binary": "Can't preview a binary file"
         }
       }
     },

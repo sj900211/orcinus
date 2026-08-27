@@ -4895,6 +4895,12 @@ const api = {
     realpath: (args: { targetId: string; path: string }): Promise<string | SftpError> =>
       ipcRenderer.invoke('sftp:realpath', args),
 
+    readFile: (args: {
+      targetId: string
+      path: string
+    }): Promise<{ content: string; isBinary: boolean; truncated: boolean } | SftpError> =>
+      ipcRenderer.invoke('sftp:readFile', args),
+
     mkdir: (args: { targetId: string; path: string }): Promise<{ ok: true } | SftpError> =>
       ipcRenderer.invoke('sftp:mkdir', args),
 
