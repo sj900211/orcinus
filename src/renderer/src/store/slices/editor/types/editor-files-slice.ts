@@ -67,6 +67,7 @@ export type EditorFilesSlice = {
       | 'language'
       | 'runtimeEnvironmentId'
       | 'externalSshTargetId'
+      | 'sftpTargetId'
     >,
     options?: { anchor?: string | null; targetGroupId?: string; sourceFileId?: string }
   ) => void

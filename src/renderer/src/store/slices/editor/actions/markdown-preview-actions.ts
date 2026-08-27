@@ -9,7 +9,7 @@ import {
 } from '@/lib/editor-file-operation-owner'
 import { createUntitledMarkdownFileWithTemplateSelection } from '@/lib/create-untitled-markdown'
 import type { OpenFile } from '../types/open-file'
-import { resolveEditorFileIdForOwner } from '../file-ids/editor-file-ids'
+import { buildSftpEditorFileId, resolveEditorFileIdForOwner } from '../file-ids/editor-file-ids'
 import { buildEditorActiveResult } from '../tabs/editor-open-target-group'
 import { openWorkspaceEditorItem } from '../tabs/workspace-editor-item'
 
@@ -77,17 +77,26 @@ export function createMarkdownPreviewActions(
             undefined)
       const sourceFileId =
         options?.sourceFileId ??
-        resolveEditorFileIdForOwner(
-          initialState,
-          file.filePath,
-          file.worktreeId,
-          resolvedRuntimeEnvironmentId,
-          ['edit']
-        )
+        // Why: an SFTP source tab's id is host-namespaced (buildSftpEditorFileId), so resolve it the
+        // same way here or the preview points at a bare-path id no OpenFile has.
+        (file.sftpTargetId
+          ? buildSftpEditorFileId(file.sftpTargetId, file.worktreeId, file.filePath)
+          : resolveEditorFileIdForOwner(
+              initialState,
+              file.filePath,
+              file.worktreeId,
+              resolvedRuntimeEnvironmentId,
+              ['edit']
+            ))
       const id = `markdown-preview::${sourceFileId}`
       const externalSshTargetId =
         file.externalSshTargetId ??
         initialState.openFiles.find((openFile) => openFile.id === sourceFileId)?.externalSshTargetId
+      // Why: derive the SFTP host from the source tab (like externalSshTargetId) so the preview routes
+      // remote reads even when a caller passes only sourceFileId (toolbar/shortcut), not the full file.
+      const sftpTargetId =
+        file.sftpTargetId ??
+        initialState.openFiles.find((openFile) => openFile.id === sourceFileId)?.sftpTargetId
       const anchor = options?.anchor || undefined
       set((s) => {
         const existing = s.openFiles.find((openFile) => openFile.id === id)
@@ -101,6 +110,7 @@ export function createMarkdownPreviewActions(
             existing.filePath !== file.filePath ||
             existing.language !== file.language ||
             existing.externalSshTargetId !== externalSshTargetId ||
+            existing.sftpTargetId !== sftpTargetId ||
             existing.markdownPreviewSourceFileId !== sourceFileId ||
             existing.markdownPreviewAnchor !== anchor ||
             existing.mode !== 'markdown-preview'
@@ -116,6 +126,8 @@ export function createMarkdownPreviewActions(
                         language: file.language,
                         runtimeEnvironmentId,
                         externalSshTargetId,
+                        // Why: carry SFTP routing so the preview reads remote content over SFTP.
+                        sftpTargetId,
                         markdownPreviewSourceFileId: sourceFileId,
                         markdownPreviewAnchor: anchor,
                         mode: 'markdown-preview' as const
@@ -136,6 +148,8 @@ export function createMarkdownPreviewActions(
           isDirty: false,
           runtimeEnvironmentId,
           externalSshTargetId,
+          // Why: carry SFTP routing so the preview reads remote content over SFTP.
+          sftpTargetId,
           markdownPreviewSourceFileId: sourceFileId,
           markdownPreviewAnchor: anchor,
           mode: 'markdown-preview'
