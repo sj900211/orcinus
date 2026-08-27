@@ -63,6 +63,9 @@ export type FileExplorerRowProps = {
   /** Opt-in: render a custom context menu (e.g. SFTP actions) instead of the default. The local
    *  File Explorer omits it, so its behavior is unchanged. */
   renderContextMenu?: (node: TreeNode) => React.ReactNode
+  /** Opt-in: render trailing metadata (e.g. SFTP size/permissions) after the name. Omitted by the
+   *  local File Explorer. */
+  renderRowMeta?: (node: TreeNode) => React.ReactNode
 }
 
 export function FileExplorerRow({
@@ -104,7 +107,8 @@ export function FileExplorerRow({
   onDragExpandDir,
   onNativeDragTargetChange,
   onNativeDragExpandDir,
-  renderContextMenu
+  renderContextMenu,
+  renderRowMeta
 }: FileExplorerRowProps): React.JSX.Element {
   const FileIcon = getFileTypeIcon(node.relativePath || node.name)
   const rowDropDir = node.isDirectory ? node.path : targetDir
@@ -232,6 +236,7 @@ export function FileExplorerRow({
           >
             {node.name}
           </span>
+          {renderRowMeta ? renderRowMeta(node) : null}
           {nodeStatus ? (
             <span
               className="ml-auto shrink-0 text-[10px] font-semibold tracking-wide mr-2"

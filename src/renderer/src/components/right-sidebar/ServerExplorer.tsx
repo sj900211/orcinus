@@ -29,6 +29,8 @@ import { ServerExplorerUploadConflictDialog } from './ServerExplorerUploadConfli
 import { useServerExplorerMutations } from './use-server-explorer-mutations'
 import { useServerExplorerUpload } from './use-server-explorer-upload'
 import { parentPosixDir } from './server-explorer-directory-listing'
+import { formatPosixMode } from './sftp-file-metadata'
+import { formatBytes } from '@/components/status-bar/workspace-space-format'
 
 // Why: read-only tree never routes git status/ignore decoration; share one stable empty
 // identity so the virtual rows don't re-render on every parent commit.
@@ -39,6 +41,25 @@ const EMPTY_SELECTED = new Set<string>()
 const noop = (): void => {}
 
 const HOST_ID_STORAGE_KEY = 'orcinus.serverExplorer.hostId'
+
+// Trailing metadata for a remote row: size (files only) + POSIX permissions, right-aligned.
+function renderRowMeta(node: TreeNode): React.ReactNode {
+  const parts: string[] = []
+  if (!node.isDirectory && node.size != null) {
+    parts.push(formatBytes(node.size))
+  }
+  if (node.mode != null) {
+    parts.push(formatPosixMode(node.mode))
+  }
+  if (parts.length === 0) {
+    return null
+  }
+  return (
+    <span className="ml-auto shrink-0 pl-2 pr-2 font-mono text-[10px] whitespace-nowrap text-muted-foreground">
+      {parts.join('  ')}
+    </span>
+  )
+}
 
 export default function ServerExplorer(): React.JSX.Element {
   const openSettingsPage = useAppStore((s) => s.openSettingsPage)
@@ -358,6 +379,7 @@ export default function ServerExplorer(): React.JSX.Element {
                   onRefresh={handleRowRefresh}
                 />
               )}
+              renderRowMeta={renderRowMeta}
             />
           )}
         </ScrollArea>

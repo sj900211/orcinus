@@ -15,6 +15,9 @@ export type TreeNode = {
   depth: number
   /** Host snapshot that produced this node. Destructive actions fail closed without it. */
   operationOwner?: FileExplorerOperationOwner
+  /** Optional file metadata (SFTP Server Explorer); the local explorer leaves these unset. */
+  size?: number
+  mode?: number
 }
 
 export type DirCache = {

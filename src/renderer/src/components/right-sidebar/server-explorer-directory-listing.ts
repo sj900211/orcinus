@@ -38,7 +38,9 @@ export function sftpEntriesToTreeNodes(
       ),
       isDirectory,
       isSymlink: entry.type === 'symlink',
-      depth: depth + 1
+      depth: depth + 1,
+      size: entry.size,
+      ...(typeof entry.mode === 'number' ? { mode: entry.mode } : {})
     } satisfies TreeNode
   })
   return nodes.sort((a, b) => {
