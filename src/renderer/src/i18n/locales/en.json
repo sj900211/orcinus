@@ -15985,7 +15985,8 @@
           "delete": "Delete…",
           "uploadFolderHere": "Upload directory here…",
           "downloadArchive": "Download as archive…",
-          "downloadArchiveMultiple": "Download {{value0}} items as archive…"
+          "downloadArchiveMultiple": "Download {{value0}} items as archive…",
+          "preview": "Preview"
         },
         "ServerExplorerNewFolderDialog": {
           "title": "New Directory",

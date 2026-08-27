@@ -1,5 +1,6 @@
 import {
   Download,
+  Eye,
   FileArchive,
   FolderPlus,
   FolderUp,
@@ -20,6 +21,7 @@ import { translate } from '@/i18n/i18n'
 type ServerExplorerRowMenuProps = {
   node: TreeNode
   selectedPaths: Set<string>
+  onPreview: (node: TreeNode) => void
   onDownload: (remotePath: string, fileName: string) => void
   onDownloadArchive: (remotePath: string, name: string) => void
   onDownloadArchiveMultiple: (remotePaths: string[]) => void
@@ -33,6 +35,7 @@ type ServerExplorerRowMenuProps = {
 export function ServerExplorerRowMenu({
   node,
   selectedPaths,
+  onPreview,
   onDownload,
   onDownloadArchive,
   onDownloadArchiveMultiple,
@@ -91,10 +94,16 @@ export function ServerExplorerRowMenu({
           </ContextMenuItem>
         </>
       ) : (
-        <ContextMenuItem onSelect={() => onDownload(node.path, node.name)}>
-          <Download className="size-3.5" />
-          {translate('auto.components.right-sidebar.ServerExplorerRowMenu.download', 'Download…')}
-        </ContextMenuItem>
+        <>
+          <ContextMenuItem onSelect={() => onPreview(node)}>
+            <Eye className="size-3.5" />
+            {translate('auto.components.right-sidebar.ServerExplorerRowMenu.preview', 'Preview')}
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => onDownload(node.path, node.name)}>
+            <Download className="size-3.5" />
+            {translate('auto.components.right-sidebar.ServerExplorerRowMenu.download', 'Download…')}
+          </ContextMenuItem>
+        </>
       )}
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onSelect={() => onDelete(node)}>

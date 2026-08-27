@@ -152,18 +152,27 @@ export default function ServerExplorer(): React.JSX.Element {
 
   const handleRowClick = useCallback(
     (node: TreeNode, event: React.MouseEvent<HTMLButtonElement>) => {
-      // Ctrl/Cmd/Shift build a multi-selection; a plain click replaces it with this row, then
-      // toggles the directory or opens the file.
+      // Ctrl/Cmd/Shift build a multi-selection; a plain click replaces it with this row and toggles a
+      // directory. A file is only selected here — Preview opens on double-click or via the row menu.
       selection.selectRowWithModifiers(node, event, (target) => {
         selection.setSelectedPaths(new Set([target.path]))
         if (target.isDirectory) {
           tree.toggleDir(target.path)
-        } else {
-          setViewingFile({ path: target.path, name: target.name })
         }
       })
     },
     [selection, tree]
+  )
+  const handlePreview = useCallback((node: TreeNode) => {
+    setViewingFile({ path: node.path, name: node.name })
+  }, [])
+  const handleRowDoubleClick = useCallback(
+    (node: TreeNode) => {
+      if (!node.isDirectory) {
+        handlePreview(node)
+      }
+    },
+    [handlePreview]
   )
   const handleRefresh = useCallback(() => {
     if (rootPath) {
@@ -322,12 +331,15 @@ export default function ServerExplorer(): React.JSX.Element {
               supportsFolderDownload={false}
               canOpenInOrcaBrowser={() => false}
               onClick={handleRowClick}
-              onDoubleClick={noop}
+              onDoubleClick={handleRowDoubleClick}
               onViewFile={noop}
               onContextMenuSelect={selection.preserveSelectionForContextMenu}
               onCopyPaths={noop}
               onStartNew={noop}
-              onStartRename={noop}
+              // SFTP has no rename; the shared row routes a filename-text double-click through
+              // onStartRename (stopping propagation to the row). Reuse it to open Preview so
+              // double-clicking the name matches double-clicking the row's icon/empty area.
+              onStartRename={handleRowDoubleClick}
               onDuplicate={noop}
               onAddFolderAsProject={noop}
               canAddFolderAsProject={() => false}
@@ -348,6 +360,7 @@ export default function ServerExplorer(): React.JSX.Element {
                 <ServerExplorerRowMenu
                   node={node}
                   selectedPaths={selection.selectedPaths}
+                  onPreview={handlePreview}
                   onDownload={handleDownload}
                   onDownloadArchive={handleDownloadArchive}
                   onDownloadArchiveMultiple={handleDownloadArchiveMultiple}
