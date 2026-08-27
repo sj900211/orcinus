@@ -16011,6 +16011,14 @@
         "FileExplorerSftpSplit": {
           "hide": "Hide SFTP",
           "show": "Show SFTP"
+        },
+        "localDownload": {
+          "downloading": "Downloading {{value0}}…",
+          "cancel": "Cancel",
+          "items": "{{value0}} items",
+          "downloaded": "Downloaded {{value0}}",
+          "failed": "Download failed",
+          "remoteWorkspace": "Can't download into a remote workspace."
         }
       }
     },

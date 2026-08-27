@@ -6,14 +6,20 @@ import {
   readWorkspaceFileDragPaths,
   WORKSPACE_FILE_PATH_MIME
 } from '@/lib/workspace-file-drag'
+import { readSftpFileDrag } from '@/lib/sftp-file-drag'
+import { translate } from '@/i18n/i18n'
 import type { FileExplorerOperationOwner } from './file-explorer-types'
 import { useFileExplorerDragEdgeScroll } from './useFileExplorerDragEdgeScroll'
 import { useFileExplorerMoveDrop } from './useFileExplorerMoveDrop'
 import { useFileExplorerDragExpand } from './useFileExplorerDragExpand'
+import { downloadRemotePathsToLocalDir } from './local-explorer-download-transfers'
 
 type UseFileExplorerDragDropParams = {
   worktreePath: string | null
   activeWorktreeId: string | null
+  /** SSH connection owning this explorer, or null for a truly-local worktree. A remote (SSH-backed)
+   *  explorer's paths live on that host, not this machine, so SFTP download-to-dir is disabled. */
+  connectionId: string | null
   expanded: Set<string>
   toggleDir: (worktreeId: string, dirPath: string) => void
   refreshDir: (dirPath: string) => Promise<void>
@@ -36,6 +42,9 @@ type UseFileExplorerDragDropResult = {
   nativeDropTargetDir: string | null
   setNativeDropTargetDir: (dir: string | null) => void
   handleNativeDragExpandDir: (dirPath: string) => void
+  /** Claims a drop of REMOTE (SFTP) paths onto a local dir as a download; returns true if handled,
+   *  so the caller skips the internal move. Passed to the shared rows via onExternalPathsDrop. */
+  onExternalPathsDrop: (destDir: string, dataTransfer: DataTransfer) => boolean
   // Stops the drag edge auto-scroll loop (call on drag end / unmount)
   stopDragEdgeScroll: () => void
   rootDragHandlers: {
@@ -51,6 +60,7 @@ type UseFileExplorerDragDropResult = {
 export function useFileExplorerDragDrop({
   worktreePath,
   activeWorktreeId,
+  connectionId,
   expanded,
   toggleDir,
   refreshDir,
@@ -120,6 +130,30 @@ export function useFileExplorerDragDrop({
     stopAndClearDragState()
   }, [stopAndClearDragState])
 
+  // A drag that carries the SFTP mime originates on the Server Explorer — dropping it here downloads
+  // the remote paths into destDir. Returns true when it claimed the drop (skip the internal move). A
+  // remote (SSH-backed) explorer can't receive a Node-fs download, so it's refused with a toast.
+  const onExternalPathsDrop = useCallback(
+    (destDir: string, dataTransfer: DataTransfer): boolean => {
+      const sftp = readSftpFileDrag(dataTransfer)
+      if (!sftp) {
+        return false
+      }
+      if (connectionId != null) {
+        toast.error(
+          translate(
+            'auto.components.right-sidebar.localDownload.remoteWorkspace',
+            "Can't download into a remote workspace."
+          )
+        )
+        return true
+      }
+      void downloadRemotePathsToLocalDir(sftp.hostId, sftp.paths, destDir)
+      return true
+    },
+    [connectionId]
+  )
+
   const rootDragHandlers = {
     onDragOver: useCallback(
       (e: React.DragEvent) => {
@@ -185,6 +219,12 @@ export function useFileExplorerDragDrop({
         // here; the actual import is triggered from onFileDrop.
         clearNativeDragState()
         if (worktreePath) {
+          // A remote-origin (SFTP) drag downloads into the worktree root; only if it doesn't claim
+          // the drop does the internal move run. A remote drag must be checked BEFORE the move loop —
+          // its paths are remote POSIX, not local worktree paths.
+          if (onExternalPathsDrop(worktreePath, e.dataTransfer)) {
+            return
+          }
           const dragPaths = readWorkspaceFileDragPaths(e.dataTransfer)
           if (dragPaths.status === 'rejected') {
             toast.error(getWorkspaceFileDragRejectionMessage(dragPaths.reason))
@@ -195,7 +235,7 @@ export function useFileExplorerDragDrop({
           }
         }
       },
-      [worktreePath, handleMoveDrop, stopDragEdgeScroll, clearNativeDragState]
+      [worktreePath, handleMoveDrop, stopDragEdgeScroll, clearNativeDragState, onExternalPathsDrop]
     )
   }
 
@@ -216,6 +256,7 @@ export function useFileExplorerDragDrop({
     nativeDropTargetDir,
     setNativeDropTargetDir,
     handleNativeDragExpandDir,
+    onExternalPathsDrop,
     stopDragEdgeScroll,
     rootDragHandlers,
     clearNativeDragState

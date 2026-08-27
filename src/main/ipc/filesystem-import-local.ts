@@ -108,7 +108,7 @@ export async function importOneSource(
  * Pattern: "name copy.ext", "name copy 2.ext", "name copy 3.ext", etc.
  * For directories: "name copy", "name copy 2", "name copy 3", etc.
  */
-async function deconflictName(
+export async function deconflictName(
   destDir: string,
   originalName: string,
   reservedNames: Set<string>

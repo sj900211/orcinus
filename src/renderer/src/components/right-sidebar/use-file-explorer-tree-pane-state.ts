@@ -11,6 +11,7 @@ import type { TreeNode } from './file-explorer-types'
 import { buildFolderStatusMap, buildStatusMap } from './status-display'
 import { useFileDeletion } from './useFileDeletion'
 import { useFileExplorerDragDrop } from './useFileExplorerDragDrop'
+import { useLocalExplorerDownloadProgress } from './use-local-explorer-download-progress'
 import { useFileExplorerHandlers } from './useFileExplorerHandlers'
 import { useFileExplorerImport } from './useFileExplorerImport'
 import { useFileExplorerInlineInput } from './useFileExplorerInlineInput'
@@ -154,12 +155,15 @@ export function useFileExplorerTreePaneState({
   const dragDrop = useFileExplorerDragDrop({
     worktreePath,
     activeWorktreeId,
+    connectionId: activeRepo?.connectionId ?? null,
     expanded,
     toggleDir,
     refreshDir,
     scrollRef,
     getOperationOwnerForPath: (path) => rowProjection.getRowByPath(path)?.operationOwner
   })
+  // Drop-download (dungeon 11-3) toasts + local-tree refresh when a remote drop settles.
+  useLocalExplorerDownloadProgress(refreshDir)
 
   useFileExplorerTreeLoadEffects({
     visibleFilesWorktreePath,

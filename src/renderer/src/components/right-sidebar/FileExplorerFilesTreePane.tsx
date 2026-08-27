@@ -91,6 +91,7 @@ export function FileExplorerFilesTreePane({
     nativeDropTargetDir,
     setNativeDropTargetDir,
     handleNativeDragExpandDir,
+    onExternalPathsDrop,
     stopDragEdgeScroll,
     rootDragHandlers
   } = dragDrop
@@ -201,6 +202,7 @@ export function FileExplorerFilesTreePane({
           onCollapseFolderSubtree={handleCollapseFolderSubtree}
           onFindInFolder={handleFindInFolder}
           onMoveDrop={handleMoveDrop}
+          onExternalPathsDrop={onExternalPathsDrop}
           onDragTargetChange={setDropTargetDir}
           onDragSourceChange={setDragSourcePath}
           onDragExpandDir={hasNameFilter ? handleExpandNameFilterDir : handleDragExpandDir}

@@ -10,6 +10,7 @@ import { uploadDirectoriesInto } from '../ssh/sftp-upload-batch'
 import { registerSftpFsMutationHandlers } from './sftp-fs-mutations'
 import { registerSftpUploadHandlers } from './sftp-upload-handlers'
 import { registerSftpArchiveHandlers } from './sftp-download-archive'
+import { registerSftpDownloadHandlers } from './sftp-download-handlers'
 import { sanitizeLocalDownloadFilename } from '../local-download-filename'
 import {
   emitProgress,
@@ -52,7 +53,8 @@ const SFTP_IPC_CHANNELS = [
   'sftp:planUpload',
   'sftp:performUpload',
   'sftp:uploadPaths',
-  'sftp:downloadArchive'
+  'sftp:downloadArchive',
+  'sftp:downloadToDir'
 ] as const
 
 // Viewer read cap — matches the relay text-file cap (ssh-file-stream-read-cap.ts MAX_TEXT_FILE_SIZE).
@@ -431,4 +433,5 @@ export function registerSftpTransferHandlers(
   registerSftpFsMutationHandlers(getSftpConnection)
   registerSftpUploadHandlers({ getSftpConnection, lifecycle, transfers, ensureDestroyedCleanup })
   registerSftpArchiveHandlers({ getSftpConnection, lifecycle, transfers, ensureDestroyedCleanup })
+  registerSftpDownloadHandlers({ getSftpConnection, lifecycle, transfers, ensureDestroyedCleanup })
 }

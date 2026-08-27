@@ -83,6 +83,16 @@ export function lstatViaSftp(sftp: SFTPWrapper, filePath: string): Promise<FileS
   })
 }
 
+// Raw lstat (link not followed) returning the ssh2 Stats. Callers that must distinguish a symlink or
+// a mode-less (untrusted) entry from a real file/dir need the raw mode, which FileStat discards.
+export function lstatRawViaSftp(
+  sftp: SFTPWrapper,
+  filePath: string,
+  options?: { signal?: AbortSignal }
+): Promise<Stats> {
+  return waitForSftpCallback<Stats>((callback) => sftp.lstat(filePath, callback), options)
+}
+
 export function fastGetViaSftp(
   sftp: SFTPWrapper,
   sourcePath: string,
