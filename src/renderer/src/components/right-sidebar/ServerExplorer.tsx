@@ -21,7 +21,11 @@ import type { TreeNode } from './file-explorer-types'
 import { createVisibleFileExplorerRowProjection } from './useFileExplorerVisibleRowProjection'
 import { useServerExplorerTree } from './useServerExplorerTree'
 import { useServerExplorerVirtualizer } from './use-server-explorer-virtualizer'
-import { downloadServerFile, uploadFolderToServerDir } from './server-explorer-transfers'
+import {
+  downloadServerArchive,
+  downloadServerFile,
+  uploadFolderToServerDir
+} from './server-explorer-transfers'
 import { useServerExplorerTransferProgress } from './use-server-explorer-transfer-progress'
 import { ServerExplorerRowMenu } from './ServerExplorerRowMenu'
 import { ServerExplorerNewFolderDialog } from './ServerExplorerNewFolderDialog'
@@ -160,6 +164,14 @@ export default function ServerExplorer(): React.JSX.Element {
     (remotePath: string, fileName: string) => {
       if (selectedHostId) {
         void downloadServerFile(selectedHostId, remotePath, fileName)
+      }
+    },
+    [selectedHostId]
+  )
+  const handleDownloadArchive = useCallback(
+    (remotePath: string, name: string) => {
+      if (selectedHostId) {
+        void downloadServerArchive(selectedHostId, remotePath, name)
       }
     },
     [selectedHostId]
@@ -372,6 +384,7 @@ export default function ServerExplorer(): React.JSX.Element {
                 <ServerExplorerRowMenu
                   node={node}
                   onDownload={handleDownload}
+                  onDownloadArchive={handleDownloadArchive}
                   onUploadHere={upload.uploadFiles}
                   onUploadFolderHere={handleUploadFolder}
                   onCreateFolder={setNewFolderParent}

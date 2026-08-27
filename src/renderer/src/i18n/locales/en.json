@@ -15983,7 +15983,8 @@
           "refresh": "Refresh",
           "newFolder": "New Directory…",
           "delete": "Delete…",
-          "uploadFolderHere": "Upload directory here…"
+          "uploadFolderHere": "Upload directory here…",
+          "downloadArchive": "Download as archive…"
         },
         "ServerExplorerNewFolderDialog": {
           "title": "New Directory",

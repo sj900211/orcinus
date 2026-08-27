@@ -1,4 +1,12 @@
-import { Download, FolderPlus, FolderUp, RefreshCw, Trash2, Upload } from 'lucide-react'
+import {
+  Download,
+  FileArchive,
+  FolderPlus,
+  FolderUp,
+  RefreshCw,
+  Trash2,
+  Upload
+} from 'lucide-react'
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -12,6 +20,7 @@ import { translate } from '@/i18n/i18n'
 type ServerExplorerRowMenuProps = {
   node: TreeNode
   onDownload: (remotePath: string, fileName: string) => void
+  onDownloadArchive: (remotePath: string, name: string) => void
   onUploadHere: (remoteDir: string) => void
   onUploadFolderHere: (remoteDir: string) => void
   onCreateFolder: (parentDir: string) => void
@@ -22,6 +31,7 @@ type ServerExplorerRowMenuProps = {
 export function ServerExplorerRowMenu({
   node,
   onDownload,
+  onDownloadArchive,
   onUploadHere,
   onUploadFolderHere,
   onCreateFolder,
@@ -32,6 +42,13 @@ export function ServerExplorerRowMenu({
     <ContextMenuContent className="w-52">
       {node.isDirectory ? (
         <>
+          <ContextMenuItem onSelect={() => onDownloadArchive(node.path, node.name)}>
+            <FileArchive className="size-3.5" />
+            {translate(
+              'auto.components.right-sidebar.ServerExplorerRowMenu.downloadArchive',
+              'Download as archive…'
+            )}
+          </ContextMenuItem>
           <ContextMenuItem onSelect={() => onUploadHere(node.path)}>
             <Upload className="size-3.5" />
             {translate(

@@ -4942,6 +4942,12 @@ const api = {
     }): Promise<{ transferId: string } | { canceled: true } | SftpError> =>
       ipcRenderer.invoke('sftp:startDownload', args),
 
+    downloadArchive: (args: {
+      targetId: string
+      remotePath: string
+    }): Promise<{ transferId: string } | { canceled: true } | SftpError> =>
+      ipcRenderer.invoke('sftp:downloadArchive', args),
+
     cancelTransfer: (args: { transferId: string }): Promise<{ ok: true } | SftpError> =>
       ipcRenderer.invoke('sftp:cancelTransfer', args),
 

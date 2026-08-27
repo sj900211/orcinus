@@ -8,6 +8,7 @@ import { mkdirSftp, uploadFile } from '../ssh/sftp-upload'
 import { uploadDirectoriesInto } from '../ssh/sftp-upload-batch'
 import { registerSftpFsMutationHandlers } from './sftp-fs-mutations'
 import { registerSftpUploadHandlers } from './sftp-upload-handlers'
+import { registerSftpArchiveHandlers } from './sftp-download-archive'
 import { sanitizeLocalDownloadFilename } from '../local-download-filename'
 import {
   emitProgress,
@@ -47,7 +48,8 @@ const SFTP_IPC_CHANNELS = [
   'sftp:move',
   'sftp:delete',
   'sftp:planUpload',
-  'sftp:performUpload'
+  'sftp:performUpload',
+  'sftp:downloadArchive'
 ] as const
 
 type TransferSession = { controller: AbortController; senderId: number }
@@ -393,4 +395,5 @@ export function registerSftpTransferHandlers(
 
   registerSftpFsMutationHandlers(getSftpConnection)
   registerSftpUploadHandlers({ getSftpConnection, lifecycle, transfers, ensureDestroyedCleanup })
+  registerSftpArchiveHandlers({ getSftpConnection, lifecycle, transfers, ensureDestroyedCleanup })
 }

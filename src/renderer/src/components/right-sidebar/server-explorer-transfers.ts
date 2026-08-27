@@ -111,6 +111,25 @@ export async function downloadServerFile(
   showPending(result.transferId, 'download', fileName)
 }
 
+/** Download a remote directory as a single .tar.gz archive (streamed via `tar` over exec). */
+export async function downloadServerArchive(
+  targetId: string,
+  remotePath: string,
+  name: string
+): Promise<void> {
+  const result = await window.api.sftp.downloadArchive({ targetId, remotePath })
+  if ('canceled' in result) {
+    return
+  }
+  if ('error' in result) {
+    toast.error(result.error)
+    return
+  }
+  const label = `${name}.tar.gz`
+  tracked.set(result.transferId, { kind: 'download', label, remoteDir: '' })
+  showPending(result.transferId, 'download', label)
+}
+
 export type UploadConflictResolution =
   | { action: 'overwrite' }
   | { action: 'skip' }
