@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Orcinus — SFTP 원정 대화록</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d2129; --border:#2a2f3a;
+    --fg:#e6e9ef; --muted:#9aa4b2; --accent:#5aa9e6; --code:#0b0d11;
+    --user:#2b3b2f; --user-b:#3f5a45; --ok:#7bd88f; --warn:#f2c94c; --bad:#ff6b6b;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font:15px/1.6 -apple-system,Segoe UI,Roboto,'Malgun Gothic',sans-serif; }
+  header { padding:28px 20px 14px; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,#141822,#0f1115); position:sticky; top:0; z-index:5; }
+  header h1 { margin:0 0 4px; font-size:22px; }
+  header .sub { color:var(--muted); font-size:13px; }
+  .wrap { max-width:960px; margin:0 auto; padding:0 20px 80px; }
+  nav.toc { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; margin:20px 0; }
+  nav.toc b { display:block; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px; }
+  nav.toc a { color:var(--accent); text-decoration:none; display:inline-block; margin:2px 12px 2px 0; font-size:13px; }
+  nav.toc a:hover { text-decoration:underline; }
+  section.ms { margin:30px 0; }
+  section.ms > h2 { font-size:17px; padding:8px 12px; background:var(--panel2);
+    border-left:3px solid var(--accent); border-radius:0 8px 8px 0; scroll-margin-top:80px; }
+  details.ex { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    margin:10px 0; overflow:hidden; scroll-margin-top:80px; }
+  details.ex > summary { cursor:pointer; padding:12px 14px; list-style:none; display:flex; gap:10px; align-items:baseline; }
+  details.ex > summary::-webkit-details-marker { display:none; }
+  details.ex > summary .who { font-size:11px; font-weight:700; padding:2px 7px; border-radius:20px; white-space:nowrap; }
+  .who.u { background:var(--user); border:1px solid var(--user-b); color:#cfe9d6; }
+  .who.a { background:#20304a; border:1px solid #33507d; color:#cfe0ff; }
+  details.ex > summary .sum { color:var(--fg); flex:1; }
+  details.ex > summary .tag { font-size:11px; color:var(--muted); }
+  details.ex[open] > summary { border-bottom:1px solid var(--border); background:var(--panel2); }
+  .body { padding:6px 16px 14px; }
+  .md h3 { font-size:15px; margin:14px 0 6px; }
+  .md p { margin:8px 0; }
+  .md ul,.md ol { margin:8px 0; padding-left:22px; }
+  .md li { margin:3px 0; }
+  .md code { background:var(--code); border:1px solid var(--border); border-radius:4px; padding:1px 5px; font-family:ui-monospace,Consolas,monospace; font-size:13px; }
+  .md pre { background:var(--code); border:1px solid var(--border); border-radius:8px; padding:12px; overflow:auto; }
+  .md pre code { border:0; padding:0; }
+  .md strong { color:#fff; }
+  .md a { color:var(--accent); }
+  .sev { font-weight:700; }
+  .sev.h { color:var(--bad); } .sev.m { color:var(--warn); } .sev.l { color:var(--muted); }
+  footer { color:var(--muted); font-size:12px; text-align:center; padding:20px; border-top:1px solid var(--border); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🗺 Orcinus — SFTP 원정 대화록</h1>
+  <div class="sub">Orca 포크 커스텀 ADE · 3단계(SFTP 원격 파일 관리) 개발 · 2026-08-28 클리어</div>
+</header>
+<div class="wrap">
+  <nav class="toc"><b>마일스톤</b>
+    <a href="#m1">M1 · 다중선택 아카이브</a>
+    <a href="#m2">M2 · 프리뷰 개선 · 진행순서</a>
+    <a href="#m3">M3 · 업로드 드롭(11-2)</a>
+    <a href="#m4">M4 · 분할 수정 · 네이티브 에디터</a>
+    <a href="#m5">M5 · 원격 탭 아이콘 · 마크다운 프리뷰</a>
+    <a href="#m6">M6 · 다운로드 드롭(11-3)</a>
+    <a href="#m7">M7 · upstream 동기화(연기)</a>
+    <a href="#m8">M8 · 보스전(빌드·설치·클리어)</a>
+    <a href="#m9">M9 · 결산</a>
+  </nav>
+
+  <p class="sub">각 항목을 펼치면 상세가 마크다운으로 렌더됩니다. 🧑 = 제작자 요청/판정, 🤖 = 작업 산출.</p>
+
+  <!-- M1 -->
+  <section class="ms" id="m1"><h2>M1 · 다중선택 아카이브 다운로드</h2>
+
+  <details class="ex" id="e1-1"><summary><span class="who a">🤖</span><span class="sum">여러 원격 항목을 하나의 .tar.gz로 — 구현·적대적 리뷰·커밋</span><span class="tag">90602c9056</span></summary>
+  <div class="body md">
+원격 파일/폴더를 다중 선택(Ctrl/Shift)해 **단일 `.tar.gz`**로 내려받는 기능을 구현.
+
+- 백엔드 `streamTarToFile`을 `remotePaths[]`로 확장: 공통 조상 디렉토리를 `-C`로, 나머지를 상대 멤버로. 중첩·중복 경로 제거.
+- 선택 훅 `useFileExplorerSelection`을 Server Explorer에 연결(Ctrl/Shift 다중선택), 행 메뉴에 "Download N items as archive…".
+- **적대적 리뷰 → 확정 3건 교정**: <span class="sev h">HIGH</span> tar 옵션-인젝션(대시 파일명 → `--` 종결자), <span class="sev m">MED</span> 시그널 종료를 성공 오인, <span class="sev l">LOW</span> 중복 경로.
+- 게이트(타입체크·린트·테스트 9/9) 통과 후 커밋.
+  </div></details>
+
+  <details class="ex" id="e1-2"><summary><span class="who u">🧑</span><span class="sum">"모두 성공적으로 확인했어" + 프리뷰 개선·11-2/11-3 순서 검토 요청</span></summary>
+  <div class="body md">
+다중선택 아카이브 승인. 이어서 두 가지 요청:
+
+1. SFTP 파일 **단일 클릭 시 프리뷰 팝업이 열려 불편** → 더블클릭/우클릭 메뉴로 바꿔달라.
+2. 건너뛴 **11-2/11-3(양방향 드래그 전송)** 진행 순서를 검토해달라.
+  </div></details>
+  </section>
+
+  <!-- M2 -->
+  <section class="ms" id="m2"><h2>M2 · 프리뷰 상호작용 · 진행 순서</h2>
+
+  <details class="ex" id="e2-1"><summary><span class="who a">🤖</span><span class="sum">프리뷰 = 더블클릭/메뉴로 전환 + 진행순서(A→11-2→11-3) 제안</span><span class="tag">c290518417</span></summary>
+  <div class="body md">
+병렬 정찰(프리뷰 배선 + DnD 범위)로 근거 확보 후:
+
+- **단일 클릭 = 선택만**, 더블클릭/우클릭 "Preview" = 열람으로 변경. 파일명 텍스트 더블클릭이 rename 훅에 가로채이던 함정도, SFTP엔 rename이 없어 그 경로를 프리뷰로 재사용해 해결.
+- **진행 순서 제안**: 공통 MIME 선결(A) → 업로드(11-2, 저위험) → 다운로드(11-3, 고위험). 로컬 탐색기 드롭 경로를 건드리는 11-3을 마지막으로 격리.
+  </div></details>
+
+  <details class="ex" id="e2-2"><summary><span class="who u">🧑</span><span class="sum">순서 "A → 11-2 → 11-3" 선택 → "시작해줘"</span></summary>
+  <div class="body md">권장 순서 채택. Step A(공통 드래그 MIME)부터 착수 지시.</div></details>
+  </section>
+
+  <!-- M3 -->
+  <section class="ms" id="m3"><h2>M3 · 업로드 드롭 (11-2)</h2>
+
+  <details class="ex" id="e3-1"><summary><span class="who a">🤖</span><span class="sum">공통 MIME + 로컬→원격 업로드 드롭 — 구현·리뷰·커밋</span><span class="tag">3862ac947f</span></summary>
+  <div class="body md">
+- **Step A**: 원격 행에만 `SFTP_FILE_DRAG_MIME`(`{hostId,paths}`) 태깅 → 드롭 지점이 로컬/원격 출처 구분.
+- **11-2**: 다이얼로그 없는 `sftp:uploadPaths`(파일→`uploadFilesInto`, 디렉토리→`uploadDirectoriesInto`). 공유 행 훅에 opt-in `onExternalPathsDrop` 추가(로컬 무손상). 원격 행·배경 드롭 분기.
+- **적대적 3렌즈 리뷰 → 확정 3건**: <span class="sev h">HIGH</span> 최상위 심링크 디렉토리 업로드가 링크 대상(예: `~/.ssh`) 유출 → `lstat`로 거부. <span class="sev m">MED</span> 배경 다중드롭 1건 잘림 → 다중 경로 MIME. <span class="sev m">MED</span> 렌더러 신뢰 모델(기존 `performUpload`와 동일) → 보고.
+  </div></details>
+
+  <details class="ex" id="e3-2"><summary><span class="who u">🧑</span><span class="sum">"모두 성공적으로 검증되었어" + 분할 패널·네이티브 에디터 요청</span></summary>
+  <div class="body md">
+업로드 드롭 승인. 두 수정 요청:
+
+1. "Show SFTP" 시 SFTP 패널이 로컬 패널을 **가려 스크롤이 안 생김** → 진짜 분할로.
+2. SFTP 프리뷰가 별도 Monaco 팝업인데, **로컬 파일과 같은 Orca 에디터로, 메인 워크스페이스에** 열리게.
+  </div></details>
+  </section>
+
+  <!-- M4 -->
+  <section class="ms" id="m4"><h2>M4 · 분할 수정 · 네이티브 에디터(Phase 1)</h2>
+
+  <details class="ex" id="e4-1"><summary><span class="who a">🤖</span><span class="sum">분할 스크롤 수정(1줄) + 원격 파일 → 메인 에디터 read-only 탭</span><span class="tag">6aaf53b1ad · a4962b1408</span></summary>
+  <div class="body md">
+- **분할 수정**: 상단 pane 래퍼에 `flex flex-col` 누락 → FileExplorer의 `flex-1`이 무력화돼 ScrollArea가 높이를 못 잡던 것. 한 줄 추가로 진짜 분할 복원.
+- **네이티브 에디터(Phase 1)**: Plan 에이전트로 검증된 최소 경로 확보 → `OpenFile.sftpTargetId` + 콘텐츠 로더 SFTP 분기 + 활성 워크트리 소유(AI Vault "View Log" 선례). 팝업 뷰어 삭제.
+- **적대적 3렌즈 리뷰 → 확정 2건**: <span class="sev m">MED</span> 같은 경로 로컬/SSH 탭과 **식별자 충돌**(SSH 워크스페이스는 POSIX라 Windows에서도 발생) → 호스트 네임스페이스 `sftp:` id + 재사용 가드. <span class="sev m">MED</span> unified 탭이 별도 영속돼 하이드레이션 고아 → SFTP 탭 영속 제외.
+  </div></details>
+
+  <details class="ex" id="e4-2"><summary><span class="who u">🧑</span><span class="sum">검증 완료 + 원격 탭 시각 구분 요청(배경/글자색/아이콘)</span></summary>
+  <div class="body md">원격 파일 탭을 배경색/글자색/왼쪽 아이콘 중 하나로 시각적으로 구분해달라.</div></details>
+  </section>
+
+  <!-- M5 -->
+  <section class="ms" id="m5"><h2>M5 · 원격 탭 아이콘 · 마크다운 프리뷰</h2>
+
+  <details class="ex" id="e5-1"><summary><span class="who a">🤖</span><span class="sum">서버 아이콘으로 탭 구분 + 원격 마크다운 프리뷰 수정</span><span class="tag">4082c399ae · 82d5306ba8</span></summary>
+  <div class="body md">
+- **탭 아이콘**: (선택지 제시 → "서버 아이콘으로 교체") `EditorFileTab`에서 `sftpTargetId` 있으면 파일 아이콘 대신 Server 글리프.
+- **원격 마크다운 프리뷰**(제작자 질문 "의도한 건지"): **의도가 아니라 Phase 1 누락**. 프리뷰 탭이 별도 `OpenFile`이라 `sftpTargetId`가 없어 원격 경로를 로컬로 읽으려다 빈 화면. → 프리뷰 탭이 **소스 탭에서 SFTP 호스트를 물려받게**(externalSshTargetId 유도 방식과 동일) 수정, 툴바·단축키·메뉴 전 경로 커버.
+  </div></details>
+
+  <details class="ex" id="e5-2"><summary><span class="who u">🧑</span><span class="sum">"이상 없어. 다음 진행하자" → 11-3</span></summary>
+  <div class="body md">마크다운 프리뷰 승인. 다운로드 드롭(11-3)으로 진행.</div></details>
+  </section>
+
+  <!-- M6 -->
+  <section class="ms" id="m6"><h2>M6 · 다운로드 드롭 (11-3)</h2>
+
+  <details class="ex" id="e6-1"><summary><span class="who a">🤖</span><span class="sum">원격→로컬 다운로드 드롭 — 구현·리뷰·커밋</span><span class="tag">fc3157dd4b</span></summary>
+  <div class="body md">
+- Plan 에이전트로 로컬 드롭 경로(git 이동·undo 무손상) + 원격 디렉토리 다운로드 방식 설계.
+- 다이얼로그 없는 `sftp:downloadToDir`: 파일=temp+rename, **디렉토리=재귀 walk**(readdir+fastGet, tar 의존성 없음). 11-2의 `onExternalPathsDrop` 훅을 로컬 행에 재사용 + 배경 드롭 분기. hostId=드래그 페이로드. **`connectionId==null`(진짜 로컬 워크트리) 게이트**(SSH 백엔드 거부).
+- **적대적 3렌즈 리뷰 → 확정 2건**: <span class="sev h">HIGH</span> 기존 로컬 파일 무경고 덮어쓰기 → `deconflictName`("name copy") 비파괴. <span class="sev m">MED</span> 심링크가 선택적 mode 비트 의존 → `classifyRemoteEntry`로 S_IFREG/S_IFDIR 확정 분류, 그 외 스킵.
+  </div></details>
+
+  <details class="ex" id="e6-2"><summary><span class="who u">🧑</span><span class="sum">"모두 문제 없이 테스트 완료했어. 승인할께"</span></summary>
+  <div class="body md">11-3 승인. 던전 11(Split+DnD) 전 조각 완료.</div></details>
+  </section>
+
+  <!-- M7 -->
+  <section class="ms" id="m7"><h2>M7 · upstream 재동기화 (시도 → 연기)</h2>
+
+  <details class="ex" id="e7-1"><summary><span class="who a">🤖</span><span class="sum">201커밋 병합 시도 — 텍스트·기계적·게이트 해결, 창별 딜리버리가 벽</span></summary>
+  <div class="body md">
+`upstream/main`(201커밋 뒤)을 `main`에 병합:
+
+- 텍스트 충돌 14개 병렬 에이전트로 해결(정체성 보존), **기계적 5건** 확정 적용, **pty 게이트 재직조**(arg 15건) 완료 → 관련 테스트 15개 통과, 타입체크 0. 게이트 실패 근본원인 = 병합이 라우터 주입 누락 → 복원.
+- **확정된 유일 블로커**: `pty-project-window-stream-routing`(7건) = 멀티윈도우 PTY 스트림 전달 서브시스템(약 1,500줄)을 upstream 분할 위에 **재구현**하는 feature-scale 작업. 반쪽 이식은 단일창 전달 오염 → 전용 던전 필요.
+  </div></details>
+
+  <details class="ex" id="e7-2"><summary><span class="who u">🧑</span><span class="sum">"병합 중단·유예" 선택</span></summary>
+  <div class="body md">
+경계가 확정된 만큼 유예 결정. `git reset --hard origin/main`로 원복(`feat/sftp` 무손상), 정제된 진단을 메모리·월드맵에 기록(다음 담당자가 바로 이어받도록).
+  </div></details>
+  </section>
+
+  <!-- M8 -->
+  <section class="ms" id="m8"><h2>M8 · 보스전 (통합·빌드·설치)</h2>
+
+  <details class="ex" id="e8-1"><summary><span class="who a">🤖</span><span class="sum">통합 게이트 통과 → 서명된 Windows 설치기 빌드</span></summary>
+  <div class="body md">
+- 통합 게이트: 타입체크 클린 + SFTP/에디터 테스트 **56개 통과**.
+- `build:win` → 네이티브 모듈(node-pty·ssh2) 리빌드·서명, 패키징 검증 통과 → **`dist/orcinus-windows-setup.exe`**(약 183 MB, NSIS 원클릭·서명). 정체성 `Orcinus.exe` 확인. conpty EBUSY 없음.
+- 설치·수동 검증은 제작자 몫으로 핸드오프(SFTP 전 기능 체크리스트 제공).
+  </div></details>
+
+  <details class="ex" id="e8-2"><summary><span class="who u">🧑</span><span class="sum">"원정 3 클리어" — 판정</span></summary>
+  <div class="body md">설치본에서 SFTP 전 기능 수동 검증 후 **3단계 클리어** 선언. 세 요구 원정(리브랜딩·New Window·SFTP) 모두 완료.</div></details>
+  </section>
+
+  <!-- M9 -->
+  <section class="ms" id="m9"><h2>M9 · 결산</h2>
+
+  <details class="ex" id="e9-1"><summary><span class="who a">🤖</span><span class="sum">최종 결산 문서 4종 작성</span></summary>
+  <div class="body md">
+`guided-steps`에 따라 프로젝트 피날레 결산:
+
+1. **결과 보고서**(Markdown) — 사무적, 외부 공유 가능.
+2. **대화록**(HTML) — 이 문서.
+3. **upstream 동기화 인수인계**(Markdown) — 연기된 작업 핸드오프.
+4. **SFTP 아키텍처 심화**(Markdown) — 릴레이-프리 설계.
+  </div></details>
+  </section>
+</div>
+<footer>Orcinus · SFTP 원정 대화록 · 자동 생성</footer>
+
+<script>
+// 초경량 마크다운 렌더러: 헤딩/굵게/기울임/인라인코드/코드블록/목록/링크/문단.
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function inline(s){
+  return s
+    .replace(/`([^`]+)`/g,(m,c)=>'<code>'+esc(c)+'</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2">$1</a>');
+}
+function renderMd(src){
+  const lines=src.replace(/\r/g,'').split('\n'); let out=[],i=0;
+  while(i<lines.length){
+    let ln=lines[i];
+    if(/^```/.test(ln)){ i++; let buf=[]; while(i<lines.length&&!/^```/.test(lines[i])){buf.push(esc(lines[i]));i++;} i++; out.push('<pre><code>'+buf.join('\n')+'</code></pre>'); continue; }
+    let h=ln.match(/^(#{1,4})\s+(.*)/); if(h){ const n=h[1].length; out.push('<h'+n+'>'+inline(esc(h[2]))+'</h'+n+'>'); i++; continue; }
+    if(/^\s*[-*]\s+/.test(ln)){ let items=[]; while(i<lines.length&&/^\s*[-*]\s+/.test(lines[i])){ items.push('<li>'+inline(esc(lines[i].replace(/^\s*[-*]\s+/,'')))+'</li>'); i++; } out.push('<ul>'+items.join('')+'</ul>'); continue; }
+    if(/^\s*\d+\.\s+/.test(ln)){ let items=[]; while(i<lines.length&&/^\s*\d+\.\s+/.test(lines[i])){ items.push('<li>'+inline(esc(lines[i].replace(/^\s*\d+\.\s+/,'')))+'</li>'); i++; } out.push('<ol>'+items.join('')+'</ol>'); continue; }
+    if(/^\s*$/.test(ln)){ i++; continue; }
+    // 이미 HTML(span/strong 등)이 섞인 줄은 그대로, 아니면 inline 처리.
+    let para=[ln]; i++; while(i<lines.length&&!/^\s*$/.test(lines[i])&&!/^(#{1,4}\s|```|\s*[-*]\s|\s*\d+\.\s)/.test(lines[i])){para.push(lines[i]);i++;}
+    const joined=para.join(' ');
+    out.push('<p>'+(/[<][a-z]/.test(joined)?joined.replace(/`([^`]+)`/g,(m,c)=>'<code>'+esc(c)+'</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>'):inline(esc(joined)))+'</p>');
+  }
+  return out.join('\n');
+}
+document.querySelectorAll('.md').forEach(el=>{ el.innerHTML=renderMd(el.textContent); });
+// 해시로 지목된 아코디언 열고 스크롤.
+function openHash(){ if(location.hash){ const el=document.querySelector(location.hash); if(el){ if(el.tagName==='DETAILS') el.open=true; el.scrollIntoView({behavior:'smooth',block:'start'}); } } }
+window.addEventListener('hashchange',openHash); window.addEventListener('load',openHash);
+</script>
+</body>
+</html>
