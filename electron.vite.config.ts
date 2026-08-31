@@ -316,6 +316,10 @@ export const electronViteConfig: UserConfig = {
         input: {
           index: resolve('src/renderer/index.html'),
           popout: resolve('src/renderer/popout.html'),
+          // Why: the editor child window hosts a single editor tab in its own
+          // BrowserWindow (Expedition 5); like the popout it boots its own
+          // React root while reusing the same preload/window.api.
+          editor: resolve('src/renderer/editor.html'),
           web: resolve('src/renderer/web-index.html')
         }
       }

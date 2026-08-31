@@ -16215,7 +16215,8 @@
         },
         "EditorFileTabContextMenu": {
           "closeOthers": "Close Others",
-          "closeTabsToLeft": "Close Tabs To The Left"
+          "closeTabsToLeft": "Close Tabs To The Left",
+          "moveToNewWindow": "Open in New Window (Spike)"
         }
       }
     },
@@ -16635,5 +16636,15 @@
   },
   "quickOpen": {
     "moreMatchesAvailable": "More matches may be available. Refine your search to narrow the results."
+  },
+  "editorChild": {
+    "missingBootParams": "This window was opened without a file to edit.",
+    "workspaceNotFound": "The workspace that owns this file is not in the local catalog.",
+    "bootFailed": "The editor window could not start.",
+    "loading": "Opening the editor…",
+    "recoverableError": {
+      "title": "The editor window hit an error.",
+      "description": "The editor could not finish rendering. Retry to remount it, or reopen it from the tab menu."
+    }
   }
 }

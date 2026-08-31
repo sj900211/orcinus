@@ -2510,6 +2510,16 @@ const api = {
     }
   },
 
+  editorChildWindow: {
+    // Open (or retarget) the standalone editor child window for one file (Expedition 5 spike).
+    open: (args: {
+      filePath: string
+      relativePath: string
+      worktreeId: string
+      language: string
+    }): Promise<void> => ipcRenderer.invoke('editorChildWindow:open', args)
+  },
+
   terminalPreview: {
     connect: (
       ptyId: string,

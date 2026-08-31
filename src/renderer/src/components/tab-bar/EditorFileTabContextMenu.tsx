@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   Copy,
   CopyX,
   ExternalLink,
@@ -251,6 +252,37 @@ export function EditorFileTabContextMenu({
           <ExternalLink className="size-3.5" />
           {revealLabel}
         </DropdownMenuItem>
+        {/* Expedition-5 spike: local plain edit tabs only — SSH/runtime/SFTP owners
+            need broader store hydration, untitled tabs risk on-disk deletion, and
+            read-only/mirrored tabs have no save path in a child window. */}
+        {file.mode === 'edit' &&
+        !file.sftpTargetId &&
+        !file.runtimeEnvironmentId &&
+        !file.externalSshTargetId &&
+        !file.readOnly &&
+        !file.isUntitled &&
+        !file.mirroredFromRuntimeSession &&
+        repoConnectionId === null ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                void window.api.editorChildWindow.open({
+                  filePath: file.filePath,
+                  relativePath: file.relativePath,
+                  worktreeId: file.worktreeId,
+                  language: resolvedLanguage
+                })
+              }}
+            >
+              <AppWindow className="size-3.5" />
+              {translate(
+                'components.tab.bar.EditorFileTabContextMenu.moveToNewWindow',
+                'Open in New Window (Spike)'
+              )}
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )
