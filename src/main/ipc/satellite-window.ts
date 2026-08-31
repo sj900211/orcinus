@@ -50,9 +50,12 @@ function isFileEntryList(value: unknown): value is SatelliteFileEntry[] {
 // A renderer reload un-readies its satellite (did-start-navigation hook below)
 // so post-reload pushes queue again instead of vanishing into a loading page.
 const pendingOpenFilesBySatelliteId = new Map<string, SatelliteBootFile[]>()
+// Last dirty-file count each satellite reported; gates the native-close intercept.
+const dirtyOpenFileCountBySatelliteId = new Map<string, number>()
 const readySatelliteIds = new Set<string>()
 
 function clearSatelliteIpcState(satelliteId: string): void {
+  dirtyOpenFileCountBySatelliteId.delete(satelliteId)
   pendingOpenFilesBySatelliteId.delete(satelliteId)
   readySatelliteIds.delete(satelliteId)
 }
@@ -116,10 +119,12 @@ export function registerSatelliteWindowHandlers(): void {
   ipcMain.removeHandler('satelliteWindow:ready')
   ipcMain.removeAllListeners('satelliteWindow:reportOpenFiles')
   ipcMain.removeAllListeners('satelliteWindow:activeWorktreeChanged')
+  ipcMain.removeAllListeners('satelliteWindow:confirmClose')
   unsubscribeRegistryBroadcast?.()
   unsubscribeRegistryBroadcast = onSatelliteRegistryChanged(broadcastMirror)
   pendingOpenFilesBySatelliteId.clear()
   readySatelliteIds.clear()
+  dirtyOpenFileCountBySatelliteId.clear()
 
   ipcMain.handle(
     'satelliteWindow:open',
@@ -151,9 +156,27 @@ export function registerSatelliteWindowHandlers(): void {
         (_event, _url, _isInPlace, isMainFrame): void => {
           if (isMainFrame) {
             readySatelliteIds.delete(satelliteId)
+            // A reload resets the renderer store - stale dirtiness must not
+            // intercept a close against a booting renderer with no listener.
+            dirtyOpenFileCountBySatelliteId.delete(satelliteId)
           }
         }
       )
+      // Post-review fix: intercept the native close ONLY while the renderer
+      // reports dirty files - it drains them through its save dialog, then
+      // confirms. Boot/crashed states pass through untouched, and View->Reload
+      // (no 'close' event) never reaches this path, so a vetoed reload can no
+      // longer be converted into a window close.
+      window.on('close', (closeEvent) => {
+        if (window.webContents.isDestroyed() || window.webContents.isCrashed()) {
+          return
+        }
+        if ((dirtyOpenFileCountBySatelliteId.get(satelliteId) ?? 0) === 0) {
+          return
+        }
+        closeEvent.preventDefault()
+        window.webContents.send('satelliteWindow:closeRequested')
+      })
       window.on('closed', () => clearSatelliteIpcState(satelliteId))
       return { satelliteId }
     }
@@ -204,16 +227,47 @@ export function registerSatelliteWindowHandlers(): void {
     }
   })
 
-  ipcMain.on('satelliteWindow:reportOpenFiles', (event, files: unknown): void => {
+  ipcMain.on(
+    'satelliteWindow:reportOpenFiles',
+    (event, files: unknown, openSurfaceCount: unknown, dirtyOpenFileCount: unknown): void => {
+      const record = getSatelliteByWebContents(event.sender)
+      if (!record || !isFileEntryList(files)) {
+        return
+      }
+      setSatelliteFiles(record.satelliteId, files)
+      dirtyOpenFileCountBySatelliteId.set(
+        record.satelliteId,
+        typeof dirtyOpenFileCount === 'number' &&
+          Number.isInteger(dirtyOpenFileCount) &&
+          dirtyOpenFileCount >= 0
+          ? dirtyOpenFileCount
+          : 0
+      )
+      // Why a separate count: the mirror carries edit-mode files only, but a
+      // satellite showing a non-edit surface (markdown preview) is not empty.
+      const surfaces =
+        typeof openSurfaceCount === 'number' &&
+        Number.isInteger(openSurfaceCount) &&
+        openSurfaceCount >= 0
+          ? openSurfaceCount
+          : files.length
+      // Owner decision D1: a satellite whose last open surface closed has no function — close it.
+      if (surfaces === 0 && !record.window.isDestroyed()) {
+        record.window.close()
+      }
+    }
+  )
+
+  // The renderer finished draining its dirty files for an intercepted close.
+  ipcMain.on('satelliteWindow:confirmClose', (event): void => {
     const record = getSatelliteByWebContents(event.sender)
-    if (!record || !isFileEntryList(files)) {
+    if (!record || record.window.isDestroyed()) {
       return
     }
-    setSatelliteFiles(record.satelliteId, files)
-    // Owner decision D1: a satellite whose last tab closed has no function — close it.
-    if (files.length === 0 && !record.window.isDestroyed()) {
-      record.window.close()
-    }
+    // Why destroy(): it skips the 'close' intercept and beforeunload - the
+    // renderer just drained, nothing is left to guard - while 'closed' still
+    // fires so registry/IPC cleanup stays intact.
+    record.window.destroy()
   })
 
   // Spec 5: the parent reports its active worktree; subordinate satellites

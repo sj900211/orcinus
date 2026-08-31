@@ -16645,6 +16645,16 @@
     "recoverableError": {
       "title": "The editor window hit an error.",
       "description": "The editor could not finish rendering. Retry to remount it, or reopen it from the tab menu."
-    }
+    },
+    "unsavedChanges": {
+      "title": "Unsaved Changes",
+      "named": "\"{{value0}}\" has unsaved changes. Do you want to save before closing?",
+      "unnamed": "This file has unsaved changes.",
+      "cancel": "Cancel",
+      "discard": "Don't Save",
+      "save": "Save",
+      "saveFailed": "Save timed out or failed. Fix errors before closing."
+    },
+    "noTabs": "No files open in this window."
   }
 }

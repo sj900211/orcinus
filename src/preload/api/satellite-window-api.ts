@@ -14,7 +14,13 @@ export type SatelliteWindowApi = {
   /** Satellite renderer only: boot finished — main flushes queued moveFile pushes. */
   notifyReady: () => Promise<void>
   /** Satellite renderer only: report the current open-file set after every change. */
-  reportOpenFiles: (files: SatelliteFileEntry[]) => void
+  reportOpenFiles: (
+    files: SatelliteFileEntry[],
+    openSurfaceCount: number,
+    dirtyOpenFileCount: number
+  ) => void
+  onCloseRequested: (callback: () => void) => () => void
+  confirmClose: () => void
   /** App windows: report the active worktree so subordinate satellites hide/show. */
   notifyActiveWorktreeChanged: (worktreeId: string) => void
   /** App windows: per-recipient mirror of THIS window's satellites. */

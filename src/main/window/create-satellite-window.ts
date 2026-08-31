@@ -5,6 +5,10 @@ import { is } from '@electron-toolkit/utils'
 import { installPrivilegedWindowNavigationPolicy } from './privileged-window-navigation'
 import { addTrustedUIRendererWebContentsId, removeTrustedUIRendererWebContentsId } from '../ipc/ui'
 import {
+  addTrustedClipboardTextWebContentsId,
+  removeTrustedClipboardTextWebContentsId
+} from './clipboard-ipc-handlers'
+import {
   registerSatellite,
   shouldRevealSatelliteOnReady,
   unregisterSatellite
@@ -94,6 +98,9 @@ export function createSatelliteWindow(
   // windows. Captured now: reading webContents.id inside 'closed' throws.
   const trustedWebContentsId = window.webContents.id
   addTrustedUIRendererWebContentsId(trustedWebContentsId)
+  // Why (post-review fix): Copy Path / paste-read route through the clipboard
+  // TEXT trust, which is pinned to the main window - join the text-only set.
+  addTrustedClipboardTextWebContentsId(trustedWebContentsId)
 
   registerSatellite({
     satelliteId,
@@ -119,6 +126,7 @@ export function createSatelliteWindow(
 
   window.on('closed', () => {
     removeTrustedUIRendererWebContentsId(trustedWebContentsId)
+    removeTrustedClipboardTextWebContentsId(trustedWebContentsId)
     unregisterSatellite(satelliteId, window)
   })
 

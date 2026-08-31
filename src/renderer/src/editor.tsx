@@ -1,12 +1,14 @@
 import './assets/main.css'
 
-import { lazy, StrictMode, Suspense, useEffect, useState } from 'react'
+import { StrictMode, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RecoverableRenderErrorBoundary } from './components/error-boundaries/RecoverableRenderErrorBoundary'
 import EditorAutosaveController from './components/editor/EditorAutosaveController'
 import { Toaster } from './components/ui/sonner'
 import { TooltipProvider } from './components/ui/tooltip'
 import { useEditorExternalWatch } from './hooks/useEditorExternalWatch'
+import { useAppMenuPaste } from './hooks/useAppMenuPaste'
+import { useAppMenuSelectionActions } from './hooks/useAppMenuSelectionActions'
 import {
   installRendererCrashDiagnostics,
   recordRendererCrashBreadcrumb
@@ -20,8 +22,10 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
 import { getOrCreateRendererRoot } from './lib/react-renderer-root'
-
-const EditorPanel = lazy(() => import('./components/editor/EditorPanel'))
+import { setRendererWindowSurface } from './lib/renderer-window-surface'
+import { EditorChildShell } from './components/editor-child/EditorChildShell'
+import { EditorChildCloseCoordinator } from './components/editor-child/EditorChildCloseCoordinator'
+import RecentTabSwitcher from './components/tab-bar/RecentTabSwitcher'
 
 // Editor child window entry (Expedition 5 spike): a separate BrowserWindow with
 // its own React root and its own store instance that hosts ONE editor tab.
@@ -32,6 +36,9 @@ const EditorPanel = lazy(() => import('./components/editor/EditorPanel'))
 // (useEditorPanelFileContentLoader / getEditorFileOperationContext).
 recordRendererCrashBreadcrumb('editor_child_bootstrap_started', { dev: import.meta.env.DEV })
 installRendererCrashDiagnostics('editor-child')
+// Why before any render: reused workbench components (tab context menus) read
+// this flag to hide affordances a satellite cannot honor (split layout, D11).
+setRendererWindowSurface('satellite')
 
 type EditorChildBootParams = {
   satelliteId: string
@@ -132,6 +139,17 @@ function EditorChildExternalWatch(): null {
   return null
 }
 
+// Why: the global app menu registers REAL accelerators (CmdOrCtrl+V everywhere;
+// Cmd+C/Cmd+A on macOS) whose clicks send IPC to the focused window instead of
+// letting the chord reach the DOM. Without a subscriber those chords are dead
+// in this window — the main window mounts these via useAppShellServices, and
+// the dashboard popout ships its own bridge for the same reason.
+function EditorChildAppMenuClipboardBridge(): null {
+  useAppMenuPaste()
+  useAppMenuSelectionActions()
+  return null
+}
+
 type BootPhase =
   | { phase: 'loading' }
   | { phase: 'ready'; fileId: string; worktreeId: string }
@@ -196,6 +214,12 @@ function useEditorChildBoot(): BootPhase {
           },
           { focusEditor: true }
         )
+        // Why direct setState (not the setActiveWorktree action): the tab-cycle
+        // helpers and close commands only need activeWorktreeId, and the full
+        // action drags main-workbench side effects into this slim shell —
+        // unread-clear persistence, terminal tab reconciliation, webview focus
+        // moves — against a store that has none of those surfaces.
+        useAppStore.setState({ activeWorktreeId: boot.worktreeId })
         if (!disposed) {
           setState({ phase: 'ready', fileId, worktreeId: boot.worktreeId })
         }
@@ -227,14 +251,20 @@ function SatelliteWindowSync({ worktreeId }: { worktreeId: string }): null {
   useEffect(() => {
     void window.api.satelliteWindow.notifyReady()
     const reportFiles = (): void => {
+      const openFiles = useAppStore.getState().openFiles
       // Why edit-mode only: transient surfaces (markdown preview, diffs) must
       // not enter the mirror — dungeon-5 interception treats mirror entries as
-      // "this file LIVES here", which only edit tabs satisfy.
+      // "this file LIVES here", which only edit tabs satisfy. The separate
+      // all-modes count keeps D1 from closing a window that still shows a
+      // non-edit surface.
       window.api.satelliteWindow.reportOpenFiles(
-        useAppStore
-          .getState()
-          .openFiles.filter((file) => file.mode === 'edit')
-          .map((file) => ({ fileId: file.id, filePath: file.filePath }))
+        openFiles
+          .filter((file) => file.mode === 'edit')
+          .map((file) => ({ fileId: file.id, filePath: file.filePath })),
+        openFiles.length,
+        // Why: main intercepts the native close only while dirty files exist,
+        // so unsaved edits drain through the save dialog instead of vanishing.
+        openFiles.filter((file) => file.isDirty).length
       )
     }
     reportFiles()
@@ -272,22 +302,21 @@ function EditorChildRoot(): React.JSX.Element {
     return <EditorChildStatus message={translate('editorChild.loading', 'Opening the editor…')} />
   }
   return (
-    // Why this exact wrapper: EditorPanel sizes itself against the split-pane
+    // Why this exact wrapper: the shell's editor body relies on the split-pane
     // host contract (TabGroupPanel) — an absolutely-positioned flex pane inside
-    // a sized ancestor. A plain block wrapper collapses it to ~2px.
+    // a sized ancestor. A plain block wrapper collapses the editor to ~2px.
     <div className="relative h-screen w-screen overflow-hidden">
       <SatelliteWindowSync worktreeId={boot.worktreeId} />
+      <EditorChildCloseCoordinator />
+      {/* Why here (not the main-window overlay stack): Ctrl+Tab MRU switching
+          reads this window's own store; its guards (activeView 'terminal',
+          activeWorktreeId) hold because boot seeds both defaults. */}
+      <RecentTabSwitcher />
       <div className="absolute inset-0 flex min-h-0 min-w-0">
-        <Suspense
-          fallback={
-            <EditorChildStatus message={translate('editorChild.loading', 'Opening the editor…')} />
-          }
-        >
-          {/* Why no activeFileId pin: the prop would override the store forever,
-            making every later file (moveFile push) invisible — boot's openFile
-            already set the store's activeFileId, and the panel must follow it. */}
-          <EditorPanel isVisible isCmdSaveOwner />
-        </Suspense>
+        {/* Dungeon 4: the multi-tab shell replaces the single pinned panel —
+            tabs render from this window's own unified tab group, so moveFile
+            pushes and in-window opens all surface as real tabs. */}
+        <EditorChildShell worktreeId={boot.worktreeId} />
       </div>
     </div>
   )
@@ -317,6 +346,7 @@ getOrCreateRendererRoot(rootElement, import.meta.hot?.data).render(
       <EditorChildSettingsSync />
       <EditorAutosaveController />
       <EditorChildExternalWatch />
+      <EditorChildAppMenuClipboardBridge />
       {/* Why window-wide (mirrors App.tsx): Radix Tooltip.Root throws without a
           provider, and the editor tree has bare consumers — the markdown
           header's ArtifactPublishButton crashed the whole child without this. */}

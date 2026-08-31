@@ -2525,8 +2525,25 @@ const api = {
     raise: (satelliteId: string): Promise<void> =>
       ipcRenderer.invoke('satelliteWindow:raise', satelliteId),
     notifyReady: (): Promise<void> => ipcRenderer.invoke('satelliteWindow:ready'),
-    reportOpenFiles: (files: { fileId: string; filePath: string }[]): void =>
-      ipcRenderer.send('satelliteWindow:reportOpenFiles', files),
+    reportOpenFiles: (
+      files: { fileId: string; filePath: string }[],
+      openSurfaceCount: number,
+      dirtyOpenFileCount: number
+    ): void =>
+      ipcRenderer.send(
+        'satelliteWindow:reportOpenFiles',
+        files,
+        openSurfaceCount,
+        dirtyOpenFileCount
+      ),
+    onCloseRequested: (callback: () => void): (() => void) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('satelliteWindow:closeRequested', listener)
+      return () => {
+        ipcRenderer.removeListener('satelliteWindow:closeRequested', listener)
+      }
+    },
+    confirmClose: (): void => ipcRenderer.send('satelliteWindow:confirmClose'),
     notifyActiveWorktreeChanged: (worktreeId: string): void =>
       ipcRenderer.send('satelliteWindow:activeWorktreeChanged', worktreeId),
     onMirrorChanged: (

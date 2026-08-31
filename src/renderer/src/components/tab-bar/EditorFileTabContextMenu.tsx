@@ -25,6 +25,7 @@ import { showLocalPathOpenBlockedToast } from '@/lib/local-path-open-guard'
 import { useOptionalShortcutLabel } from '@/hooks/useShortcutLabel'
 import type { OpenFile } from '../../store/slices/editor'
 import { shouldBlockEditorTabLocalOpen } from './editor-tab-local-open-guard'
+import { getRendererWindowSurface } from '@/lib/renderer-window-surface'
 import { translate } from '@/i18n/i18n'
 import { TabWorkspaceLayoutMenuSection } from './TabWorkspaceLayoutMenuSection'
 import { TAB_CONTEXT_MENU_CONTENT_CLASS } from './tab-context-menu-sizing'
@@ -129,11 +130,15 @@ export function EditorFileTabContextMenu({
           event.preventDefault()
         }}
       >
-        <TabWorkspaceLayoutMenuSection
-          unifiedTabId={unifiedTabId}
-          groupId={groupId}
-          trailingSeparator
-        />
+        {/* Why hidden in satellites (D11): "Move Tab to Split" would create a
+            split group the satellite shell does not render. */}
+        {getRendererWindowSurface() !== 'satellite' ? (
+          <TabWorkspaceLayoutMenuSection
+            unifiedTabId={unifiedTabId}
+            groupId={groupId}
+            trailingSeparator
+          />
+        ) : null}
         <DropdownMenuItem
           disabled={!canRename || isRenaming}
           onSelect={() => {
@@ -254,8 +259,11 @@ export function EditorFileTabContextMenu({
         </DropdownMenuItem>
         {/* Expedition-5 spike: local plain edit tabs only — SSH/runtime/SFTP owners
             need broader store hydration, untitled tabs risk on-disk deletion, and
-            read-only/mirrored tabs have no save path in a child window. */}
-        {file.mode === 'edit' &&
+            read-only/mirrored tabs have no save path in a child window. Hidden in
+            satellites: main rejects satellite-of-satellite opens, so the item
+            would silently no-op there. */}
+        {getRendererWindowSurface() !== 'satellite' &&
+        file.mode === 'edit' &&
         !file.sftpTargetId &&
         !file.runtimeEnvironmentId &&
         !file.externalSshTargetId &&

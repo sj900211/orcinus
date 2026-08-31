@@ -93,6 +93,7 @@ type TestRecord = {
   window: {
     isDestroyed: () => boolean
     close: ReturnType<typeof vi.fn>
+    destroy: ReturnType<typeof vi.fn>
     webContents: { isDestroyed: () => boolean; send: ReturnType<typeof vi.fn> }
   }
 }
@@ -108,6 +109,7 @@ function makeRecord(satelliteId: string, worktreeId = 'repo::wt-1'): TestRecord 
     window: {
       isDestroyed: () => false,
       close: vi.fn(),
+      destroy: vi.fn(),
       webContents: { isDestroyed: () => false, send: vi.fn() }
     }
   }
@@ -115,9 +117,17 @@ function makeRecord(satelliteId: string, worktreeId = 'repo::wt-1'): TestRecord 
 
 function makeCreatedWindow(): {
   on: ReturnType<typeof vi.fn>
-  webContents: { on: ReturnType<typeof vi.fn> }
+  webContents: {
+    on: ReturnType<typeof vi.fn>
+    send: ReturnType<typeof vi.fn>
+    isDestroyed: () => boolean
+    isCrashed: () => boolean
+  }
 } {
-  return { on: vi.fn(), webContents: { on: vi.fn() } }
+  return {
+    on: vi.fn(),
+    webContents: { on: vi.fn(), send: vi.fn(), isDestroyed: () => false, isCrashed: () => false }
+  }
 }
 
 const bootFile = { filePath: 'C:\\repo\\a.ts', relativePath: 'a.ts', language: 'typescript' }
@@ -259,9 +269,26 @@ describe('satelliteWindow:reportOpenFiles', () => {
     getSatelliteByWebContentsMock.mockReturnValue(record)
 
     const files = [{ fileId: 'f1', filePath: 'C:\\repo\\a.ts' }]
-    emit('satelliteWindow:reportOpenFiles', { sender: record.window.webContents }, files)
+    emit('satelliteWindow:reportOpenFiles', { sender: record.window.webContents }, files, 1)
     expect(setSatelliteFilesMock).toHaveBeenCalledWith('sat-1', files)
     expect(record.window.close).not.toHaveBeenCalled()
+
+    emit('satelliteWindow:reportOpenFiles', { sender: record.window.webContents }, [], 0)
+    expect(record.window.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a satellite alive while a non-edit surface remains (empty mirror, surfaces > 0)', () => {
+    const record = makeRecord('sat-1')
+    getSatelliteByWebContentsMock.mockReturnValue(record)
+
+    emit('satelliteWindow:reportOpenFiles', { sender: record.window.webContents }, [], 1)
+    expect(setSatelliteFilesMock).toHaveBeenCalledWith('sat-1', [])
+    expect(record.window.close).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the mirror length when the count is missing or malformed', () => {
+    const record = makeRecord('sat-1')
+    getSatelliteByWebContentsMock.mockReturnValue(record)
 
     emit('satelliteWindow:reportOpenFiles', { sender: record.window.webContents }, [])
     expect(record.window.close).toHaveBeenCalledTimes(1)
@@ -276,6 +303,82 @@ describe('satelliteWindow:reportOpenFiles', () => {
     getSatelliteByWebContentsMock.mockReturnValue(record)
     emit('satelliteWindow:reportOpenFiles', { sender: record.window.webContents }, [{ bad: true }])
     expect(setSatelliteFilesMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('native close intercept (dirty drain)', () => {
+  function openSatellite(): {
+    created: ReturnType<typeof makeCreatedWindow>
+    closeListener: (event: { preventDefault: ReturnType<typeof vi.fn> }) => void
+  } {
+    fromWebContentsMock.mockReturnValue({ id: 'parent-window' })
+    const created = makeCreatedWindow()
+    createSatelliteWindowMock.mockReturnValue({ satelliteId: 'sat-1', window: created })
+    void handlers.get('satelliteWindow:open')!({ sender: parentSender }, 'repo::wt-1', bootFile)
+    const closeListener = created.on.mock.calls.find(
+      (call) => call[0] === 'close'
+    )?.[1] as (event: { preventDefault: ReturnType<typeof vi.fn> }) => void
+    return { created, closeListener }
+  }
+
+  it('intercepts the close only while the renderer reports dirty files', () => {
+    const { created, closeListener } = openSatellite()
+    const record = makeRecord('sat-1')
+    getSatelliteByWebContentsMock.mockReturnValue(record)
+
+    // No dirty report yet (boot phase) - close passes through untouched.
+    const bootEvent = { preventDefault: vi.fn() }
+    closeListener(bootEvent)
+    expect(bootEvent.preventDefault).not.toHaveBeenCalled()
+
+    const files = [{ fileId: 'f1', filePath: 'C:\\repo\\a.ts' }]
+    emit('satelliteWindow:reportOpenFiles', { sender: record.window.webContents }, files, 1, 1)
+    const vetoEvent = { preventDefault: vi.fn() }
+    closeListener(vetoEvent)
+    expect(vetoEvent.preventDefault).toHaveBeenCalledTimes(1)
+    expect(created.webContents.send).toHaveBeenCalledWith('satelliteWindow:closeRequested')
+
+    // Dirtiness settled - the next close passes again.
+    emit('satelliteWindow:reportOpenFiles', { sender: record.window.webContents }, files, 1, 0)
+    const cleanEvent = { preventDefault: vi.fn() }
+    closeListener(cleanEvent)
+    expect(cleanEvent.preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('never intercepts a crashed renderer (window must stay closable)', () => {
+    const { created, closeListener } = openSatellite()
+    const record = makeRecord('sat-1')
+    getSatelliteByWebContentsMock.mockReturnValue(record)
+    emit('satelliteWindow:reportOpenFiles', { sender: record.window.webContents }, [], 1, 3)
+
+    created.webContents.isCrashed = () => true
+    const event = { preventDefault: vi.fn() }
+    closeListener(event)
+    expect(event.preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('a renderer reload resets the dirty gate (stale dirtiness must not wedge the close)', () => {
+    const { created, closeListener } = openSatellite()
+    const record = makeRecord('sat-1')
+    getSatelliteByWebContentsMock.mockReturnValue(record)
+    emit('satelliteWindow:reportOpenFiles', { sender: record.window.webContents }, [], 1, 2)
+
+    const navListener = created.webContents.on.mock.calls.find(
+      (call) => call[0] === 'did-start-navigation'
+    )?.[1] as (event: unknown, url: string, isInPlace: boolean, isMainFrame: boolean) => void
+    navListener({}, 'app://reload', false, true)
+
+    const event = { preventDefault: vi.fn() }
+    closeListener(event)
+    expect(event.preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('confirmClose destroys the drained satellite', () => {
+    const record = makeRecord('sat-1')
+    getSatelliteByWebContentsMock.mockReturnValue(record)
+
+    emit('satelliteWindow:confirmClose', { sender: record.window.webContents })
+    expect(record.window.destroy).toHaveBeenCalledTimes(1)
   })
 })
 
