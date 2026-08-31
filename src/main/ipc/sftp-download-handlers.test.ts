@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import type * as NodeFsPromises from 'node:fs/promises'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
@@ -13,9 +14,11 @@ const {
 } = vi.hoisted(() => ({
   handleMock: vi.fn(),
   realpathMock: vi.fn(async (path: string) => path),
-  statMock: vi.fn(async (_path: string): Promise<{ isDirectory: () => boolean }> => ({
-    isDirectory: () => true
-  })),
+  statMock: vi.fn(
+    async (_path: string): Promise<{ isDirectory: () => boolean }> => ({
+      isDirectory: () => true
+    })
+  ),
   lstatRawMock: vi.fn(async (_sftp: unknown, _path: string): Promise<unknown> => ({})),
   classifyMock: vi.fn((_attrs: unknown): 'file' | 'directory' | 'skip' => 'file'),
   // Default: no collision, so the sanitized name is used as-is.
@@ -29,7 +32,7 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('node:fs/promises', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  ...(await importOriginal<typeof NodeFsPromises>()),
   realpath: realpathMock,
   stat: statMock
 }))
@@ -156,7 +159,11 @@ describe('sftp:downloadToDir', () => {
     )
     await getHandler('sftp:downloadToDir')(
       { sender: createSender() },
-      { targetId: 'target-1', remotePaths: ['/remote/link', '/remote/a.txt'], localDir: '/local/dest' }
+      {
+        targetId: 'target-1',
+        remotePaths: ['/remote/link', '/remote/a.txt'],
+        localDir: '/local/dest'
+      }
     )
     await new Promise((r) => setImmediate(r))
 

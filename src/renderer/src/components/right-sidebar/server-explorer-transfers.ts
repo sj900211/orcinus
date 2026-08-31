@@ -156,7 +156,7 @@ export async function uploadFilesToServerDir(
     toast.error(plan.error)
     return
   }
-  const uploads: Array<{ localPath: string; remoteName: string; overwrite: boolean }> = []
+  const uploads: { localPath: string; remoteName: string; overwrite: boolean }[] = []
   for (const item of plan.items) {
     if (!item.conflict) {
       uploads.push({ localPath: item.localPath, remoteName: item.name, overwrite: false })

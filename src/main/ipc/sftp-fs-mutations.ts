@@ -48,11 +48,7 @@ async function replaceViaBackup(
     await renameSftp(sftp, backup, dest).catch(() => {})
     throw error
   }
-  if (destIsDirectory) {
-    await removeDirectorySftp(sftp, backup)
-  } else {
-    await unlinkSftp(sftp, backup)
-  }
+  await (destIsDirectory ? removeDirectorySftp(sftp, backup) : unlinkSftp(sftp, backup))
 }
 
 export function registerSftpFsMutationHandlers(getSftpConnection: GetSftpConnection): void {
@@ -86,11 +82,9 @@ export function registerSftpFsMutationHandlers(getSftpConnection: GetSftpConnect
           if (existing && !overwrite) {
             return { conflict: true }
           }
-          if (existing) {
-            await replaceViaBackup(sftp, sourcePath, destPath, existing.isDirectory)
-          } else {
-            await renameSftp(sftp, sourcePath, destPath)
-          }
+          await (existing
+            ? replaceViaBackup(sftp, sourcePath, destPath, existing.isDirectory)
+            : renameSftp(sftp, sourcePath, destPath))
           return { ok: true }
         })
       } catch (error) {

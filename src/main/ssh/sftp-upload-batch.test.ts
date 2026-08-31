@@ -132,7 +132,7 @@ describe('uploadFilesInto', () => {
       const opts = args[3] as { onProgress?: (b: number) => void }
       opts.onProgress?.(10)
     })
-    const seen: Array<{ bytes: number; total: number }> = []
+    const seen: { bytes: number; total: number }[] = []
     await uploadFilesInto(
       {} as never,
       [

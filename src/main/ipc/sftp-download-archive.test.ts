@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events'
+import type * as NodeFs from 'node:fs'
+import type * as NodeFsPromises from 'node:fs/promises'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
@@ -24,11 +26,11 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('node:fs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:fs')>()),
+  ...(await importOriginal<typeof NodeFs>()),
   createWriteStream: createWriteStreamMock
 }))
 vi.mock('node:fs/promises', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  ...(await importOriginal<typeof NodeFsPromises>()),
   rename: renameMock,
   unlink: unlinkMock
 }))

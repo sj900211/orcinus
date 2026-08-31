@@ -4930,7 +4930,7 @@ const api = {
       targetId: string
       remoteDir: string
     }): Promise<
-      | { items: Array<{ name: string; localPath: string; conflict: boolean }> }
+      | { items: { name: string; localPath: string; conflict: boolean }[] }
       | { canceled: true }
       | SftpError
     > => ipcRenderer.invoke('sftp:planUpload', args),
@@ -4938,7 +4938,7 @@ const api = {
     performUpload: (args: {
       targetId: string
       remoteDir: string
-      uploads: Array<{ localPath: string; remoteName: string; overwrite: boolean }>
+      uploads: { localPath: string; remoteName: string; overwrite: boolean }[]
     }): Promise<{ transferId: string } | SftpError> =>
       ipcRenderer.invoke('sftp:performUpload', args),
 
@@ -4946,8 +4946,7 @@ const api = {
       targetId: string
       remoteDir: string
       paths: string[]
-    }): Promise<{ transferId: string } | SftpError> =>
-      ipcRenderer.invoke('sftp:uploadPaths', args),
+    }): Promise<{ transferId: string } | SftpError> => ipcRenderer.invoke('sftp:uploadPaths', args),
 
     downloadToDir: (args: {
       targetId: string

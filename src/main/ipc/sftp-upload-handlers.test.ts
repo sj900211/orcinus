@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import type * as NodeFsPromises from 'node:fs/promises'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
@@ -36,7 +37,7 @@ vi.mock('../ssh/sftp-upload-batch', () => ({
 }))
 
 vi.mock('node:fs/promises', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  ...(await importOriginal<typeof NodeFsPromises>()),
   lstat: lstatMock
 }))
 
