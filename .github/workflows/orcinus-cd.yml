@@ -1,0 +1,329 @@
+# Orcinus (fork) release pipeline — assembled from release-cut.yml's named
+# steps with everything the fork cannot use cut out: SignPath signing, Apple
+# notarization, Slack, PostHog/telemetry gates, homebrew, dev channels, and the
+# macOS leg (no Apple Developer ID -> unsigned mac cannot auto-update; add the
+# leg back with the 5 Apple secrets when one exists).
+#
+# Flow: push tag vX.Y.Z (version already committed to package.json by hand)
+# -> draft release -> build win + linux-x64 (--publish always uploads
+# installers + updater manifests) -> verify assets (fork gate) -> un-draft.
+# The draft->verify->publish shape is upstream's all-or-nothing guarantee:
+# users never see a release missing its updater manifest. Each build leg
+# re-confirms the release is still an unpublished draft right before it
+# uploads, so a re-run of an already-shipped tag fails fast instead of
+# mutating the live release users' updaters are reading.
+#
+# Why no ORCA_BUILD_IDENTITY / ORCA_POSTHOG_WRITE_KEY / ORCA_DIAGNOSTICS_TOKEN_URL:
+# unset identity keeps telemetry silent (upstream's own dev-channel stance for
+# unofficial builds) — a personal fork must not report into upstream's PostHog
+# or pin crash uploads to upstream's diagnostics endpoint.
+name: Orcinus CD
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+# Why queue (not cancel): killing a release run mid-upload can strand a draft
+# in a half-written state; a re-pushed tag waits for the prior run to settle.
+concurrency:
+  group: orcinus-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  create-release:
+    # Why the gate: mirrors upstream's repository guard so a fork of this fork
+    # never fires the pipeline.
+    if: github.repository == 'sj900211/orcinus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      # Why: this pipeline deliberately skips release-cut's version-bumping cut
+      # job (its main fast-forward push would multiply upstream-merge
+      # conflicts). The contract is "commit the version, then tag" — enforce it
+      # before spending build minutes.
+      # Why the tag grammar too: prerelease detection downstream is "-rc." —
+      # a hand-pushed v1.2.3-beta.1 would otherwise un-draft as the stable
+      # "latest" release and be force-fed to every installed app. Same
+      # stable|rc shapes release-cut's tag-classify accepts.
+      - name: Verify tag shape and package.json version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+(\.[0-9A-Za-z]+)?)?$ ]]; then
+            echo "::error::Tag $TAG is neither stable (vX.Y.Z) nor rc (vX.Y.Z-rc.N); refusing to release it."
+            exit 1
+          fi
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::package.json version is $version but the tag is $TAG — commit the version bump before tagging."
+            exit 1
+          fi
+
+      - name: Create draft release with bounded generated notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
+            exit 0
+          fi
+
+          node config/scripts/create-draft-release.mjs "$TAG"
+
+  build:
+    needs: create-release
+    if: github.repository == 'sj900211/orcinus'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Why windows-2022: windows-latest moved to the Windows 2025 / VS 2026
+          # image before node-gyp could detect VS 18, breaking native installs
+          # (upstream's pin, kept).
+          - os: windows-2022
+            platform: win
+            release_command: 'node config/scripts/ensure-native-runtime.mjs --runtime=electron; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; pnpm exec electron-builder --config config/electron-builder.config.cjs --win --publish always'
+            eb_cache_path: |
+              ~\AppData\Local\electron\Cache
+              ~\AppData\Local\electron-builder\Cache
+          # Why AppImage deb (no rpm): the fork release matrix is Windows +
+          # Linux x64; rpm would add an fpm dependency for a target nobody
+          # installs. Matches config linux.target.
+          - os: ubuntu-latest
+            platform: linux-x64
+            release_command: node config/scripts/ensure-native-runtime.mjs --runtime=electron && pnpm exec electron-builder --config config/electron-builder.config.cjs --linux AppImage deb --x64 --publish always
+            unpacked_dir: dist/linux-unpacked
+            eb_cache_path: |
+              ~/.cache/electron
+              ~/.cache/electron-builder
+
+    runs-on: ${{ matrix.os }}
+    # Why 120: pack + upload with no SignPath approval waits fits in well under
+    # 90 on the happy path, but the retry budgets (install ~30m worst case +
+    # publish ~90m worst case) can exceed it — give retries room to finish.
+    timeout-minutes: 120
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # pnpm must be on PATH before setup-node so setup-node can locate the store for caching.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      # Why: release builds hit the same native-module postinstall path as PR
+      # CI; pnpm's bundled gyp_main.py is not executable on fresh Linux runners.
+      - name: Use external node-gyp to avoid pnpm's bundled copy (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          npm install -g node-gyp@11.5.0
+          echo "npm_config_node_gyp=$(npm root -g)/node-gyp/bin/node-gyp.js" >> "$GITHUB_ENV"
+
+      # Cache the Electron binary + electron-builder tool downloads
+      # (winCodeSign, nsis, AppImage). Saves ~30-90s per job.
+      - name: Cache electron-builder downloads
+        uses: actions/cache@v5
+        with:
+          path: ${{ matrix.eb_cache_path }}
+          key: electron-builder-${{ matrix.platform }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            electron-builder-${{ matrix.platform }}-
+
+      # Why retried: pnpm install triggers electron's postinstall, which pulls
+      # the Electron binary from GitHub's CDN, and that returns transient 504s
+      # often enough to lose a build to it.
+      - name: Install dependencies
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: pnpm install --frozen-lockfile
+
+      # Why: `pnpm build:release` verifies the Linux computer-use provider by
+      # importing AT-SPI bindings, which are not on stock Ubuntu runners.
+      - name: Install Linux computer-use provider dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-atspi-2.0 at-spi2-core xclip xdotool
+
+      - name: Build app
+        run: pnpm build:release
+        env:
+          # Why: Vite's web build crossed Node's default old-space ceiling on
+          # release runners before (upstream's fix, kept).
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      # Why: #8212 is a native-process crash contract. Prove both the Node host
+      # and the exact Electron runtime survive SIGSEGV before packaging.
+      - name: Gate runtime file-watcher process isolation
+        if: runner.os == 'Linux'
+        run: |
+          node config/scripts/runtime-file-watcher-fault-harness.mjs
+          ELECTRON_RUN_AS_NODE=1 pnpm exec electron config/scripts/runtime-file-watcher-fault-harness.mjs
+
+      # Why: the remote native watcher shares a daemon with live PTYs. Kill
+      # only its child and require both PTY and watch recovery before packaging.
+      - name: Gate SSH relay watcher process isolation
+        run: node config/scripts/relay-watcher-fault-harness.mjs
+
+      # Why (adapted from dev-channel-win-build's release-still-exists guard):
+      # `--publish always` mints a fresh NON-draft release when it can't find
+      # the tag's release, and re-runs of an already-published tag would upload
+      # into the live release. Requiring "exists AND still draft" right before
+      # the upload makes both paths fail fast instead. Deliberately NOT setting
+      # EP_GH_IGNORE_TIME: electron-publish's refusal to touch a release
+      # published >2h ago only ever fires in exactly the state we want to fail
+      # on (drafts are exempt), so the escape hatch would invert this guard.
+      - name: Confirm the release still exists and is draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          draft="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$TAG\") | .draft" | head -1)"
+          if [[ -z "$draft" ]]; then
+            echo "::error::No release exists for $TAG (draft was deleted mid-build?); refusing to publish — electron-builder would mint a fresh visible release."
+            exit 1
+          fi
+          if [[ "$draft" != "true" ]]; then
+            echo "::error::Release $TAG is already published; refusing to upload into a live release. Delete the release and the tag, then re-tag to rebuild."
+            exit 1
+          fi
+
+      - name: Build and publish release artifacts
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: ${{ matrix.release_command }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORCA_BUILD_COMMIT: ${{ github.sha }}
+
+      # Why (kept from release-cut verbatim): the afterPack helper returns
+      # silently when conpty.node is absent from the packaged tree, so a
+      # packaging regression that drops it would ship a build whose every
+      # terminal fails to load. Pure file-existence check, no signing ties.
+      - name: Verify Windows node-pty ConPTY runtime
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $runtimeDir = 'dist/win-unpacked/resources/node_modules/node-pty/build/Release'
+          $requiredFiles = @(
+            "$runtimeDir/conpty.node",
+            "$runtimeDir/conpty/conpty.dll",
+            "$runtimeDir/conpty/OpenConsole.exe"
+          )
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Missing Windows node-pty runtime file: $file"
+            }
+            Get-Item -LiteralPath $file
+          }
+
+      # Why: a Linux runner-image glibc bump once shipped a node-pty requiring
+      # a newer glibc than the supported floor; prove the packaged binary loads.
+      - name: Load packaged node-pty on the Linux floor
+        if: runner.os == 'Linux'
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: >-
+            node config/scripts/run-linux-packaged-node-pty-floor-smoke.mjs
+            --app-dir ${{ matrix.unpacked_dir }}
+
+  publish-release:
+    needs:
+      - create-release
+      - build
+    if: github.repository == 'sj900211/orcinus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Verify release is still draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          releases_json="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100")"
+          # Why: publish-release verifies the draft before making it visible.
+          draft="$(jq -e -r --arg tag "$TAG" '
+            map(select(.tag_name == $tag))
+            | if length == 1 and (.[0].draft | type) == "boolean" then (.[0].draft | tostring) else empty end
+          ' <<<"$releases_json")" || {
+            echo "::error::Release $TAG was not found in the draft-aware releases list, or its draft state was missing."
+            exit 1
+          }
+          if [[ "$draft" != "true" ]]; then
+            echo "::error::Release $TAG was published before publish-release; refusing to continue."
+            exit 1
+          fi
+
+      # Why the fork gate (not upstream's verify-release-required-assets.mjs):
+      # the upstream list demands mac/rpm/arm64/orca-named assets this matrix
+      # never builds. The fork gate requires the orcinus-named win+linux set
+      # and still promotes every manifest-referenced asset to required, so
+      # artifact-name drift refuses to un-draft.
+      - name: Verify release assets complete
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: node config/scripts/verify-orcinus-release-assets.mjs "$TAG"
+
+      # Why: derive `--prerelease` from the tag shape (not from whatever
+      # electron-builder left the release flagged as) — upstream learned this
+      # the hard way when an RC got flipped to "latest".
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$TAG" == *"-rc."* ]]; then
+            prerelease=true
+          else
+            prerelease=false
+          fi
+          gh release edit "$TAG" \
+            --draft=false \
+            --prerelease="$prerelease" \
+            --repo "$GITHUB_REPOSITORY"

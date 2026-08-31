@@ -1,0 +1,70 @@
+# Orcinus (fork) minimal CI — deliberately NOT upstream's pr.yml (40+ jobs,
+# 32 test shards). Solo-fork workflow is push-to-branch with direct merges, so
+# this runs the cheap, high-signal checks on every push: lint, typecheck, the
+# electron-builder config smoke, and the fork-contract tests that guard the
+# release identity. The full suite stays a local/dev concern.
+name: Orcinus CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orcinus-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    # Why the gate: mirrors upstream's repository guard so a fork of this fork
+    # never fires the workflow.
+    if: github.repository == 'sj900211/orcinus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/install-node-dependencies
+
+      - name: Lint
+        run: pnpm exec oxlint --format github
+
+      # Why: every project is `composite`, so tsc writes a .tsbuildinfo that
+      # lets the next run skip unchanged files; without the cache CI rechecks
+      # the world every push (upstream's pr.yml pattern, kept).
+      - name: Cache TypeScript incremental state
+        uses: actions/cache@v5
+        with:
+          path: config/*.tsbuildinfo
+          key: tsbuildinfo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'config/tsconfig*.json') }}-${{ github.sha }}
+          restore-keys: |
+            tsbuildinfo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'config/tsconfig*.json') }}-
+            tsbuildinfo-${{ runner.os }}-
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      # Why a smoke instead of electron-builder-config.test.mjs: that upstream
+      # contract test asserts stablyai identity (appId, icon, artifact names)
+      # and has failed on the fork since the rebrand — the fork's identity is
+      # guarded by verify-dev-channel-packaging.test.mjs below instead.
+      - name: Smoke-load electron-builder config
+        run: node -e "const c = require('./config/electron-builder.config.cjs'); if (c.win.verifyUpdateCodeSignature !== false || c.win.signtoolOptions) { throw new Error('fork builds must stay unsigned with update signature checks disabled') }"
+
+      # Why exactly these files: they pin the fork's release contract — unsigned
+      # Windows identity, publish target, and the release asset gate — and are
+      # known green on the fork. Broad suites carry upstream-identity tests that
+      # contradict the rebrand by design.
+      - name: Fork contract tests
+        run: >-
+          pnpm exec vitest run --config config/vitest.config.ts
+          config/scripts/verify-dev-channel-packaging.test.mjs
+          config/scripts/verify-orcinus-release-assets.test.mjs
+          config/scripts/verify-release-required-assets.test.mjs
