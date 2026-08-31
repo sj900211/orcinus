@@ -317,20 +317,17 @@ module.exports = {
   win: {
     icon: 'resources/build/orcinus.ico',
     executableName: 'Orcinus',
-    // Why: Windows installers are signed after electron-builder packaging by
-    // SignPath, so the packager cannot infer the updater publisherName.
-    //
-    // Why dev channels drop it instead: they ship unsigned, because SignPath's
-    // approval waits are budgeted in hours and cannot fit an hourly cadence.
-    // electron-updater Authenticode-verifies every installer it downloads
+    // Why (fork): Orcinus ships unsigned on every channel — upstream's SignPath
+    // Foundation OSS signing is tied to their org and not transferable to this
+    // fork. electron-updater Authenticode-verifies every installer it downloads
     // against the publisherName baked into the *installed* app's app-update.yml
     // (NsisUpdater.verifySignature), and skips verification entirely when that
-    // name is absent. An unsigned build that still claimed 'SignPath Foundation'
-    // would therefore reject its own channel's next build — and its way back to
-    // stable with it. Dropping it is what makes dev→dev and dev→stable work.
-    ...(isWinDevChannel
-      ? { verifyUpdateCodeSignature: false }
-      : { signtoolOptions: { publisherName: 'SignPath Foundation' } }),
+    // name is absent. A release build that still claimed 'SignPath Foundation'
+    // would therefore reject its own next update, so all fork builds take the
+    // unsigned path upstream uses for its dev channels (see their rationale in
+    // dev-channel-win-build.yml). Revisit if the fork ever acquires Windows
+    // code signing — then restore the signtoolOptions.publisherName branch.
+    verifyUpdateCodeSignature: false,
     extraResources: [
       ...commonExtraResources,
       ...createPackagedRuntimeNodeModuleResources('win32'),

@@ -34,12 +34,17 @@ afterEach(() => {
 })
 
 describe('electron-builder dev-channel identity', () => {
-  it('keeps the SignPath publisherName on stable Windows builds', () => {
+  // Fork note (Orcinus): every channel ships unsigned — upstream's SignPath
+  // Foundation signing is tied to their org and not transferable. A stable
+  // build that still baked the publisherName would Authenticode-verify and
+  // reject its own next (unsigned) update, so stable takes the same unsigned
+  // branch as dev channels. See the Why in electron-builder.config.cjs `win`.
+  it('keeps stable Windows builds unsigned with update signature checks disabled', () => {
     const config = loadConfigWithEnv({})
 
-    expect(config.win.signtoolOptions.publisherName).toBe('SignPath Foundation')
-    expect(config.win.verifyUpdateCodeSignature).toBeUndefined()
-    expect(config.publish.repo).toBe('orca')
+    expect(config.win.signtoolOptions?.publisherName).toBeUndefined()
+    expect(config.win.verifyUpdateCodeSignature).toBe(false)
+    expect(config.publish.repo).toBe('orcinus')
     expect(config.publish.releaseType).toBe('release')
   })
 
