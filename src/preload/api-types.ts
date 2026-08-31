@@ -46,7 +46,7 @@ import type {
 import type { PetApi } from './api/pet-api'
 import type { PluginsApi } from './api/plugin-host-api'
 import type { PreflightApi } from './api/preflight-api'
-import type { EditorChildWindowApi } from './api/editor-child-window-api'
+import type { SatelliteWindowApi } from './api/satellite-window-api'
 import type { ProjectWindowApi } from './api/project-window-api'
 import type { PtyApi } from './api/pty-api'
 import type { ProjectGroupsApi, ProjectsApi, RepositoryApi } from './api/repository-api'
@@ -113,7 +113,7 @@ export type PreloadApi = {
   onboarding: OnboardingApi
   dashboard: DashboardApi
   projectWindow: ProjectWindowApi
-  editorChildWindow: EditorChildWindowApi
+  satelliteWindow: SatelliteWindowApi
   terminalPreview: TerminalPreviewApi
   macosTccPrompts: MacosTccPromptsApi
   developerPermissions: DeveloperPermissionsApi

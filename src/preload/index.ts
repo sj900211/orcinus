@@ -2510,14 +2510,52 @@ const api = {
     }
   },
 
-  editorChildWindow: {
-    // Open (or retarget) the standalone editor child window for one file (Expedition 5 spike).
-    open: (args: {
-      filePath: string
-      relativePath: string
-      worktreeId: string
-      language: string
-    }): Promise<void> => ipcRenderer.invoke('editorChildWindow:open', args)
+  satelliteWindow: {
+    // Satellite editor windows (Expedition 5): one worktree's editor tabs in a
+    // subordinate window. open creates, moveFile pushes into a live satellite.
+    open: (
+      worktreeId: string,
+      file: { filePath: string; relativePath: string; language: string }
+    ): Promise<{ satelliteId: string } | null> =>
+      ipcRenderer.invoke('satelliteWindow:open', worktreeId, file),
+    moveFile: (
+      satelliteId: string,
+      file: { filePath: string; relativePath: string; language: string }
+    ): Promise<void> => ipcRenderer.invoke('satelliteWindow:moveFile', satelliteId, file),
+    raise: (satelliteId: string): Promise<void> =>
+      ipcRenderer.invoke('satelliteWindow:raise', satelliteId),
+    notifyReady: (): Promise<void> => ipcRenderer.invoke('satelliteWindow:ready'),
+    reportOpenFiles: (files: { fileId: string; filePath: string }[]): void =>
+      ipcRenderer.send('satelliteWindow:reportOpenFiles', files),
+    notifyActiveWorktreeChanged: (worktreeId: string): void =>
+      ipcRenderer.send('satelliteWindow:activeWorktreeChanged', worktreeId),
+    onMirrorChanged: (
+      callback: (
+        entries: {
+          satelliteId: string
+          worktreeId: string
+          visible: boolean
+          files: { fileId: string; filePath: string }[]
+        }[]
+      ) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        entries: Parameters<typeof callback>[0]
+      ): void => callback(entries)
+      ipcRenderer.on('satelliteWindow:mirrorChanged', listener)
+      return () => ipcRenderer.removeListener('satelliteWindow:mirrorChanged', listener)
+    },
+    onOpenFile: (
+      callback: (file: { filePath: string; relativePath: string; language: string }) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        file: Parameters<typeof callback>[0]
+      ): void => callback(file)
+      ipcRenderer.on('satellite:openFile', listener)
+      return () => ipcRenderer.removeListener('satellite:openFile', listener)
+    }
   },
 
   terminalPreview: {

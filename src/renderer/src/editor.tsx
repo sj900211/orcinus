@@ -34,6 +34,7 @@ recordRendererCrashBreadcrumb('editor_child_bootstrap_started', { dev: import.me
 installRendererCrashDiagnostics('editor-child')
 
 type EditorChildBootParams = {
+  satelliteId: string
   filePath: string
   relativePath: string
   worktreeId: string
@@ -42,14 +43,15 @@ type EditorChildBootParams = {
 
 function getEditorChildBootParams(): EditorChildBootParams | null {
   const params = new URLSearchParams(window.location.search)
+  const satelliteId = params.get('orca-satellite-id')
   const filePath = params.get('orca-editor-file')
   const relativePath = params.get('orca-editor-relative')
   const worktreeId = params.get('orca-worktree')
   const language = params.get('orca-editor-language')
-  if (!filePath || !relativePath || !worktreeId || !language) {
+  if (!satelliteId || !filePath || !relativePath || !worktreeId || !language) {
     return null
   }
-  return { filePath, relativePath, worktreeId, language }
+  return { satelliteId, filePath, relativePath, worktreeId, language }
 }
 
 function applyEditorChildAppearance(settings: GlobalSettings | null): void {
@@ -132,7 +134,7 @@ function EditorChildExternalWatch(): null {
 
 type BootPhase =
   | { phase: 'loading' }
-  | { phase: 'ready'; fileId: string }
+  | { phase: 'ready'; fileId: string; worktreeId: string }
   | { phase: 'error'; message: string }
 
 function useEditorChildBoot(): BootPhase {
@@ -195,7 +197,7 @@ function useEditorChildBoot(): BootPhase {
           { focusEditor: true }
         )
         if (!disposed) {
-          setState({ phase: 'ready', fileId })
+          setState({ phase: 'ready', fileId, worktreeId: boot.worktreeId })
         }
       } catch (error) {
         recordRendererCrashBreadcrumb('editor_child_boot_failed')
@@ -216,6 +218,40 @@ function useEditorChildBoot(): BootPhase {
   }, [])
 
   return state
+}
+
+// Registry sync (dungeon 3): report this satellite's open files to main after
+// every change (feeds the parent's interception mirror), signal boot-ready so
+// queued moveFile pushes flush, and apply pushed files into this store.
+function SatelliteWindowSync({ worktreeId }: { worktreeId: string }): null {
+  useEffect(() => {
+    void window.api.satelliteWindow.notifyReady()
+    const reportFiles = (): void => {
+      // Why edit-mode only: transient surfaces (markdown preview, diffs) must
+      // not enter the mirror — dungeon-5 interception treats mirror entries as
+      // "this file LIVES here", which only edit tabs satisfy.
+      window.api.satelliteWindow.reportOpenFiles(
+        useAppStore
+          .getState()
+          .openFiles.filter((file) => file.mode === 'edit')
+          .map((file) => ({ fileId: file.id, filePath: file.filePath }))
+      )
+    }
+    reportFiles()
+    const unsubscribe = useAppStore.subscribe((state, prevState) => {
+      if (state.openFiles !== prevState.openFiles) {
+        reportFiles()
+      }
+    })
+    const offOpenFile = window.api.satelliteWindow.onOpenFile((file) => {
+      useAppStore.getState().openFile({ ...file, worktreeId, mode: 'edit' }, { focusEditor: true })
+    })
+    return () => {
+      unsubscribe()
+      offOpenFile()
+    }
+  }, [worktreeId])
+  return null
 }
 
 function EditorChildStatus({ message }: { message: string }): React.JSX.Element {
@@ -240,13 +276,17 @@ function EditorChildRoot(): React.JSX.Element {
     // host contract (TabGroupPanel) — an absolutely-positioned flex pane inside
     // a sized ancestor. A plain block wrapper collapses it to ~2px.
     <div className="relative h-screen w-screen overflow-hidden">
+      <SatelliteWindowSync worktreeId={boot.worktreeId} />
       <div className="absolute inset-0 flex min-h-0 min-w-0">
         <Suspense
           fallback={
             <EditorChildStatus message={translate('editorChild.loading', 'Opening the editor…')} />
           }
         >
-          <EditorPanel activeFileId={boot.fileId} isVisible isCmdSaveOwner />
+          {/* Why no activeFileId pin: the prop would override the store forever,
+            making every later file (moveFile push) invisible — boot's openFile
+            already set the store's activeFileId, and the panel must follow it. */}
+          <EditorPanel isVisible isCmdSaveOwner />
         </Suspense>
       </div>
     </div>

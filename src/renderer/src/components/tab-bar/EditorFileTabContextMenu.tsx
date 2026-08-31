@@ -267,10 +267,9 @@ export function EditorFileTabContextMenu({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => {
-                void window.api.editorChildWindow.open({
+                void window.api.satelliteWindow.open(file.worktreeId, {
                   filePath: file.filePath,
                   relativePath: file.relativePath,
-                  worktreeId: file.worktreeId,
                   language: resolvedLanguage
                 })
               }}
