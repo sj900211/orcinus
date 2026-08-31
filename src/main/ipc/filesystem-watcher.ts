@@ -296,7 +296,18 @@ function emitOverflowPayload(root: WatchedRoot): void {
   }
   for (const [, wc] of root.listeners) {
     if (!wc.isDestroyed()) {
-      wc.send('fs:changed', payload)
+      try {
+        wc.send('fs:changed', payload)
+      } catch (err) {
+        // Why (same class as the remote path below): isDestroyed() stays false while a
+        // closing window's frame is already disposed, so a bare send from this timer
+        // escapes as a fatal main-process exception.
+        console.warn(
+          `[filesystem-watcher] failed to deliver fs:changed overflow for ${rootPath}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        )
+      }
     }
   }
 }
@@ -340,7 +351,19 @@ async function flushBatch(root: WatchedRoot): Promise<void> {
 
   for (const [, wc] of root.listeners) {
     if (!wc.isDestroyed()) {
-      wc.send('fs:changed', payload)
+      try {
+        wc.send('fs:changed', payload)
+      } catch (err) {
+        // Why (same class as the remote path below): the trailing-debounce timer can fire
+        // while a listener window is closing — frame disposed, isDestroyed() still false —
+        // and a bare send then escapes as a fatal main-process exception (editor child
+        // spike repro: edit -> autosave echo -> close).
+        console.warn(
+          `[filesystem-watcher] failed to deliver fs:changed for ${root.rootPath}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        )
+      }
     }
   }
 }
