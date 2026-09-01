@@ -1,4 +1,6 @@
 /* eslint-disable max-lines -- Why: persistence keeps schema defaults, migration, and load/save/flush in one file so the storage contract reviews as a unit. */
+import type { PersistedSatelliteWindowSession } from '../../../shared/satellite-window-payloads'
+import { normalizeSatelliteWindowSessions } from '../../ipc/satellite-window-payload-validation'
 import {
   readFileSync,
   writeFileSync,
@@ -1195,6 +1197,7 @@ export class Store {
           mobileClientTabSelectionsByDeviceId: normalizePersistedMobileClientTabSelections(
             parsed.mobileClientTabSelectionsByDeviceId
           ),
+          satelliteWindowSessions: normalizeSatelliteWindowSessions(parsed.satelliteWindowSessions),
           workspaceLineageByChildKey: normalizeWorkspaceLineageByChildKey(
             parsed.workspaceLineageByChildKey
           ),
@@ -2370,6 +2373,39 @@ export class Store {
     return this.state.mobileClientTabSelectionsByDeviceId ?? {}
   }
 
+  // Satellite windows to restore at launch (5-7). Staged continuously by each
+  // satellite renderer; entries are removed only on a clean user close of a
+  // READY satellite (every other death keeps the entry for restore).
+  getSatelliteWindowSessions(): PersistedSatelliteWindowSession[] {
+    return this.state.satelliteWindowSessions ?? []
+  }
+
+  setSatelliteWindowSession(entry: PersistedSatelliteWindowSession): void {
+    const rest = (this.state.satelliteWindowSessions ?? []).filter(
+      (candidate) => candidate.satelliteId !== entry.satelliteId
+    )
+    this.state.satelliteWindowSessions = [...rest, entry]
+    this.scheduleSave()
+  }
+
+  removeSatelliteWindowSession(satelliteId: string): void {
+    const current = this.state.satelliteWindowSessions ?? []
+    const next = current.filter((candidate) => candidate.satelliteId !== satelliteId)
+    if (next.length !== current.length) {
+      this.state.satelliteWindowSessions = next
+      this.scheduleSave()
+    }
+  }
+
+  removeSatelliteWindowSessionsForWorktree(worktreeId: string): void {
+    const current = this.state.satelliteWindowSessions ?? []
+    const next = current.filter((candidate) => candidate.worktreeId !== worktreeId)
+    if (next.length !== current.length) {
+      this.state.satelliteWindowSessions = next
+      this.scheduleSave()
+    }
+  }
+
   setMobileClientTabSelections(next: PersistedMobileClientTabSelections): void {
     this.state.mobileClientTabSelectionsByDeviceId = next
     this.scheduleSave()
@@ -2832,6 +2868,8 @@ export class Store {
     resolved: ExecutionHostId,
     options: { advanceTerminalTopologyRevision?: boolean }
   ): void {
+    // A removed worktree must not resurrect as a restored satellite (5-7).
+    this.removeSatelliteWindowSessionsForWorktree(worktreeId)
     if (!this.hasPersistedWorkspaceSession(resolved)) {
       return
     }
@@ -3128,6 +3166,10 @@ export class Store {
     this.scheduleSave()
   }
 
+  /** Satellite fold-back (Expedition 5, dungeon 5): merge one worktree's
+   *  returned files into the LOCAL session without clobbering other worktrees
+   *  (patchWorkspaceSession is a shallow top-level spread — unusable here).
+   *  Replace-by-filePath keeps the quit-ordering double-applies idempotent. */
   private getTerminalLayoutLeafIds(root: TerminalPaneLayoutNode | null): Set<string> {
     const leafIds = new Set<string>()
     const visit = (node: TerminalPaneLayoutNode | null): void => {

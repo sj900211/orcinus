@@ -1,3 +1,4 @@
+import { rectHasVisibleAreaOnAnyDisplay } from './window-bounds-validation'
 import { randomUUID } from 'node:crypto'
 import { BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'node:path'
@@ -13,7 +14,10 @@ import {
   shouldRevealSatelliteOnReady,
   unregisterSatellite
 } from './satellite-window-registry'
-import type { SatelliteBootFile } from '../../shared/satellite-window-payloads'
+import type {
+  SatelliteBootFile,
+  SatelliteWindowBounds
+} from '../../shared/satellite-window-payloads'
 
 // Satellite editor window factory (Expedition 5): a native-frame window that
 // hosts editor tabs for ONE worktree, subordinate to the app window that
@@ -54,19 +58,33 @@ function loadSatelliteWindow(
 export function createSatelliteWindow(
   parent: BrowserWindow,
   worktreeId: string,
-  bootFile: SatelliteBootFile
+  bootFile: SatelliteBootFile,
+  options?: {
+    /** Restore-at-launch: validated persisted rectangle wins over the cascade. */
+    initialBounds?: SatelliteWindowBounds
+    /** Restore-at-launch: stay hidden until the parent's first active-worktree
+     *  report — an eager reveal would flash over the wrong workspace. */
+    startSubordinationHidden?: boolean
+  }
 ): { satelliteId: string; window: BrowserWindow } {
+  const restoredBounds =
+    options?.initialBounds &&
+    rectHasVisibleAreaOnAnyDisplay(options.initialBounds, MIN_WIDTH / 2, MIN_HEIGHT / 2)
+      ? options.initialBounds
+      : null
   const satelliteId = randomUUID()
   // Why the minimized check: a minimized win32 window reports iconic bounds
   // (~-32000) — a cascade offset from those would spawn the satellite off-screen.
   const parentBounds = parent.isDestroyed() || parent.isMinimized() ? null : parent.getBounds()
 
   const window = new BrowserWindow({
-    width: DEFAULT_WIDTH,
-    height: DEFAULT_HEIGHT,
-    ...(parentBounds
-      ? { x: parentBounds.x + CASCADE_OFFSET, y: parentBounds.y + CASCADE_OFFSET }
-      : {}),
+    width: restoredBounds?.width ?? DEFAULT_WIDTH,
+    height: restoredBounds?.height ?? DEFAULT_HEIGHT,
+    ...(restoredBounds
+      ? { x: restoredBounds.x, y: restoredBounds.y }
+      : parentBounds
+        ? { x: parentBounds.x + CASCADE_OFFSET, y: parentBounds.y + CASCADE_OFFSET }
+        : {}),
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     title: `${bootFile.relativePath} — Orcinus`,
@@ -108,7 +126,8 @@ export function createSatelliteWindow(
     parentWindow: parent,
     worktreeId,
     files: [],
-    hiddenByWorkspaceSwitch: false,
+    hiddenByWorkspaceSwitch: options?.startSubordinationHidden === true,
+    revealInactive: options?.startSubordinationHidden === true,
     hiddenWithParent: false,
     minimizedBeforeHide: false,
     trustedWebContentsId
@@ -120,7 +139,12 @@ export function createSatelliteWindow(
     // unconditional show() would reveal it over the wrong workspace and no
     // correcting report would arrive until the NEXT switch.
     if (!window.isDestroyed() && shouldRevealSatelliteOnReady(satelliteId)) {
-      window.show()
+      // Restored windows reveal WITHOUT stealing launch focus (post-review C9).
+      if (options?.startSubordinationHidden === true) {
+        window.showInactive()
+      } else {
+        window.show()
+      }
     }
   })
 

@@ -17,6 +17,7 @@ import {
   requestEditorSaveQuiesce,
   type EditorRequestFileCloseDetail
 } from '@/components/editor/editor-autosave'
+import { stageSatelliteSessionSyncNow } from '@/lib/satellite-session-staging'
 
 // Why 350ms (Terminal precedent): long enough to swallow a double-click's
 // second press, short enough that a deliberate next click still lands.
@@ -66,7 +67,6 @@ export function EditorChildCloseCoordinator(): React.JSX.Element {
 
   const saveDialogFileIdRef = useRef<string | null>(null)
   const pendingCloseQueueRef = useRef<string[]>([])
-  const closeWindowAfterQueueRef = useRef(false)
   // Why (Terminal precedent): a double-click's second press must not act on the
   // NEXT queued file's dialog that replaced this one under the pointer.
   const isClosingRef = useRef(false)
@@ -127,13 +127,6 @@ export function EditorChildCloseCoordinator(): React.JSX.Element {
       store.setActiveFile(fileId)
       openDialogFor(fileId)
       return
-    }
-    if (closeWindowAfterQueueRef.current) {
-      closeWindowAfterQueueRef.current = false
-      // Every dirty tab is resolved — let main finish the intercepted close
-      // (destroy). Never window.close() from here: that path also fired after
-      // a vetoed reload and destroyed the window the user asked to refresh.
-      window.api.satelliteWindow.confirmClose()
     }
   }, [openDialogFor])
 
@@ -209,10 +202,9 @@ export function EditorChildCloseCoordinator(): React.JSX.Element {
     if (isClosingRef.current) {
       return
     }
-    // Why flush + drop the close flag: Cancel means "stop closing" — both the
-    // rest of a bulk close and a pending window close.
+    // Why flush: Cancel means "stop closing" — the rest of a bulk close is
+    // abandoned, not replayed.
     pendingCloseQueueRef.current = []
-    closeWindowAfterQueueRef.current = false
     openDialogFor(null)
   }, [openDialogFor])
 
@@ -225,48 +217,23 @@ export function EditorChildCloseCoordinator(): React.JSX.Element {
       pendingCloseQueueRef.current.push(fileId)
       advanceQueue()
     }
-    // PURE veto (post-review fix): beforeunload also fires for View→Reload, so
-    // it must never convert an unload into a window close. It only blocks the
-    // unload and surfaces the dialogs; the genuine close flow arrives via
-    // main's dirty-gated close intercept (onCloseRequested above).
-    const onBeforeUnload = (event: BeforeUnloadEvent): void => {
-      const dirtyIds = useAppStore
-        .getState()
-        .openFiles.filter((file) => file.isDirty)
-        .map((file) => file.id)
-      if (dirtyIds.length === 0) {
-        return
-      }
-      event.preventDefault()
-      // Why also returnValue: Chromium only honors the cancellation when one of
-      // the two signals is set; keep both for belt-and-suspenders.
-      event.returnValue = true
-      for (const fileId of dirtyIds) {
-        if (!pendingCloseQueueRef.current.includes(fileId)) {
-          pendingCloseQueueRef.current.push(fileId)
-        }
-      }
-      advanceQueue()
+    // Final SYNCHRONOUS stage (spec revision 5-7): close/reload/quit all pass
+    // through beforeunload — persist the freshest snapshot instead of vetoing.
+    // The dirty-block itself is enforced main-side; a renderer veto during
+    // quit would strand the quitting flags (recon-verified hazard).
+    const onBeforeUnload = (): void => {
+      stageSatelliteSessionSyncNow()
     }
-    // Main intercepted a native close (X, parent cascade, quit) because this
-    // window reported dirty files: drain them through the dialog, then confirm.
+    // Dirty-block notice (spec revision 5-7): main refused the native close
+    // while unsaved files remain — closing a satellite never moves nor
+    // discards drafts; save or close the tabs first.
     const offCloseRequested = window.api.satelliteWindow.onCloseRequested(() => {
-      const dirtyIds = useAppStore
-        .getState()
-        .openFiles.filter((file) => file.isDirty)
-        .map((file) => file.id)
-      if (dirtyIds.length === 0) {
-        // Cleaned up between the report and the intercept — nothing to drain.
-        window.api.satelliteWindow.confirmClose()
-        return
-      }
-      closeWindowAfterQueueRef.current = true
-      for (const fileId of dirtyIds) {
-        if (!pendingCloseQueueRef.current.includes(fileId)) {
-          pendingCloseQueueRef.current.push(fileId)
-        }
-      }
-      advanceQueue()
+      toast.warning(
+        translate(
+          'editorChild.closeBlockedDirty',
+          'Save or close the unsaved files before closing this window.'
+        )
+      )
     })
     window.addEventListener(ORCA_EDITOR_REQUEST_FILE_CLOSE_EVENT, onRequestEditorClose)
     window.addEventListener('beforeunload', onBeforeUnload)
@@ -275,7 +242,7 @@ export function EditorChildCloseCoordinator(): React.JSX.Element {
       window.removeEventListener(ORCA_EDITOR_REQUEST_FILE_CLOSE_EVENT, onRequestEditorClose)
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
-  }, [advanceQueue])
+  }, [advanceQueue, openDialogFor])
 
   return (
     <Dialog

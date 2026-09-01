@@ -1,4 +1,5 @@
 /* oxlint-disable max-lines */
+import { destroySatellitesForWorktree } from '../window/satellite-window-registry'
 import { app, ipcMain, type BrowserWindow } from 'electron'
 import { readFile, stat } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
@@ -335,6 +336,9 @@ function removeWorktreeMetadataAndTransientState(
   hostId?: ExecutionHostId,
   snapshotPruneBatchId?: string
 ): void {
+  // Post-review C2: a live satellite for this worktree would re-stage its
+  // persisted entry right back after the Store pruned it.
+  destroySatellitesForWorktree(worktreeId)
   const persistedHostId = store.getWorktreeMeta(worktreeId)?.hostId
   const repoId = getRepoIdFromWorktreeId(worktreeId)
   const preservesSameIdOwner = Boolean(

@@ -60,6 +60,10 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
     let retryScheduled = false
     try {
       const state = store.getState()
+      // Post-review-2 C7: a keystroke during the (possibly seconds-long) read
+      // must not defeat the disk==draft rebaseline — snapshot the draft the
+      // verification started from.
+      const draftAtVerifyStart = state.editorDrafts[file.id]
       const result = await readRuntimeFileContent({
         settings: settingsForRuntimeOwner(state.settings, file.runtimeEnvironmentId),
         filePath: file.filePath,
@@ -87,6 +91,17 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
         return
       }
       if (getDiskBaselineSignature(result.content) !== file.lastKnownDiskSignature) {
+        // Post-review C4: a quiesced-but-completed autosave writes the draft
+        // without finalizing (generation bump skips the re-baseline), so a
+        // moved/restored tab can carry the PRE-save signature while disk holds
+        // exactly the draft. Identical content is not a conflict — rebaseline.
+        const liveDraft = store.getState().editorDrafts[file.id]
+        if (liveDraft === result.content || draftAtVerifyStart === result.content) {
+          store
+            .getState()
+            .setLastKnownDiskSignature(file.id, getDiskBaselineSignature(result.content))
+          return
+        }
         markFileChangedOnDisk(store.getState(), liveFile, {
           connectionId: getConnectionIdForFile(file.worktreeId, file.filePath) ?? undefined,
           origin: 'restore'

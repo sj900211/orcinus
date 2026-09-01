@@ -34,6 +34,24 @@ export function createRecentlyClosedEditorTabs(
         targetGroupId: position?.groupId,
         reopenId
       })
+      // Post-review C12: an intercepted open (file lives in a satellite) makes
+      // no local tab — skip position restore (orphan id in the tab order) and
+      // put the snapshot back so the gesture is not spent on a raise.
+      if (!get().openFiles.some((candidate) => candidate.id === restoredFileId)) {
+        set((s) => ({
+          recentlyClosedEditorTabsByWorktree: {
+            ...s.recentlyClosedEditorTabsByWorktree,
+            [worktreeId]: [next, ...(s.recentlyClosedEditorTabsByWorktree[worktreeId] ?? [])]
+          },
+          // Post-review-2 C9: the combined caller already shifted an 'editor'
+          // kind entry — restore it too or the two stacks desync permanently.
+          recentlyClosedTabKindsByWorktree: {
+            ...s.recentlyClosedTabKindsByWorktree,
+            [worktreeId]: ['editor', ...(s.recentlyClosedTabKindsByWorktree?.[worktreeId] ?? [])]
+          }
+        }))
+        return true
+      }
       restoreRecentlyClosedTabPosition(get, worktreeId, restoredFileId, position)
       return true
     },

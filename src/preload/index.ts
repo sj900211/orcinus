@@ -2520,13 +2520,89 @@ const api = {
       ipcRenderer.invoke('satelliteWindow:open', worktreeId, file),
     moveFile: (
       satelliteId: string,
-      file: { filePath: string; relativePath: string; language: string }
-    ): Promise<void> => ipcRenderer.invoke('satelliteWindow:moveFile', satelliteId, file),
+      file: {
+        filePath: string
+        relativePath: string
+        language: string
+        dirtyDraftContent?: string
+        lastKnownDiskSignature?: string
+        cursorLine?: number
+        scrollTop?: number
+        selections?: {
+          selectionStartLineNumber: number
+          selectionStartColumn: number
+          positionLineNumber: number
+          positionColumn: number
+        }[]
+        markdownViewMode?: string
+      }
+    ): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('satelliteWindow:moveFile', satelliteId, file),
     raise: (satelliteId: string): Promise<void> =>
       ipcRenderer.invoke('satelliteWindow:raise', satelliteId),
+    getMirror: (): Promise<
+      {
+        satelliteId: string
+        worktreeId: string
+        visible: boolean
+        files: { fileId: string; filePath: string; relativePath: string; language: string }[]
+      }[]
+    > => ipcRenderer.invoke('satelliteWindow:getMirror'),
+    activateFile: (
+      satelliteId: string,
+      file: { filePath: string; relativePath: string; language: string }
+    ): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('satelliteWindow:activateFile', satelliteId, file),
+    moveFileBack: (file: {
+      filePath: string
+      relativePath: string
+      language: string
+      dirtyDraftContent?: string
+      lastKnownDiskSignature?: string
+      cursorLine?: number
+      scrollTop?: number
+      selections?: {
+        selectionStartLineNumber: number
+        selectionStartColumn: number
+        positionLineNumber: number
+        positionColumn: number
+      }[]
+      markdownViewMode?: string
+    }): Promise<{ ok: boolean }> => ipcRenderer.invoke('satelliteWindow:moveFileBack', file),
+    onFilesMovedBack: (
+      callback: (data: {
+        worktreeId: string
+        files: {
+          filePath: string
+          relativePath: string
+          language: string
+          dirtyDraftContent?: string
+          lastKnownDiskSignature?: string
+          cursorLine?: number
+          scrollTop?: number
+          selections?: {
+            selectionStartLineNumber: number
+            selectionStartColumn: number
+            positionLineNumber: number
+            positionColumn: number
+          }[]
+          markdownViewMode?: string
+        }[]
+      }) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        data: Parameters<typeof callback>[0]
+      ): void => callback(data)
+      ipcRenderer.on('satellite:filesMovedBack', listener)
+      return () => ipcRenderer.removeListener('satellite:filesMovedBack', listener)
+    },
     notifyReady: (): Promise<void> => ipcRenderer.invoke('satelliteWindow:ready'),
+    /** Satellite renderer only: boot failed terminally (missing repo etc.) —
+     *  main drops the persisted restore entry so it cannot zombie. */
+    notifyBootFailed: (): void => ipcRenderer.send('satelliteWindow:bootFailed'),
     reportOpenFiles: (
-      files: { fileId: string; filePath: string }[],
+      files: { fileId: string; filePath: string; relativePath: string; language: string }[],
       openSurfaceCount: number,
       dirtyOpenFileCount: number
     ): void =>
@@ -2543,7 +2619,46 @@ const api = {
         ipcRenderer.removeListener('satelliteWindow:closeRequested', listener)
       }
     },
-    confirmClose: (): void => ipcRenderer.send('satelliteWindow:confirmClose'),
+    stageSession: (
+      files: {
+        filePath: string
+        relativePath: string
+        language: string
+        dirtyDraftContent?: string
+        lastKnownDiskSignature?: string
+        cursorLine?: number
+        scrollTop?: number
+        selections?: {
+          selectionStartLineNumber: number
+          selectionStartColumn: number
+          positionLineNumber: number
+          positionColumn: number
+        }[]
+        markdownViewMode?: string
+      }[]
+    ): void => ipcRenderer.send('satelliteWindow:stageSession', files),
+    /** Synchronous final stage from beforeunload — close/reload/quit must not
+     *  lose keystrokes newer than the debounced stage. */
+    stageSessionSync: (
+      files: {
+        filePath: string
+        relativePath: string
+        language: string
+        dirtyDraftContent?: string
+        lastKnownDiskSignature?: string
+        cursorLine?: number
+        scrollTop?: number
+        selections?: {
+          selectionStartLineNumber: number
+          selectionStartColumn: number
+          positionLineNumber: number
+          positionColumn: number
+        }[]
+        markdownViewMode?: string
+      }[]
+    ): void => {
+      ipcRenderer.sendSync('satelliteWindow:stageSessionSync', files)
+    },
     notifyActiveWorktreeChanged: (worktreeId: string): void =>
       ipcRenderer.send('satelliteWindow:activeWorktreeChanged', worktreeId),
     onMirrorChanged: (
@@ -2552,7 +2667,7 @@ const api = {
           satelliteId: string
           worktreeId: string
           visible: boolean
-          files: { fileId: string; filePath: string }[]
+          files: { fileId: string; filePath: string; relativePath: string; language: string }[]
         }[]
       ) => void
     ): (() => void) => {
@@ -2564,7 +2679,22 @@ const api = {
       return () => ipcRenderer.removeListener('satelliteWindow:mirrorChanged', listener)
     },
     onOpenFile: (
-      callback: (file: { filePath: string; relativePath: string; language: string }) => void
+      callback: (file: {
+        filePath: string
+        relativePath: string
+        language: string
+        dirtyDraftContent?: string
+        lastKnownDiskSignature?: string
+        cursorLine?: number
+        scrollTop?: number
+        selections?: {
+          selectionStartLineNumber: number
+          selectionStartColumn: number
+          positionLineNumber: number
+          positionColumn: number
+        }[]
+        markdownViewMode?: string
+      }) => void
     ): (() => void) => {
       const listener = (
         _event: Electron.IpcRendererEvent,

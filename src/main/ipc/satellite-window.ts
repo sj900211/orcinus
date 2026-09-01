@@ -1,130 +1,72 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
+import type { Store } from '../persistence'
+import type {
+  SatelliteMirrorEntry,
+  SatelliteMovedFile
+} from '../../shared/satellite-window-payloads'
+import { areLocalWindowsWslPathAliases } from '../../shared/cross-platform-path'
 import { createSatelliteWindow } from '../window/create-satellite-window'
+import { activateWindow } from '../window/focus-existing-window'
 import {
   applyParentActiveWorktree,
+  getParentLastActiveWorktree,
   getSatellite,
   getSatelliteByWebContents,
-  listSatellitesForParent,
   markSatelliteRaised,
+  onParentRendererNavigation,
   onSatelliteRegistryChanged,
   setSatelliteFiles
 } from '../window/satellite-window-registry'
-import { activateWindow } from '../window/focus-existing-window'
-import { listAppWindows } from '../window/window-affinity-router'
 import { isTrustedUIRenderer } from './ui'
-import type {
-  SatelliteBootFile,
-  SatelliteFileEntry,
-  SatelliteMirrorEntry
-} from '../../shared/satellite-window-payloads'
+import { isBootFile, isFileEntryList, isMovedFile } from './satellite-window-payload-validation'
+import {
+  hasPendingOpenFiles,
+  clearAllSatellitePushState,
+  markSatelliteReadyAndFlush,
+  pushOpenFile
+} from './satellite-push-queue'
+import { broadcastMirror, buildMirrorEntriesFor } from './satellite-window-mirror'
+import {
+  clearAllSatelliteLifecycleState,
+  setSatelliteDirtyOpenFileCount,
+  upsertPersistedSatelliteFile,
+  wireSatelliteWindowLifecycle
+} from './satellite-window-lifecycle'
+import {
+  clearAllParentMirrorReadiness,
+  clearParentMirrorReady,
+  isParentMirrorReady,
+  markParentMirrorReady
+} from './satellite-parent-readiness'
 
 // IPC for satellite editor windows (Expedition 5, dungeon 3). Mirrors the
 // project-window handler structure: one module-level registry subscription,
 // trusted-sender gates on every channel, per-recipient mirror payloads.
 
-function isBootFile(value: unknown): value is SatelliteBootFile {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  const record = value as Record<string, unknown>
-  return (['filePath', 'relativePath', 'language'] as const).every(
-    (key) => typeof record[key] === 'string' && record[key] !== ''
-  )
-}
-
-function isFileEntryList(value: unknown): value is SatelliteFileEntry[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (entry) =>
-        typeof entry === 'object' &&
-        entry !== null &&
-        typeof (entry as Record<string, unknown>).fileId === 'string' &&
-        typeof (entry as Record<string, unknown>).filePath === 'string'
-    )
-  )
-}
-
-// Why a boot queue: moveFile pushes can race the satellite's mini-hydration;
-// files sent before the renderer's satelliteWindow:ready are flushed on it.
-// A renderer reload un-readies its satellite (did-start-navigation hook below)
-// so post-reload pushes queue again instead of vanishing into a loading page.
-const pendingOpenFilesBySatelliteId = new Map<string, SatelliteBootFile[]>()
-// Last dirty-file count each satellite reported; gates the native-close intercept.
-const dirtyOpenFileCountBySatelliteId = new Map<string, number>()
-const readySatelliteIds = new Set<string>()
-
-function clearSatelliteIpcState(satelliteId: string): void {
-  dirtyOpenFileCountBySatelliteId.delete(satelliteId)
-  pendingOpenFilesBySatelliteId.delete(satelliteId)
-  readySatelliteIds.delete(satelliteId)
-}
-
-function pushOpenFile(satelliteId: string, file: SatelliteBootFile): void {
-  const record = getSatellite(satelliteId)
-  if (!record) {
-    return
-  }
-  if (!readySatelliteIds.has(satelliteId)) {
-    const queue = pendingOpenFilesBySatelliteId.get(satelliteId) ?? []
-    queue.push(file)
-    pendingOpenFilesBySatelliteId.set(satelliteId, queue)
-    return
-  }
-  try {
-    record.window.webContents.send('satellite:openFile', file)
-  } catch {
-    // Why: a frame disposed mid-send must not fail the caller's move.
-  }
-}
-
-/**
- * Per-recipient mirror: each app window receives only ITS satellites — the
- * mirror drives that parent's open-interception and menu gating, and other
- * windows have no use for it.
- */
-function sendMirrorTo(target: BrowserWindow): void {
-  if (target.isDestroyed() || target.webContents.isDestroyed()) {
-    return
-  }
-  const entries: SatelliteMirrorEntry[] = listSatellitesForParent(target).map((record) => ({
-    satelliteId: record.satelliteId,
-    worktreeId: record.worktreeId,
-    // Why flag-derived (not isVisible()): a booting satellite is invisible but
-    // functional, and win32 reports minimized windows as visible — the mirror
-    // contract is "hidden by subordination", which only the flags encode.
-    visible: !record.hiddenByWorkspaceSwitch && !record.hiddenWithParent,
-    files: record.files
-  }))
-  try {
-    target.webContents.send('satelliteWindow:mirrorChanged', entries)
-  } catch {
-    // Why: a frame disposed mid-send must not fail the registry mutation that triggered the broadcast.
-  }
-}
-
-function broadcastMirror(): void {
-  for (const target of listAppWindows()) {
-    sendMirrorTo(target)
-  }
-}
-
 // Why module-level: handlers may re-register (tests); keep exactly one registry subscription.
 let unsubscribeRegistryBroadcast: (() => void) | null = null
+let unsubscribeParentNavigation: (() => void) | null = null
 
-export function registerSatelliteWindowHandlers(): void {
+export function registerSatelliteWindowHandlers(store?: Store): void {
   ipcMain.removeHandler('satelliteWindow:open')
   ipcMain.removeHandler('satelliteWindow:moveFile')
   ipcMain.removeHandler('satelliteWindow:raise')
   ipcMain.removeHandler('satelliteWindow:ready')
+  ipcMain.removeHandler('satelliteWindow:getMirror')
+  ipcMain.removeHandler('satelliteWindow:activateFile')
+  ipcMain.removeHandler('satelliteWindow:moveFileBack')
   ipcMain.removeAllListeners('satelliteWindow:reportOpenFiles')
   ipcMain.removeAllListeners('satelliteWindow:activeWorktreeChanged')
-  ipcMain.removeAllListeners('satelliteWindow:confirmClose')
+  ipcMain.removeAllListeners('satelliteWindow:stageSession')
+  ipcMain.removeAllListeners('satelliteWindow:stageSessionSync')
+  ipcMain.removeAllListeners('satelliteWindow:bootFailed')
+  unsubscribeParentNavigation?.()
+  unsubscribeParentNavigation = onParentRendererNavigation(clearParentMirrorReady)
   unsubscribeRegistryBroadcast?.()
   unsubscribeRegistryBroadcast = onSatelliteRegistryChanged(broadcastMirror)
-  pendingOpenFilesBySatelliteId.clear()
-  readySatelliteIds.clear()
-  dirtyOpenFileCountBySatelliteId.clear()
+  clearAllSatellitePushState()
+  clearAllParentMirrorReadiness()
+  clearAllSatelliteLifecycleState()
 
   ipcMain.handle(
     'satelliteWindow:open',
@@ -148,51 +90,34 @@ export function registerSatelliteWindowHandlers(): void {
         return null
       }
       const { satelliteId, window } = createSatelliteWindow(parent, worktreeId, file)
-      // IPC-side lifecycle: a main-frame renderer navigation (View→Reload,
-      // crash recovery) invalidates ready — pushes must queue again; close
-      // drops this module's per-satellite state.
-      window.webContents.on(
-        'did-start-navigation',
-        (_event, _url, _isInPlace, isMainFrame): void => {
-          if (isMainFrame) {
-            readySatelliteIds.delete(satelliteId)
-            // A reload resets the renderer store - stale dirtiness must not
-            // intercept a close against a booting renderer with no listener.
-            dirtyOpenFileCountBySatelliteId.delete(satelliteId)
-          }
-        }
-      )
-      // Post-review fix: intercept the native close ONLY while the renderer
-      // reports dirty files - it drains them through its save dialog, then
-      // confirms. Boot/crashed states pass through untouched, and View->Reload
-      // (no 'close' event) never reaches this path, so a vetoed reload can no
-      // longer be converted into a window close.
-      window.on('close', (closeEvent) => {
-        if (window.webContents.isDestroyed() || window.webContents.isCrashed()) {
-          return
-        }
-        if ((dirtyOpenFileCountBySatelliteId.get(satelliteId) ?? 0) === 0) {
-          return
-        }
-        closeEvent.preventDefault()
-        window.webContents.send('satelliteWindow:closeRequested')
-      })
-      window.on('closed', () => clearSatelliteIpcState(satelliteId))
+      wireSatelliteWindowLifecycle(window, satelliteId, store)
       return { satelliteId }
     }
   )
 
-  ipcMain.handle('satelliteWindow:moveFile', (event, satelliteId: unknown, file: unknown): void => {
-    if (!isTrustedUIRenderer(event.sender)) {
-      console.warn('[satellite-window] moveFile rejected: untrusted sender', event.sender.id)
-      return
+  // Why {ok} (owner decision D14): a TRUE move closes the parent tab only after
+  // main accepted the payload — the old void return hid every silent-drop path
+  // (stale record, destroyed frame) and would have lost carried drafts.
+  ipcMain.handle(
+    'satelliteWindow:moveFile',
+    (event, satelliteId: unknown, file: unknown): { ok: boolean } => {
+      if (!isTrustedUIRenderer(event.sender)) {
+        console.warn('[satellite-window] moveFile rejected: untrusted sender', event.sender.id)
+        return { ok: false }
+      }
+      if (typeof satelliteId !== 'string' || !isMovedFile(file)) {
+        console.warn('[satellite-window] moveFile rejected: invalid payload')
+        return { ok: false }
+      }
+      const record = getSatellite(satelliteId)
+      if (!record || record.window.isDestroyed() || record.window.webContents.isDestroyed()) {
+        return { ok: false }
+      }
+      pushOpenFile(satelliteId, file)
+      upsertPersistedSatelliteFile(store, satelliteId, record.worktreeId, file)
+      return { ok: true }
     }
-    if (typeof satelliteId !== 'string' || !isBootFile(file)) {
-      console.warn('[satellite-window] moveFile rejected: invalid payload')
-      return
-    }
-    pushOpenFile(satelliteId, file)
-  })
+  )
 
   ipcMain.handle('satelliteWindow:raise', (event, satelliteId: unknown): void => {
     if (!isTrustedUIRenderer(event.sender)) {
@@ -213,18 +138,95 @@ export function registerSatelliteWindowHandlers(): void {
     activateWindow(record.window, app, process.platform, setTimeout)
   })
 
+  // Dungeon 5: late-subscriber mirror snapshot — the change-driven broadcast
+  // (and the did-finish-load re-broadcast) can land before the renderer's
+  // subscription mounts, leaving interception blind after a reload.
+  ipcMain.handle('satelliteWindow:getMirror', (event): SatelliteMirrorEntry[] => {
+    if (!isTrustedUIRenderer(event.sender)) {
+      return []
+    }
+    // The snapshot fetch doubles as the parent's "renderer can apply pushes"
+    // signal (cleared again on its next main-frame navigation).
+    markParentMirrorReady(event.sender.id)
+    const target = BrowserWindow.fromWebContents(event.sender)
+    return target ? buildMirrorEntriesFor(target) : []
+  })
+
+  // Open-interception raise + tab activation (spec 2 / D17). Membership is
+  // re-checked against the LIVE registry files: the renderer's mirror can be
+  // stale for two async hops, and pushing a just-closed file would re-open it
+  // in the satellite the user closed it in.
+  ipcMain.handle(
+    'satelliteWindow:activateFile',
+    (event, satelliteId: unknown, file: unknown): { ok: boolean } => {
+      if (!isTrustedUIRenderer(event.sender)) {
+        return { ok: false }
+      }
+      if (typeof satelliteId !== 'string' || !isBootFile(file)) {
+        return { ok: false }
+      }
+      const record = getSatellite(satelliteId)
+      if (!record || record.window.isDestroyed()) {
+        return { ok: false }
+      }
+      const isMember = record.files.some(
+        (entry) =>
+          entry.filePath === file.filePath ||
+          areLocalWindowsWslPathAliases(entry.filePath, file.filePath)
+      )
+      if (!isMember) {
+        return { ok: false }
+      }
+      markSatelliteRaised(satelliteId)
+      activateWindow(record.window, app, process.platform, setTimeout)
+      // A push of an already-open path activates + focuses its tab.
+      pushOpenFile(satelliteId, file)
+      return { ok: true }
+    }
+  )
+
+  // Move Back (D6/D18): one file returns from a satellite to its parent. The
+  // invoke ACK gates the satellite's local closeFile — a drop must keep the
+  // satellite tab (mirror of the D14 move contract).
+  ipcMain.handle('satelliteWindow:moveFileBack', (event, file: unknown): { ok: boolean } => {
+    const record = getSatelliteByWebContents(event.sender)
+    if (!record || !isMovedFile(file)) {
+      return { ok: false }
+    }
+    const parent = record.parentWindow
+    if (
+      parent.isDestroyed() ||
+      parent.webContents.isDestroyed() ||
+      parent.webContents.isCrashed() ||
+      // A reloading/crashed parent cannot apply the push — keep the satellite
+      // tab (a false ok would delete the file from both windows, C15/C2).
+      !isParentMirrorReady(parent.webContents.id)
+    ) {
+      return { ok: false }
+    }
+    try {
+      parent.webContents.send('satellite:filesMovedBack', {
+        worktreeId: record.worktreeId,
+        files: [file]
+      })
+    } catch {
+      return { ok: false }
+    }
+    // D18: raise the parent only when the file lands in its ACTIVE worktree —
+    // a background-worktree return must not yank the user's focus.
+    if (getParentLastActiveWorktree(parent) === record.worktreeId) {
+      activateWindow(parent, app, process.platform, setTimeout)
+    }
+    return { ok: true }
+  })
+
   // Satellite renderer signals its boot finished; flush queued pushes.
   ipcMain.handle('satelliteWindow:ready', (event): void => {
     const record = getSatelliteByWebContents(event.sender)
     if (!record) {
       return
     }
-    readySatelliteIds.add(record.satelliteId)
-    const queue = pendingOpenFilesBySatelliteId.get(record.satelliteId)
-    pendingOpenFilesBySatelliteId.delete(record.satelliteId)
-    for (const file of queue ?? []) {
-      pushOpenFile(record.satelliteId, file)
-    }
+    markSatelliteReadyAndFlush(record.satelliteId)
   })
 
   ipcMain.on(
@@ -235,14 +237,7 @@ export function registerSatelliteWindowHandlers(): void {
         return
       }
       setSatelliteFiles(record.satelliteId, files)
-      dirtyOpenFileCountBySatelliteId.set(
-        record.satelliteId,
-        typeof dirtyOpenFileCount === 'number' &&
-          Number.isInteger(dirtyOpenFileCount) &&
-          dirtyOpenFileCount >= 0
-          ? dirtyOpenFileCount
-          : 0
-      )
+      setSatelliteDirtyOpenFileCount(record.satelliteId, dirtyOpenFileCount)
       // Why a separate count: the mirror carries edit-mode files only, but a
       // satellite showing a non-edit surface (markdown preview) is not empty.
       const surfaces =
@@ -258,16 +253,55 @@ export function registerSatelliteWindowHandlers(): void {
     }
   )
 
-  // The renderer finished draining its dirty files for an intercepted close.
-  ipcMain.on('satelliteWindow:confirmClose', (event): void => {
+  // Terminal boot failure (post-review C1/C7): the restore entry must not
+  // zombie across launches, and a subordination-hidden restored window must
+  // become visible so the user can read the error and close it.
+  ipcMain.on('satelliteWindow:bootFailed', (event): void => {
     const record = getSatelliteByWebContents(event.sender)
-    if (!record || record.window.isDestroyed()) {
+    if (!record) {
       return
     }
-    // Why destroy(): it skips the 'close' intercept and beforeunload - the
-    // renderer just drained, nothing is left to guard - while 'closed' still
-    // fires so registry/IPC cleanup stays intact.
-    record.window.destroy()
+    store?.removeSatelliteWindowSession(record.satelliteId)
+    markSatelliteRaised(record.satelliteId)
+    if (!record.window.isDestroyed() && !record.window.isVisible()) {
+      record.window.showInactive()
+    }
+  })
+
+  // Continuous session staging (5-7): the latest snapshot per satellite is
+  // what restart restores. Bounds are captured main-side (minimized windows
+  // report iconic bounds — keep the previous rectangle then).
+  const applyStagedSession = (event: Electron.IpcMainEvent, files: unknown): void => {
+    const record = getSatelliteByWebContents(event.sender)
+    if (!record || !store || !Array.isArray(files) || !files.every((file) => isMovedFile(file))) {
+      return
+    }
+    // Post-review C8: undelivered queued pushes mean the renderer's snapshot is
+    // pre-restore — persisting it would clobber the seeded entry's drafts.
+    if (hasPendingOpenFiles(record.satelliteId)) {
+      return
+    }
+    const bounds =
+      !record.window.isDestroyed() && !record.window.isMinimized()
+        ? record.window.getBounds()
+        : store
+            .getSatelliteWindowSessions()
+            .find((candidate) => candidate.satelliteId === record.satelliteId)?.bounds
+    store.setSatelliteWindowSession({
+      satelliteId: record.satelliteId,
+      worktreeId: record.worktreeId,
+      files: files as SatelliteMovedFile[],
+      ...(bounds ? { bounds } : {})
+    })
+  }
+  ipcMain.on('satelliteWindow:stageSession', (event, files: unknown): void => {
+    applyStagedSession(event, files)
+  })
+  // Why sendSync (beforeunload cannot await): returnValue is set FIRST so a
+  // validation bail can never hang the closing renderer.
+  ipcMain.on('satelliteWindow:stageSessionSync', (event, files: unknown): void => {
+    event.returnValue = true
+    applyStagedSession(event, files)
   })
 
   // Spec 5: the parent reports its active worktree; subordinate satellites

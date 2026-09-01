@@ -26,6 +26,11 @@ import { useOptionalShortcutLabel } from '@/hooks/useShortcutLabel'
 import type { OpenFile } from '../../store/slices/editor'
 import { shouldBlockEditorTabLocalOpen } from './editor-tab-local-open-guard'
 import { getRendererWindowSurface } from '@/lib/renderer-window-surface'
+import {
+  moveEditorFileBackToParent,
+  moveEditorFileToNewSatellite
+} from '@/lib/satellite-editor-file-move'
+import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { TabWorkspaceLayoutMenuSection } from './TabWorkspaceLayoutMenuSection'
 import { TAB_CONTEXT_MENU_CONTENT_CLASS } from './tab-context-menu-sizing'
@@ -257,12 +262,14 @@ export function EditorFileTabContextMenu({
           <ExternalLink className="size-3.5" />
           {revealLabel}
         </DropdownMenuItem>
-        {/* Expedition-5 spike: local plain edit tabs only — SSH/runtime/SFTP owners
-            need broader store hydration, untitled tabs risk on-disk deletion, and
-            read-only/mirrored tabs have no save path in a child window. Hidden in
-            satellites: main rejects satellite-of-satellite opens, so the item
-            would silently no-op there. */}
+        {/* TRUE move (dungeon 5): local plain edit tabs only — SSH/runtime/SFTP
+            owners need broader store hydration, untitled tabs risk on-disk
+            deletion (closeFile deletes untouched untitled files), pinned tabs
+            are excluded because closeFile bypasses pin guards (D16), and
+            read-only/mirrored tabs have no save path in a satellite. Hidden in
+            satellites: main rejects satellite-of-satellite opens. */}
         {getRendererWindowSurface() !== 'satellite' &&
+        !isPinned &&
         file.mode === 'edit' &&
         !file.sftpTargetId &&
         !file.runtimeEnvironmentId &&
@@ -275,17 +282,57 @@ export function EditorFileTabContextMenu({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => {
-                void window.api.satelliteWindow.open(file.worktreeId, {
-                  filePath: file.filePath,
-                  relativePath: file.relativePath,
-                  language: resolvedLanguage
+                void moveEditorFileToNewSatellite({
+                  file,
+                  language: resolvedLanguage,
+                  unifiedTabId: file.tabId ?? unifiedTabId
+                }).then((moved) => {
+                  if (!moved) {
+                    toast.error(
+                      translate(
+                        'components.tab.bar.EditorFileTabContextMenu.moveToNewWindowFailed',
+                        'Could not move the file to a new window.'
+                      )
+                    )
+                  }
                 })
               }}
             >
               <AppWindow className="size-3.5" />
               {translate(
                 'components.tab.bar.EditorFileTabContextMenu.moveToNewWindow',
-                'Open in New Window (Spike)'
+                'Move to New Window'
+              )}
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {/* D6 Move Back: the explicit return path — satellite tab close stays a
+            plain close. Satellite files are local edit tabs by construction. */}
+        {getRendererWindowSurface() === 'satellite' && file.mode === 'edit' ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                void moveEditorFileBackToParent({
+                  file,
+                  language: resolvedLanguage,
+                  unifiedTabId: file.tabId ?? unifiedTabId
+                }).then((moved) => {
+                  if (!moved) {
+                    toast.error(
+                      translate(
+                        'components.tab.bar.EditorFileTabContextMenu.moveBackFailed',
+                        'Could not move the file back to the main window.'
+                      )
+                    )
+                  }
+                })
+              }}
+            >
+              <AppWindow className="size-3.5" />
+              {translate(
+                'components.tab.bar.EditorFileTabContextMenu.moveBackToMainWindow',
+                'Move Back to Main Window'
               )}
             </DropdownMenuItem>
           </>

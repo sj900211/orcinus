@@ -131,7 +131,11 @@ export function createMarkdownLinkAction(
         )
         if (line !== undefined) {
           const fileId = getOpenedEditFileIdAfterOpen(get(), target.absolutePath, ctx.worktreeId)
-          scheduleEditorLineReveal(get, target.absolutePath, line, column, fileId)
+          // Post-review-2 C10: skip when the open was intercepted into a
+          // satellite — the bare-path fallback id would arm a stale reveal.
+          if (get().openFiles.some((candidate) => candidate.id === fileId)) {
+            scheduleEditorLineReveal(get, target.absolutePath, line, column, fileId)
+          }
         }
         return
       }
@@ -176,9 +180,13 @@ export function createMarkdownLinkAction(
 
       if (line !== undefined) {
         const fileId = getOpenedEditFileIdAfterOpen(get(), absolutePath, ctx.worktreeId)
-        // Why: MonacoEditor drops the reveal if the file stays in rich mode; switch to source using the resolved owner-qualified id.
-        get().setMarkdownViewMode(fileId, 'source')
-        scheduleEditorLineReveal(get, absolutePath, line, column, fileId)
+        // Post-review C10: skip when the open was intercepted into a satellite —
+        // the fallback id mounts nothing here and the reveal would go stale.
+        if (get().openFiles.some((candidate) => candidate.id === fileId)) {
+          // Why: MonacoEditor drops the reveal if the file stays in rich mode; switch to source using the resolved owner-qualified id.
+          get().setMarkdownViewMode(fileId, 'source')
+          scheduleEditorLineReveal(get, absolutePath, line, column, fileId)
+        }
       }
     }
   }

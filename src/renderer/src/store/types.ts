@@ -44,6 +44,7 @@ import type { TaskCreationDraftsSlice } from './slices/task-creation-drafts'
 import type { RemoteServerUpdatesSlice } from './slices/remote-server-updates'
 import type { TerminalQuickCommandHostsSlice } from './slices/terminal-quick-command-hosts'
 import type { ProjectWindowsSlice } from './slices/project-windows'
+import type { SatelliteMirrorSlice } from './slices/satellite-mirror'
 
 export type AppState = RepoSlice &
   SparsePresetsSlice &
@@ -88,4 +89,5 @@ export type AppState = RepoSlice &
   TaskCreationDraftsSlice &
   RemoteServerUpdatesSlice &
   TerminalQuickCommandHostsSlice &
-  ProjectWindowsSlice
+  ProjectWindowsSlice &
+  SatelliteMirrorSlice

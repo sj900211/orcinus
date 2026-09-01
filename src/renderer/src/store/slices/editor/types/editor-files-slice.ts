@@ -1,3 +1,4 @@
+import type { SatelliteMovedFile } from '../../../../../../shared/satellite-window-payloads'
 import type { HttpLinkSourceOwner } from '@/lib/http-link-routing'
 import type {
   CheckRunDetailsTabPatch,
@@ -44,8 +45,14 @@ export type EditorFilesSlice = {
       forceContentReload?: boolean
       focusEditor?: boolean
       reopenId?: string
+      /** Satellite apply paths: skip the open-interception gate (D5 dungeon,
+       *  post-review C7 — the mirror still lists a returning file). */
+      suppressSatelliteInterception?: boolean
     }
   ) => string
+  /** Satellite TRUE move (dungeon 5, D7): openFile plus an atomic
+   *  dirty-draft/cursor/view-mode restore (hydrate-session contract). */
+  applyMovedEditorFile: (file: SatelliteMovedFile & { worktreeId: string }) => string
   openNewMarkdownInActiveWorkspace: (groupId: string) => Promise<void>
   // Why: sequences openFile/setMarkdownViewMode/reveal around an async Monaco remount. See docs/markdown-internal-link-opening-design.md.
   activateMarkdownLink: (

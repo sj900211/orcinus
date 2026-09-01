@@ -425,6 +425,7 @@ export function getDefaultRepoHookSettings(): RepoHookSettings {
 export function getDefaultPersistedState(homedir: string): PersistedState {
   return {
     schemaVersion: SCHEMA_VERSION,
+    satelliteWindowSessions: [],
     repos: [],
     projects: [],
     projectHostSetups: [],

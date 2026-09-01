@@ -1,3 +1,5 @@
+import { isAppQuitting } from '../app-quit-state'
+import { markSatelliteCloseBypass } from '../ipc/satellite-window-lifecycle'
 import type { BrowserWindow } from 'electron'
 import type { SatelliteFileEntry } from '../../shared/satellite-window-payloads'
 
@@ -32,6 +34,8 @@ export type SatelliteRecord = {
   minimizedBeforeHide: boolean
   /** Captured at creation — reading window.webContents.id in 'closed' throws. */
   trustedWebContentsId: number
+  /** Restore-at-launch windows reveal via showInactive (no focus steal). */
+  revealInactive?: boolean
 }
 
 const satellitesById = new Map<string, SatelliteRecord>()
@@ -47,12 +51,34 @@ const lastActiveWorktreeByParent = new Map<BrowserWindow, string>()
 // Why bundled + refcounted: ONE listener set per parent window, installed with
 // its first satellite and removed with its last, so a parent that outlives
 // many sequential satellites never accumulates listeners.
-type ParentHooks = { closed: () => void; hide: () => void; show: () => void; loaded: () => void }
+type ParentHooks = {
+  closed: () => void
+  hide: () => void
+  show: () => void
+  loaded: () => void
+  navigated: (event: unknown, url: string, isInPlace: boolean, isMainFrame: boolean) => void
+  crashed: () => void
+}
 const parentHooksByWindow = new Map<BrowserWindow, ParentHooks>()
 
 function notifyRegistryChanged(): void {
   for (const listener of registryChangeListeners) {
     listener()
+  }
+}
+
+// Parent renderer main-frame navigations (View->Reload, crash recovery): the
+// fold-back router must treat that parent as unable to apply pushes until its
+// fresh renderer re-fetches the mirror.
+const parentNavigationListeners: ((webContentsId: number) => void)[] = []
+
+export function onParentRendererNavigation(listener: (webContentsId: number) => void): () => void {
+  parentNavigationListeners.push(listener)
+  return () => {
+    const index = parentNavigationListeners.indexOf(listener)
+    if (index !== -1) {
+      parentNavigationListeners.splice(index, 1)
+    }
   }
 }
 
@@ -83,6 +109,11 @@ export function listSatellitesForParent(parent: BrowserWindow): SatelliteRecord[
   )
 }
 
+/** The parent's last known active worktree (creation-time + switch reports). */
+export function getParentLastActiveWorktree(parent: BrowserWindow): string | null {
+  return lastActiveWorktreeByParent.get(parent) ?? null
+}
+
 export function listSatellites(): SatelliteRecord[] {
   return [...satellitesById.values()].filter((record) => !record.window.isDestroyed())
 }
@@ -111,6 +142,13 @@ function hideForSubordination(record: SatelliteRecord): void {
  *  windows return to the taskbar minimized (minimize() re-creates the taskbar
  *  entry without raising anything); others reappear without stealing focus. */
 function revealFromSubordination(record: SatelliteRecord): void {
+  // Post-review C9: a still-loading window has never painted — clearing the
+  // flags is enough; its own ready-to-show gate performs the visual reveal
+  // (avoiding a bare background-color flash).
+  if (record.window.webContents.isLoading()) {
+    record.minimizedBeforeHide = false
+    return
+  }
   if (record.minimizedBeforeHide) {
     record.window.minimize()
   } else {
@@ -166,13 +204,31 @@ function attachParentHooks(parent: BrowserWindow): void {
     // Why: a parent renderer reload (View→Reload, crash recovery) resubscribes
     // AFTER the last mirror broadcast; nudging the registry re-broadcasts the
     // mirror so the fresh renderer is not blind to its satellites.
-    loaded: () => notifyRegistryChanged()
+    loaded: () => notifyRegistryChanged(),
+    navigated: (_event: unknown, _url: string, _isInPlace: boolean, isMainFrame: boolean) => {
+      if (isMainFrame && !parent.isDestroyed() && !parent.webContents.isDestroyed()) {
+        for (const listener of parentNavigationListeners) {
+          listener(parent.webContents.id)
+        }
+      }
+    },
+    crashed: () => {
+      // render-process-gone: the parent cannot apply pushes until its recovery
+      // reload re-fetches the mirror — same contract as a navigation.
+      if (!parent.isDestroyed() && !parent.webContents.isDestroyed()) {
+        for (const listener of parentNavigationListeners) {
+          listener(parent.webContents.id)
+        }
+      }
+    }
   }
   parentHooksByWindow.set(parent, hooks)
   parent.on('closed', hooks.closed)
   parent.on('hide', hooks.hide)
   parent.on('show', hooks.show)
   parent.webContents.on('did-finish-load', hooks.loaded)
+  parent.webContents.on('did-start-navigation', hooks.navigated)
+  parent.webContents.on('render-process-gone', hooks.crashed)
 }
 
 function detachParentHooksIfUnused(parent: BrowserWindow): void {
@@ -190,6 +246,8 @@ function detachParentHooksIfUnused(parent: BrowserWindow): void {
     parent.removeListener('show', hooks.show)
     if (!parent.isDestroyed() && !parent.webContents.isDestroyed()) {
       parent.webContents.removeListener('did-finish-load', hooks.loaded)
+      parent.webContents.removeListener('did-start-navigation', hooks.navigated)
+      parent.webContents.removeListener('render-process-gone', hooks.crashed)
     }
   }
 }
@@ -273,8 +331,30 @@ export function applyParentActiveWorktree(parent: BrowserWindow, worktreeId: str
 }
 
 /** Cascade: satellites are subordinate — parent close closes them, hidden or not. */
+/** Worktree removal (post-review C2): the persisted entries are pruned by the
+ *  Store, but a LIVE satellite would keep re-staging them back — destroy it. */
+export function destroySatellitesForWorktree(worktreeId: string): void {
+  for (const record of listSatellites()) {
+    if (record.worktreeId === worktreeId && !record.window.isDestroyed()) {
+      record.window.destroy()
+    }
+  }
+}
+
 export function closeSatellitesForParent(parent: BrowserWindow): void {
+  // Quit path (post-review C11): Electron's quit closes every satellite itself
+  // — the intercept passes via the quitting guard and beforeunload runs the
+  // final sync stage. A destroy() here would race that and lose the freshest
+  // keystrokes from the restore snapshot.
+  if (isAppQuitting()) {
+    return
+  }
   for (const record of listSatellitesForParent(parent)) {
+    // Non-quit cascade (post-review C3): bypass the dirty-block (the parent is
+    // already gone — blocking would orphan the window) but use close() so the
+    // renderer's beforeunload still stages the final snapshot; the entry
+    // survives for restore-at-launch.
+    markSatelliteCloseBypass(record.satelliteId)
     record.window.close()
   }
 }

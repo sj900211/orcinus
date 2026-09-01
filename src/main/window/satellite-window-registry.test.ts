@@ -23,6 +23,7 @@ type TestWindow = BrowserWindow & {
   hide: ReturnType<typeof vi.fn>
   showInactive: ReturnType<typeof vi.fn>
   minimize: ReturnType<typeof vi.fn>
+  destroy: ReturnType<typeof vi.fn>
   close: ReturnType<typeof vi.fn>
 }
 
@@ -34,6 +35,7 @@ function makeWindow(): TestWindow {
     listeners: {} as Record<string, (() => void)[]>,
     webContents: {
       isDestroyed: (): boolean => false,
+      isLoading: (): boolean => false,
       on: vi.fn(),
       removeListener: vi.fn()
     },
@@ -54,6 +56,9 @@ function makeWindow(): TestWindow {
     }),
     minimize: vi.fn(() => {
       window.minimized = true
+    }),
+    destroy: vi.fn((): void => {
+      window.destroyed = true
     }),
     close: vi.fn(),
     on(event: string, listener: () => void): void {
@@ -131,9 +136,13 @@ describe('satellite-window-registry', () => {
     registerSatellite(record)
     const off = onSatelliteRegistryChanged(() => events.push('changed'))
 
-    const files = [{ fileId: 'f', filePath: 'C:\\a.ts' }]
+    const files = [
+      { fileId: 'f', filePath: 'C:\\a.ts', relativePath: 'a.ts', language: 'typescript' }
+    ]
     setSatelliteFiles(record.satelliteId, files)
-    setSatelliteFiles(record.satelliteId, [{ fileId: 'f', filePath: 'C:\\a.ts' }])
+    setSatelliteFiles(record.satelliteId, [
+      { fileId: 'f', filePath: 'C:\\a.ts', relativePath: 'a.ts', language: 'typescript' }
+    ])
 
     expect(events).toHaveLength(1)
     off()
@@ -169,6 +178,8 @@ describe('satellite-window-registry', () => {
 
     fire(parent, 'closed')
 
+    // 5-8 C3/C11: non-quit cascade uses bypass+close() so the renderer's
+    // beforeunload still stages the final snapshot before the window dies.
     expect((visible.window as TestWindow).close).toHaveBeenCalledTimes(1)
     expect((hidden.window as TestWindow).close).toHaveBeenCalledTimes(1)
   })

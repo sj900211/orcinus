@@ -23,6 +23,7 @@ import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
 import { getOrCreateRendererRoot } from './lib/react-renderer-root'
 import { setRendererWindowSurface } from './lib/renderer-window-surface'
+import { startSatelliteSessionStaging } from './lib/satellite-session-staging'
 import { EditorChildShell } from './components/editor-child/EditorChildShell'
 import { EditorChildCloseCoordinator } from './components/editor-child/EditorChildCloseCoordinator'
 import RecentTabSwitcher from './components/tab-bar/RecentTabSwitcher'
@@ -225,6 +226,9 @@ function useEditorChildBoot(): BootPhase {
         }
       } catch (error) {
         recordRendererCrashBreadcrumb('editor_child_boot_failed')
+        // Terminal boot failure (missing repo etc.): main drops this window's
+        // restore entry so it cannot reappear as a zombie at every launch.
+        window.api.satelliteWindow.notifyBootFailed?.()
         if (!disposed) {
           setState({
             phase: 'error',
@@ -260,7 +264,12 @@ function SatelliteWindowSync({ worktreeId }: { worktreeId: string }): null {
       window.api.satelliteWindow.reportOpenFiles(
         openFiles
           .filter((file) => file.mode === 'edit')
-          .map((file) => ({ fileId: file.id, filePath: file.filePath })),
+          .map((file) => ({
+            fileId: file.id,
+            filePath: file.filePath,
+            relativePath: file.relativePath,
+            language: file.language
+          })),
         openFiles.length,
         // Why: main intercepts the native close only while dirty files exist,
         // so unsaved edits drain through the save dialog instead of vanishing.
@@ -273,10 +282,14 @@ function SatelliteWindowSync({ worktreeId }: { worktreeId: string }): null {
         reportFiles()
       }
     })
+    const stopStaging = startSatelliteSessionStaging()
     const offOpenFile = window.api.satelliteWindow.onOpenFile((file) => {
-      useAppStore.getState().openFile({ ...file, worktreeId, mode: 'edit' }, { focusEditor: true })
+      // TRUE move (dungeon 5): pushes carry draft/cursor/view-mode —
+      // applyMovedEditorFile = openFile + atomic dirty-restore.
+      useAppStore.getState().applyMovedEditorFile({ ...file, worktreeId })
     })
     return () => {
+      stopStaging()
       unsubscribe()
       offOpenFile()
     }

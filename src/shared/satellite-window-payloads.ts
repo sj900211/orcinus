@@ -8,6 +8,10 @@ export type SatelliteFileEntry = {
    *  check when intercepting opens — exact-fileId matching would miss
    *  `/mnt/c/…` vs `C:\…` aliases and duplicate the file across windows. */
   filePath: string
+  /** Why carried: interception activations and crashed-satellite salvage
+   *  rebuild boot files from mirror entries alone. */
+  relativePath: string
+  language: string
 }
 
 /** The file a satellite opens — at boot (query params) or via satellite:openFile push. */
@@ -24,4 +28,53 @@ export type SatelliteMirrorEntry = {
   /** false while hidden by a workspace switch (spec 5) — raise still works. */
   visible: boolean
   files: SatelliteFileEntry[]
+}
+
+/** A plain-object Monaco selection (structural twin of monaco ISelection —
+ *  shared code must not import monaco types). */
+export type SatelliteEditorSelection = {
+  selectionStartLineNumber: number
+  selectionStartColumn: number
+  positionLineNumber: number
+  positionColumn: number
+}
+
+/** True-move payload (dungeon 5, decision D7 draft-carry): a boot file plus the
+ *  state closeFile destroys in the parent. All extras optional — a clean move
+ *  carries none, and the satellite treats unknown view-mode strings as absent.
+ *  dirtyDraftContent + lastKnownDiskSignature travel TOGETHER or not at all:
+ *  the satellite only arms its disk-baseline verification gate when both exist
+ *  (hydrate-editor-session contract — flag without signature kills autosave). */
+export type SatelliteMovedFile = SatelliteBootFile & {
+  dirtyDraftContent?: string
+  lastKnownDiskSignature?: string
+  cursorLine?: number
+  scrollTop?: number
+  selections?: SatelliteEditorSelection[]
+  markdownViewMode?: string
+}
+
+/** Files returning from a satellite to its parent (Move Back / fold-back). */
+export type SatelliteFilesMovedBack = {
+  worktreeId: string
+  files: SatelliteMovedFile[]
+}
+
+/** Window rectangle persisted with a satellite session. */
+export type SatelliteWindowBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** One satellite window persisted for restore-at-launch (spec revision 5-7):
+ *  the renderer stages this continuously (debounced + a synchronous final
+ *  stage in beforeunload), and main recreates the window at next launch via
+ *  the existing open + moveFile-push-queue path (drafts ride the pushes). */
+export type PersistedSatelliteWindowSession = {
+  satelliteId: string
+  worktreeId: string
+  files: SatelliteMovedFile[]
+  bounds?: SatelliteWindowBounds
 }

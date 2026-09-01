@@ -168,7 +168,7 @@ export function registerCoreHandlers(
   registerOnboardingHandlers(store)
   registerDashboardPopoutHandlers(store, keybindings)
   registerProjectWindowHandlers(store, keybindings)
-  registerSatelliteWindowHandlers()
+  registerSatelliteWindowHandlers(store)
   registerTerminalPreviewHandlers(runtime)
   registerDeveloperPermissionHandlers()
   // Why: diagnostics handlers are wired alongside telemetry but the two

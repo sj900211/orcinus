@@ -1,3 +1,4 @@
+import type { PersistedSatelliteWindowSession } from './satellite-window-payloads'
 import type { ExecutionHostId } from './execution-host'
 import type {
   RemovedSshTargetTombstone,
@@ -49,6 +50,8 @@ export type PersistedMobileClientTabSelections = Record<
 // ─── Persistence shape ──────────────────────────────────────────────
 export type PersistedState = {
   schemaVersion: number
+  /** Satellite editor windows to restore at launch (Expedition 5, 5-7). */
+  satelliteWindowSessions?: PersistedSatelliteWindowSession[]
   repos: Repo[]
   projects: Project[]
   projectHostSetups: ProjectHostSetup[]
