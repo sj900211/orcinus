@@ -26,7 +26,10 @@ import { useOptionalShortcutLabel } from '@/hooks/useShortcutLabel'
 import type { OpenFile } from '../../store/slices/editor'
 import { shouldBlockEditorTabLocalOpen } from './editor-tab-local-open-guard'
 import { getRendererWindowSurface } from '@/lib/renderer-window-surface'
+import { getConnectionIdFromState } from '@/lib/connection-context'
 import {
+  isEditorFileEntityPinned,
+  isEditorFileMovableToSatellite,
   moveEditorFileBackToParent,
   moveEditorFileToNewSatellite
 } from '@/lib/satellite-editor-file-move'
@@ -59,7 +62,6 @@ type EditorFileTabContextMenuProps = {
   canRename: boolean
   canShowMarkdownPreview: boolean
   resolvedLanguage: string
-  repoConnectionId: string | null
   skipMenuFocusRestoreRef: React.MutableRefObject<boolean>
   onOpenChange: (open: boolean) => void
   onActivate: () => void
@@ -96,7 +98,6 @@ export function EditorFileTabContextMenu({
   canRename,
   canShowMarkdownPreview,
   resolvedLanguage,
-  repoConnectionId,
   skipMenuFocusRestoreRef,
   onOpenChange,
   onActivate,
@@ -109,6 +110,14 @@ export function EditorFileTabContextMenu({
   onCloseToLeft,
   onOpenMarkdownPreview
 }: EditorFileTabContextMenuProps): React.JSX.Element {
+  // Review C8/C10: same resolver as the drag-out path — the old prop
+  // (`repo?.connectionId ?? null`) collapsed "repo unknown" (undefined, e.g.
+  // mid-SSH-hydration after a restore) into eligible-null.
+  const repoConnectionId = useAppStore((s) => getConnectionIdFromState(s, file.worktreeId))
+  // Review C11: pin gate at entity level (cross-group duplicates of the file).
+  const isMoveEntityPinned = useAppStore((s) =>
+    isEditorFileEntityPinned(s.unifiedTabsByWorktree[file.worktreeId], file.id)
+  )
   const renameShortcut = useOptionalShortcutLabel('tab.rename')
   const closeShortcut = useOptionalShortcutLabel('tab.close')
   const closeAllShortcut = useOptionalShortcutLabel('tab.closeAll')
@@ -262,22 +271,12 @@ export function EditorFileTabContextMenu({
           <ExternalLink className="size-3.5" />
           {revealLabel}
         </DropdownMenuItem>
-        {/* TRUE move (dungeon 5): local plain edit tabs only — SSH/runtime/SFTP
-            owners need broader store hydration, untitled tabs risk on-disk
-            deletion (closeFile deletes untouched untitled files), pinned tabs
-            are excluded because closeFile bypasses pin guards (D16), and
-            read-only/mirrored tabs have no save path in a satellite. Hidden in
-            satellites: main rejects satellite-of-satellite opens. */}
+        {/* TRUE move (dungeon 5): the WHY of each gate lives on the shared
+            predicate, reused by the dungeon-6 tab drag-out so the two paths
+            never drift. Hidden in satellites: main rejects
+            satellite-of-satellite opens. */}
         {getRendererWindowSurface() !== 'satellite' &&
-        !isPinned &&
-        file.mode === 'edit' &&
-        !file.sftpTargetId &&
-        !file.runtimeEnvironmentId &&
-        !file.externalSshTargetId &&
-        !file.readOnly &&
-        !file.isUntitled &&
-        !file.mirroredFromRuntimeSession &&
-        repoConnectionId === null ? (
+        isEditorFileMovableToSatellite({ file, isPinned: isMoveEntityPinned, repoConnectionId }) ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem

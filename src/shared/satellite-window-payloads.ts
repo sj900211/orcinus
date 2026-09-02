@@ -78,3 +78,13 @@ export type PersistedSatelliteWindowSession = {
   files: SatelliteMovedFile[]
   bounds?: SatelliteWindowBounds
 }
+
+/** Main-side cursor hit test result (dungeon 6 tab drag-out): which satellite
+ *  of the REQUESTING parent window sits under the OS cursor. Main answers this
+ *  itself via screen.getCursorScreenPoint() — cursor point and window bounds
+ *  share the DIP coordinate space, so no renderer coordinate mapping (and no
+ *  mixed-DPI math) is ever involved. */
+export type SatelliteCursorHit = {
+  satelliteId: string
+  worktreeId: string
+}

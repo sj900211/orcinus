@@ -6,6 +6,11 @@ import { resolveTabInsertion } from './tab-insertion'
 import { resolveSourceGroupRestoreOnDrop } from './tab-drag-preview-target'
 import { getDragPointer } from './tab-drag-pointer'
 import {
+  attemptSatelliteDragoutMove,
+  resolveSatelliteDragoutCandidate
+} from '../../lib/satellite-tab-dragout'
+import { getLastTabDragPointerClientPoint } from './tab-drag-pointer-sensor'
+import {
   resolveActivePaneColumnSplitTarget,
   type TabGroupPanelGeometrySnapshot
 } from './tab-group-panel-split-target'
@@ -37,6 +42,33 @@ export function commitTabDragDrop({
 
   if (!isTabDragData(activeData) || activeData.worktreeId !== worktreeId) {
     finishDrag(true)
+    return
+  }
+
+  // Dungeon 6 (D20): a release OUTSIDE the window is never an in-window drop,
+  // but dnd-kit's closestCenter fallback still supplies a nearest-tab `over`
+  // that used to commit a phantom reorder. Snap back instead and — for
+  // eligible editor tabs — try the satellite under the cursor. Order matters:
+  // resolve synchronously (a 0ms missed-end timer clears the drag state right
+  // after release), finish the drag FIRST, then hit-test + move detached.
+  // Review C3: dnd-kit's delta is scroll-adjusted — a mid-drag tab-strip
+  // wheel scroll would skew activatorEvent+delta by the scrolled distance, so
+  // the sensor's raw release point classifies outside-ness (getDragPointer
+  // stays the fallback and keeps serving the in-window paths, where dnd-kit's
+  // scroll adjustment is intentional).
+  const releasePointer = getLastTabDragPointerClientPoint() ?? getDragPointer(event)
+  if (
+    releasePointer &&
+    (releasePointer.x < 0 ||
+      releasePointer.y < 0 ||
+      releasePointer.x >= window.innerWidth ||
+      releasePointer.y >= window.innerHeight)
+  ) {
+    const dragoutCandidate = resolveSatelliteDragoutCandidate(activeData)
+    finishDrag(true)
+    if (dragoutCandidate) {
+      void attemptSatelliteDragoutMove(dragoutCandidate)
+    }
     return
   }
 

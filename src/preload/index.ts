@@ -2540,6 +2540,8 @@ const api = {
       ipcRenderer.invoke('satelliteWindow:moveFile', satelliteId, file),
     raise: (satelliteId: string): Promise<void> =>
       ipcRenderer.invoke('satelliteWindow:raise', satelliteId),
+    hitTestCursor: (): Promise<{ satelliteId: string; worktreeId: string } | null> =>
+      ipcRenderer.invoke('satelliteWindow:hitTestCursor'),
     getMirror: (): Promise<
       {
         satelliteId: string

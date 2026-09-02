@@ -1,12 +1,14 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import type { Store } from '../persistence'
 import type {
+  SatelliteCursorHit,
   SatelliteMirrorEntry,
   SatelliteMovedFile
 } from '../../shared/satellite-window-payloads'
 import { areLocalWindowsWslPathAliases } from '../../shared/cross-platform-path'
 import { createSatelliteWindow } from '../window/create-satellite-window'
 import { activateWindow } from '../window/focus-existing-window'
+import { hitTestSatelliteAtCursor } from '../window/satellite-window-hit-test'
 import {
   applyParentActiveWorktree,
   getParentLastActiveWorktree,
@@ -22,12 +24,16 @@ import { isBootFile, isFileEntryList, isMovedFile } from './satellite-window-pay
 import {
   hasPendingOpenFiles,
   clearAllSatellitePushState,
+  isSatelliteRendererGone,
   markSatelliteReadyAndFlush,
-  pushOpenFile
+  pushOpenFile,
+  wouldClobberSatelliteResidentDirtyFile
 } from './satellite-push-queue'
 import { broadcastMirror, buildMirrorEntriesFor } from './satellite-window-mirror'
 import {
+  acknowledgeSeededSatelliteFiles,
   clearAllSatelliteLifecycleState,
+  mergeUnackedSeededSatelliteFiles,
   setSatelliteDirtyOpenFileCount,
   upsertPersistedSatelliteFile,
   wireSatelliteWindowLifecycle
@@ -51,6 +57,7 @@ export function registerSatelliteWindowHandlers(store?: Store): void {
   ipcMain.removeHandler('satelliteWindow:open')
   ipcMain.removeHandler('satelliteWindow:moveFile')
   ipcMain.removeHandler('satelliteWindow:raise')
+  ipcMain.removeHandler('satelliteWindow:hitTestCursor')
   ipcMain.removeHandler('satelliteWindow:ready')
   ipcMain.removeHandler('satelliteWindow:getMirror')
   ipcMain.removeHandler('satelliteWindow:activateFile')
@@ -110,7 +117,12 @@ export function registerSatelliteWindowHandlers(store?: Store): void {
         return { ok: false }
       }
       const record = getSatellite(satelliteId)
-      if (!record || record.window.isDestroyed() || record.window.webContents.isDestroyed()) {
+      // Review C5/C6: refuse pushes that would strand or clobber data.
+      if (
+        !record ||
+        isSatelliteRendererGone(record) ||
+        wouldClobberSatelliteResidentDirtyFile(record, file)
+      ) {
         return { ok: false }
       }
       pushOpenFile(satelliteId, file)
@@ -136,6 +148,23 @@ export function registerSatelliteWindowHandlers(store?: Store): void {
     // window; the registry notify also refreshes the mirror's visible flags.
     markSatelliteRaised(satelliteId)
     activateWindow(record.window, app, process.platform, setTimeout)
+  })
+
+  // Dungeon 6 (tab drag-out, D20/D21): which satellite of the SENDER's window
+  // is under the OS cursor at drop time. Main-side on purpose — cursor point
+  // and window bounds share the DIP space, so the renderer never has to map
+  // client coordinates across mixed-DPI monitors.
+  ipcMain.handle('satelliteWindow:hitTestCursor', (event): SatelliteCursorHit | null => {
+    if (!isTrustedUIRenderer(event.sender)) {
+      console.warn('[satellite-window] hitTestCursor rejected: untrusted sender', event.sender.id)
+      return null
+    }
+    // Satellites are trusted renderers too, but they host no tab drag-out.
+    if (getSatelliteByWebContents(event.sender)) {
+      return null
+    }
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    return parent ? hitTestSatelliteAtCursor(parent) : null
   })
 
   // Dungeon 5: late-subscriber mirror snapshot — the change-driven broadcast
@@ -166,7 +195,7 @@ export function registerSatelliteWindowHandlers(store?: Store): void {
         return { ok: false }
       }
       const record = getSatellite(satelliteId)
-      if (!record || record.window.isDestroyed()) {
+      if (!record || isSatelliteRendererGone(record)) {
         return { ok: false }
       }
       const isMember = record.files.some(
@@ -237,6 +266,10 @@ export function registerSatelliteWindowHandlers(store?: Store): void {
         return
       }
       setSatelliteFiles(record.satelliteId, files)
+      acknowledgeSeededSatelliteFiles(
+        record.satelliteId,
+        files.map((entry) => entry.filePath)
+      )
       setSatelliteDirtyOpenFileCount(record.satelliteId, dirtyOpenFileCount)
       // Why a separate count: the mirror carries edit-mode files only, but a
       // satellite showing a non-edit surface (markdown preview) is not empty.
@@ -290,7 +323,11 @@ export function registerSatelliteWindowHandlers(store?: Store): void {
     store.setSatelliteWindowSession({
       satelliteId: record.satelliteId,
       worktreeId: record.worktreeId,
-      files: files as SatelliteMovedFile[],
+      files: mergeUnackedSeededSatelliteFiles(
+        store,
+        record.satelliteId,
+        files as SatelliteMovedFile[]
+      ),
       ...(bounds ? { bounds } : {})
     })
   }

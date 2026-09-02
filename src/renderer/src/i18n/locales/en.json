@@ -16660,6 +16660,7 @@
     },
     "noTabs": "No files open in this window.",
     "moveBackDraftDiscarded": "\"{{value0}}\" already has unsaved local edits — the returning draft was discarded.",
-    "closeBlockedDirty": "Save or close the unsaved files before closing this window."
+    "closeBlockedDirty": "Save or close the unsaved files before closing this window.",
+    "dragMoveFailed": "Could not move the file to that window."
   }
 }

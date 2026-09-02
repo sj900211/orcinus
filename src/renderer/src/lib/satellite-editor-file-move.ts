@@ -2,7 +2,9 @@ import type {
   SatelliteFilesMovedBack,
   SatelliteMovedFile
 } from '../../../shared/satellite-window-payloads'
+import type { Tab } from '../../../shared/tab-types'
 import { requestEditorSaveQuiesce } from '@/components/editor/editor-autosave'
+import { flushLiveMonacoViewState } from '@/components/editor/monaco-view-state-persistence'
 import { editorSelectionCache, scrollTopCache } from '@/lib/scroll-cache'
 import { useAppStore } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
@@ -40,6 +42,10 @@ async function captureMovedEditorFilePayload({
   }
   const draft = current.isDirty ? state.editorDrafts[fileId] : undefined
   const viewStateKey = unifiedTabId ? `${current.filePath}::${unifiedTabId}` : current.filePath
+  // Dungeon-6 cursor fix (owner-found): the selection cache is unmount-written,
+  // so a still-mounted (actively edited) tab would ship stale/absent
+  // selections — flush the live editor so the reads below are exact.
+  flushLiveMonacoViewState(viewStateKey)
   const cursorLine = state.editorCursorLine[fileId]
   const scrollTop = scrollTopCache.get(viewStateKey)
   const selections = editorSelectionCache.get(viewStateKey)
@@ -133,6 +139,94 @@ export async function moveEditorFileToNewSatellite({
   }
   useAppStore.getState().closeFile(file.id)
   return true
+}
+
+/** Shared TRUE-move eligibility (menu "Move to New Window" + dungeon-6 tab
+ *  drag-out — ONE predicate so the two paths never drift): local plain edit
+ *  tabs only. SSH/runtime/SFTP owners need broader store hydration, untitled
+ *  tabs risk on-disk deletion (closeFile deletes untouched untitled files),
+ *  pinned tabs are excluded because closeFile bypasses pin guards (D16), and
+ *  read-only/mirrored tabs have no save path in a satellite.
+ *  repoConnectionId: null = local repo (eligible); a string (remote) or
+ *  undefined (repo not hydrated yet) is ineligible. The window-surface check
+ *  stays at each callsite — the satellite shell renders the same menu. */
+export function isEditorFileMovableToSatellite({
+  file,
+  isPinned,
+  repoConnectionId
+}: {
+  file: OpenFile
+  isPinned: boolean
+  repoConnectionId: string | null | undefined
+}): boolean {
+  return (
+    !isPinned &&
+    file.mode === 'edit' &&
+    !file.sftpTargetId &&
+    !file.runtimeEnvironmentId &&
+    !file.externalSshTargetId &&
+    !file.readOnly &&
+    !file.isUntitled &&
+    !file.mirroredFromRuntimeSession &&
+    repoConnectionId === null
+  )
+}
+
+/** D16 pin gate at ENTITY level (review C11): closeFile removes the whole
+ *  OpenFile, so a pinned duplicate of the same file in ANY split group blocks
+ *  a TRUE move — the dragged/clicked tab's own flag alone misses cross-group
+ *  duplicates. Content types mirror the unified close routing. */
+export function isEditorFileEntityPinned(tabs: Tab[] | undefined, fileId: string): boolean {
+  return (tabs ?? []).some(
+    (tab) =>
+      tab.entityId === fileId &&
+      (tab.contentType === 'editor' ||
+        tab.contentType === 'diff' ||
+        tab.contentType === 'conflict-review' ||
+        tab.contentType === 'check-details') &&
+      tab.isPinned === true
+  )
+}
+
+/** Parent window: TRUE move of one tab into an EXISTING satellite (dungeon 6
+ *  tab drag-out — the "existing satellite" path deferred from D15). Same D14
+ *  {ok} contract as the new-satellite move. raise comes LAST and only after
+ *  the ACK: focusing the satellite any earlier would abort an in-flight drag
+ *  (the tab drag sensor cancels on window focus change), and activateFile is
+ *  deliberately NOT used — record.files only updates when the satellite later
+ *  reports, so it would return ok:false right after the push (the push itself
+ *  opens AND focuses the tab). Returns 'noop' when the file closed during the
+ *  quiesce — nothing was captured, nothing lost (review C4: no toast);
+ *  'failed' only when a CAPTURED payload was refused. */
+export async function moveEditorFileToExistingSatellite({
+  file,
+  language,
+  satelliteId,
+  unifiedTabId
+}: {
+  file: OpenFile
+  language: string
+  satelliteId: string
+  unifiedTabId?: string
+}): Promise<'noop' | 'moved' | 'failed'> {
+  const captured = await captureMovedEditorFilePayload({ fileId: file.id, language, unifiedTabId })
+  if (!captured) {
+    return 'noop'
+  }
+  try {
+    const pushed = await window.api.satelliteWindow.moveFile(satelliteId, captured.payload)
+    if (!pushed?.ok) {
+      captured.restoreDirty()
+      return 'failed'
+    }
+  } catch {
+    captured.restoreDirty()
+    return 'failed'
+  }
+  useAppStore.getState().closeFile(file.id)
+  // The push opens + focuses the tab; activateFile would race record.files.
+  void window.api.satelliteWindow.raise(satelliteId)
+  return 'moved'
 }
 
 /** Satellite window: return one tab to the parent (D6 Move Back). */

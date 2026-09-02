@@ -4,7 +4,8 @@
 // flushed on it, and a renderer reload un-readies its satellite so post-reload
 // pushes queue again instead of vanishing into a loading page.
 import type { SatelliteMovedFile } from '../../shared/satellite-window-payloads'
-import { getSatellite } from '../window/satellite-window-registry'
+import { getSatellite, type SatelliteRecord } from '../window/satellite-window-registry'
+import { areLocalWindowsWslPathAliases } from '../../shared/cross-platform-path'
 
 const pendingOpenFilesBySatelliteId = new Map<string, SatelliteMovedFile[]>()
 const readySatelliteIds = new Set<string>()
@@ -78,4 +79,34 @@ export function markSatelliteReadyAndFlush(satelliteId: string): void {
   for (const file of queue ?? []) {
     pushOpenFile(satelliteId, file)
   }
+}
+
+/** Renderer-gone probe for the push-accepting handlers (review C6): a crashed
+ *  webContents silently drops send — an ACK would strand the file nowhere. */
+export function isSatelliteRendererGone(record: SatelliteRecord): boolean {
+  return (
+    record.window.isDestroyed() ||
+    record.window.webContents.isDestroyed() ||
+    record.window.webContents.isCrashed()
+  )
+}
+
+/** Review C5: a dirty payload for a file the satellite ALREADY lists is
+ *  refused — an ACK would close the parent tab while the satellite's
+ *  own-dirty branch can discard the carried draft (main cannot see per-file
+ *  dirtiness, so refuse conservatively; the parent restores its dirty flag
+ *  and toasts). A clean payload deduplicates safely — the push just
+ *  activates the existing tab. */
+export function wouldClobberSatelliteResidentDirtyFile(
+  record: SatelliteRecord,
+  file: SatelliteMovedFile
+): boolean {
+  return (
+    file.dirtyDraftContent !== undefined &&
+    record.files.some(
+      (entry) =>
+        entry.filePath === file.filePath ||
+        areLocalWindowsWslPathAliases(entry.filePath, file.filePath)
+    )
+  )
 }

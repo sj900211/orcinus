@@ -122,7 +122,11 @@ type TestRecord = {
     getBounds: () => { x: number; y: number; width: number; height: number }
     close: ReturnType<typeof vi.fn>
     destroy: ReturnType<typeof vi.fn>
-    webContents: { isDestroyed: () => boolean; send: ReturnType<typeof vi.fn> }
+    webContents: {
+      isDestroyed: () => boolean
+      isCrashed: () => boolean
+      send: ReturnType<typeof vi.fn>
+    }
   }
 }
 
@@ -145,7 +149,7 @@ function makeRecord(satelliteId: string, worktreeId = 'repo::wt-1'): TestRecord 
       getBounds: () => ({ x: 10, y: 20, width: 800, height: 600 }),
       close: vi.fn(),
       destroy: vi.fn(),
-      webContents: { isDestroyed: () => false, send: vi.fn() }
+      webContents: { isDestroyed: () => false, isCrashed: () => false, send: vi.fn() }
     }
   }
 }
@@ -744,11 +748,11 @@ describe('mirror broadcast', () => {
   it('sends each app window only ITS satellites with flag-derived visibility', () => {
     const parentA = {
       isDestroyed: () => false,
-      webContents: { isDestroyed: () => false, send: vi.fn() }
+      webContents: { isDestroyed: () => false, isCrashed: () => false, send: vi.fn() }
     }
     const parentB = {
       isDestroyed: () => false,
-      webContents: { isDestroyed: () => false, send: vi.fn() }
+      webContents: { isDestroyed: () => false, isCrashed: () => false, send: vi.fn() }
     }
     listAppWindowsMock.mockReturnValue([parentA, parentB])
     const record = makeRecord('sat-1')
@@ -773,5 +777,82 @@ describe('mirror broadcast', () => {
       }
     ])
     expect(parentB.webContents.send).toHaveBeenCalledWith('satelliteWindow:mirrorChanged', [])
+  })
+})
+
+describe('satelliteWindow:moveFile dungeon-6 guards (C5/C6)', () => {
+  it('refuses a crashed satellite renderer (C6)', () => {
+    const record = makeRecord('sat-1')
+    record.window.webContents.isCrashed = () => true
+    getSatelliteMock.mockReturnValue(record)
+    expect(
+      handlers.get('satelliteWindow:moveFile')!({ sender: parentSender }, 'sat-1', bootFile)
+    ).toEqual({ ok: false })
+  })
+
+  it('refuses a dirty payload for a file the satellite already lists (C5)', () => {
+    const record = makeRecord('sat-1')
+    record.files = [
+      {
+        fileId: bootFile.filePath,
+        filePath: bootFile.filePath,
+        relativePath: bootFile.relativePath,
+        language: bootFile.language
+      }
+    ]
+    getSatelliteMock.mockReturnValue(record)
+    expect(
+      handlers.get('satelliteWindow:moveFile')!({ sender: parentSender }, 'sat-1', {
+        ...bootFile,
+        dirtyDraftContent: 'draft'
+      })
+    ).toEqual({ ok: false })
+    // A clean payload deduplicates: the push proceeds.
+    expect(
+      handlers.get('satelliteWindow:moveFile')!({ sender: parentSender }, 'sat-1', bootFile)
+    ).toEqual({ ok: true })
+  })
+})
+
+describe('satelliteWindow:stageSession seed merge (C7)', () => {
+  it('re-appends an unacked seeded moved file, then honors closes after the ack', () => {
+    const record = makeRecord('sat-1')
+    getSatelliteMock.mockReturnValue(record)
+    getSatelliteByWebContentsMock.mockReturnValue(record)
+    void handlers.get('satelliteWindow:ready')!({ sender: record.window.webContents })
+    const moved = { ...bootFile, dirtyDraftContent: 'draft' }
+    // The ready push seeds the persisted entry and marks the seed unacked.
+    void handlers.get('satelliteWindow:moveFile')!({ sender: parentSender }, 'sat-1', moved)
+    storeStubMock.getSatelliteWindowSessions.mockReturnValue([
+      { satelliteId: 'sat-1', worktreeId: 'repo::wt-1', files: [moved] }
+    ])
+    storeStubMock.setSatelliteWindowSession.mockClear()
+    // A stale pre-push snapshot without the moved file must not evict the seed.
+    emit('satelliteWindow:stageSession', { sender: record.window.webContents }, [])
+    expect(storeStubMock.setSatelliteWindowSession).toHaveBeenCalledWith(
+      expect.objectContaining({ files: [moved] })
+    )
+    // The satellite reports the file open — the seed is acked; a later stage
+    // without the file is a genuine close and stages normally.
+    emit(
+      'satelliteWindow:reportOpenFiles',
+      { sender: record.window.webContents },
+      [
+        {
+          fileId: moved.filePath,
+          filePath: moved.filePath,
+          relativePath: moved.relativePath,
+          language: moved.language
+        }
+      ],
+      1,
+      1
+    )
+    storeStubMock.setSatelliteWindowSession.mockClear()
+    emit('satelliteWindow:stageSession', { sender: record.window.webContents }, [])
+    expect(storeStubMock.setSatelliteWindowSession).toHaveBeenCalledWith(
+      expect.objectContaining({ files: [] })
+    )
+    storeStubMock.getSatelliteWindowSessions.mockReturnValue([])
   })
 })

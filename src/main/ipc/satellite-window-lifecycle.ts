@@ -29,6 +29,47 @@ export function markSatelliteCloseBypass(satelliteId: string): void {
   closeBypassSatelliteIds.add(satelliteId)
 }
 
+// Review C7 (dungeon 6): a ready-satellite moveFile seeds the persisted entry
+// immediately, but a stage snapshot BUILT BEFORE the renderer processed that
+// push can arrive after the seed and evict it (the pending-push guard only
+// covers QUEUED pushes). Seeded filePaths stay marked until the satellite has
+// REPORTED the file open once; the merge re-appends unacked seeds a stale
+// snapshot would drop — genuine closes after that report stage normally.
+const unackedSeededFilesBySatelliteId = new Map<string, Set<string>>()
+
+export function acknowledgeSeededSatelliteFiles(satelliteId: string, filePaths: string[]): void {
+  const seeded = unackedSeededFilesBySatelliteId.get(satelliteId)
+  if (!seeded) {
+    return
+  }
+  for (const filePath of filePaths) {
+    seeded.delete(filePath)
+  }
+  if (seeded.size === 0) {
+    unackedSeededFilesBySatelliteId.delete(satelliteId)
+  }
+}
+
+export function mergeUnackedSeededSatelliteFiles(
+  store: Store,
+  satelliteId: string,
+  staged: SatelliteMovedFile[]
+): SatelliteMovedFile[] {
+  const seeded = unackedSeededFilesBySatelliteId.get(satelliteId)
+  if (!seeded || seeded.size === 0) {
+    return staged
+  }
+  const persisted =
+    store.getSatelliteWindowSessions().find((candidate) => candidate.satelliteId === satelliteId)
+      ?.files ?? []
+  const missing = persisted.filter(
+    (entry) =>
+      seeded.has(entry.filePath) &&
+      !staged.some((candidate) => candidate.filePath === entry.filePath)
+  )
+  return [...staged, ...missing]
+}
+
 export function setSatelliteDirtyOpenFileCount(satelliteId: string, reported: unknown): void {
   dirtyOpenFileCountBySatelliteId.set(
     satelliteId,
@@ -41,6 +82,7 @@ export function clearAllSatelliteLifecycleState(): void {
   dirtyOpenFileCountBySatelliteId.clear()
   cleanUserCloseSatelliteIds.clear()
   closeBypassSatelliteIds.clear()
+  unackedSeededFilesBySatelliteId.clear()
 }
 
 /** Queued-push snapshot seeding: a draft accepted for a still-booting
@@ -51,6 +93,9 @@ export function upsertPersistedSatelliteFile(
   worktreeId: string,
   file: SatelliteMovedFile
 ): void {
+  const seeded = unackedSeededFilesBySatelliteId.get(satelliteId) ?? new Set<string>()
+  seeded.add(file.filePath)
+  unackedSeededFilesBySatelliteId.set(satelliteId, seeded)
   if (!store) {
     return
   }
@@ -139,6 +184,7 @@ export function wireSatelliteWindowLifecycle(
     }
     dirtyOpenFileCountBySatelliteId.delete(satelliteId)
     closeBypassSatelliteIds.delete(satelliteId)
+    unackedSeededFilesBySatelliteId.delete(satelliteId)
     clearSatellitePushState(satelliteId)
   })
 }

@@ -19,7 +19,12 @@ import { useMonacoContentSyncBridge } from './use-monaco-content-sync-bridge'
 import { useMonacoMarkdownAnnotations } from './use-monaco-markdown-annotations'
 import { useMonacoEditorDecorations } from './use-monaco-editor-decorations'
 import { useMonacoEditorMount } from './use-monaco-editor-mount'
-import { snapshotMonacoViewState } from './monaco-view-state-persistence'
+import {
+  reapplyMonacoViewState,
+  registerMonacoViewStateFlush,
+  registerMonacoViewStateReapply,
+  snapshotMonacoViewState
+} from './monaco-view-state-persistence'
 import { MonacoMarkdownAnnotationOverlay } from './MonacoMarkdownAnnotationOverlay'
 
 type MonacoEditorProps = {
@@ -140,7 +145,20 @@ export default function MonacoEditor({
 
   // Why useLayoutEffect: cleanup runs before @monaco-editor/react disposes the editor, so getScrollTop() still reads valid state on unmount.
   useLayoutEffect(() => {
+    // Dungeon-6 cursor fix: TRUE-move captures flush the live view state —
+    // the unmount snapshot alone leaves a mounted tab's selections stale.
+    const unregisterViewStateFlush = registerMonacoViewStateFlush(viewStateKey, () =>
+      snapshotMonacoViewState(editorRef, viewStateKey)
+    )
+    const unregisterViewStateReapply = registerMonacoViewStateReapply(viewStateKey, () => {
+      const mounted = editorRef.current
+      if (mounted) {
+        reapplyMonacoViewState(mounted, viewStateKey)
+      }
+    })
     return () => {
+      unregisterViewStateFlush()
+      unregisterViewStateReapply()
       // Why: cancel the pending throttled write so it can't fire after this snapshot and overwrite the final position with a stale value.
       if (scrollThrottleTimerRef.current !== null) {
         clearTimeout(scrollThrottleTimerRef.current)

@@ -1,5 +1,6 @@
 import type {
   SatelliteBootFile,
+  SatelliteCursorHit,
   SatelliteFileEntry,
   SatelliteFilesMovedBack,
   SatelliteMirrorEntry,
@@ -15,6 +16,9 @@ export type SatelliteWindowApi = {
   moveFile: (satelliteId: string, file: SatelliteMovedFile) => Promise<{ ok: boolean }>
   /** Reveal + focus a satellite (open-interception raise; overrides subordination-hide). */
   raise: (satelliteId: string) => Promise<void>
+  /** App windows: which of THIS window's satellites sits under the OS cursor
+   *  (dungeon 6 tab drag-out). Main hit-tests in DIP space — null = none. */
+  hitTestCursor: () => Promise<SatelliteCursorHit | null>
   /** App windows: snapshot of THIS window's mirror (late-subscriber hydration). */
   getMirror: () => Promise<SatelliteMirrorEntry[]>
   /** App windows: raise a satellite AND activate one of its files (spec 2).

@@ -1,4 +1,5 @@
 import { toast } from 'sonner'
+import { scheduleLiveMonacoViewStateReapply } from '@/components/editor/monaco-view-state-persistence'
 import { translate } from '@/i18n/i18n'
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
@@ -111,7 +112,23 @@ export function createApplyMovedEditorFileAction(
         }
         if (file.selections !== undefined && file.selections.length > 0) {
           setWithLRU(editorSelectionCache, viewStateKey, file.selections)
+        } else if (file.cursorLine !== undefined) {
+          // Selections can be absent (restart staging carries cursorLine only;
+          // pre-fix payloads): a collapsed caret keeps at least the line —
+          // editorCursorLine alone is never read for caret placement.
+          setWithLRU(editorSelectionCache, viewStateKey, [
+            {
+              selectionStartLineNumber: file.cursorLine,
+              selectionStartColumn: 1,
+              positionLineNumber: file.cursorLine,
+              positionColumn: 1
+            }
+          ])
         }
+        // Restore is mount-once: when the destination editor mounted BEFORE
+        // this push (new-satellite boot race), the seeds above would never be
+        // consumed — re-apply them to the live editor after this commit.
+        scheduleLiveMonacoViewStateReapply(viewStateKey)
       }
       return fileId
     }
