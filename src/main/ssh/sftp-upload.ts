@@ -6,6 +6,11 @@ import { randomUUID } from 'node:crypto'
 import { finished } from 'node:stream/promises'
 import type { SFTPWrapper } from 'ssh2'
 import { publishTempUpload, unlinkQuietSftp } from './sftp-rename'
+import {
+  latchLateSftpSessionErrors,
+  latchLateSftpStreamErrors,
+  type SftpStreamErrorLatch
+} from './sftp-stream-late-error'
 
 export function mkdirSftp(
   sftp: SFTPWrapper,
@@ -53,6 +58,7 @@ async function uploadFileAndJoinTeardown(
   let handleClose: Promise<void> | undefined
   let readStream: ReadStream | undefined
   let writeStream: ReturnType<SFTPWrapper['createWriteStream']> | undefined
+  let writeStreamErrors: SftpStreamErrorLatch | undefined
   const closeHandle = (): Promise<void> => {
     handleClose ??= handle.close()
     return handleClose
@@ -76,7 +82,12 @@ async function uploadFileAndJoinTeardown(
     ) {
       throw new Error(`File changed during upload: ${localPath}`)
     }
+    // Why 'w' not 'wx': exclusivity is enforced at publish (rename) time by publishTempUpload;
+    // the temp path is unique per upload, so it never needs exclusive open.
     writeStream = sftp.createWriteStream(tempPath, { flags: 'w' })
+    // Why: the OPEN reply can land after this transfer settles; without a listener that
+    // outlives it, ssh2 throws it synchronously into the socket handler (#15479).
+    writeStreamErrors = latchLateSftpStreamErrors(writeStream, tempPath)
     readStream = handle.createReadStream({ autoClose: false })
     if (options?.onProgress) {
       const onProgress = options.onProgress
@@ -123,6 +134,7 @@ async function uploadFileAndJoinTeardown(
     await publishTempUpload(sftp, tempPath, remotePath, options?.exclusive ?? false)
     published = true
   } finally {
+    writeStreamErrors?.markTransferSettled()
     readStream?.destroy()
     writeStream?.destroy()
     await closeHandle()
@@ -144,8 +156,10 @@ export function uploadBuffer(
     const writeStream = sftp.createWriteStream(remotePath, {
       flags: options?.append ? 'a' : options?.exclusive ? 'wx' : 'w'
     })
+    const lateErrors = latchLateSftpStreamErrors(writeStream, remotePath)
 
     const cleanupListeners = (): void => {
+      lateErrors.markTransferSettled()
       writeStream.off('close', onClose)
       writeStream.off('error', onError)
     }
@@ -174,8 +188,10 @@ export function writeStringViaSftp(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const ws = sftp.createWriteStream(remotePath)
+    const lateErrors = latchLateSftpStreamErrors(ws, remotePath)
     let settled = false
     const cleanup = (): void => {
+      lateErrors.markTransferSettled()
       sftp.removeListener('error', onError)
       ws.removeListener('close', onClose)
       ws.removeListener('error', onError)
@@ -202,6 +218,29 @@ export function writeStringViaSftp(
     ws.once('error', onError)
     ws.end(contents)
   })
+}
+
+/**
+ * Write several files over one SFTP session, ending it when they are all done.
+ *
+ * Owns the session's late-error latch, which is why a caller must not hand-roll this
+ * loop: `writeStringViaSftp` drops its own session listener at each settle, so between
+ * files and after the last one the emitter would carry none, and a late STATUS reply
+ * throws synchronously out of ssh2's parser into main (#15479).
+ */
+export async function writeStringsViaSftp(
+  conn: { sftp(): Promise<SFTPWrapper> },
+  files: readonly { path: string; contents: string }[]
+): Promise<void> {
+  const sftp = await conn.sftp()
+  latchLateSftpSessionErrors(sftp)
+  try {
+    for (const file of files) {
+      await writeStringViaSftp(sftp, file.path, file.contents)
+    }
+  } finally {
+    sftp.end()
+  }
 }
 
 export async function uploadDirectory(

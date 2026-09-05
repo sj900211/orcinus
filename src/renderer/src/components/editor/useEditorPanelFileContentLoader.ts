@@ -153,7 +153,6 @@ export function useEditorPanelFileContentLoader({
                 route,
                 runtimeEnvironmentId ?? null
               )
-              fileReadGenerationRef.current[id] = ++fileReadGenerationCounterRef.current
               if (!migration.ok) {
                 throw new Error(
                   migration.reason === 'collision'
@@ -161,6 +160,7 @@ export function useEditorPanelFileContentLoader({
                     : 'The sibling file owner changed while the tab was restoring.'
                 )
               }
+              fileReadGenerationRef.current[id] = ++fileReadGenerationCounterRef.current
               setFileContents((prev) => {
                 const next = { ...prev }
                 delete next[id]

@@ -22,9 +22,9 @@ export type TreeNode = {
   mtime?: number
 }
 
+/** Why no `loading` here: see file-explorer-loading-dirs.ts — identity changes re-walk the tree. */
 export type DirCache = {
   children: TreeNode[]
-  loading: boolean
   operationOwner?: FileExplorerOperationOwner
 }
 

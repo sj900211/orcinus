@@ -14,7 +14,7 @@ const TERMINAL_TAB_CLOSE_TIMEOUT_MS = 20_000
 export async function requestTerminalTabCloseFromRenderer(
   windows: readonly BrowserWindow[],
   tabId: string,
-  options: { localPtyTeardownOwnedExternally?: boolean } = {}
+  options: { localPtyTeardownOwnedExternally?: boolean; force?: boolean } = {}
 ): Promise<void> {
   const targets = windows.filter(
     (window) => !window.isDestroyed() && !window.webContents.isDestroyed()

@@ -14,7 +14,9 @@ export type TerminalLinkStoreState = {
   setPendingEditorReveal: Mock
   setMarkdownViewMode: Mock
   activeFileIdByWorktree: Record<string, string | null>
+  openFiles: { id?: string; filePath: string; worktreeId: string }[]
   worktreesByRepo: Record<string, { id: string; path: string }[]>
+  folderWorkspaces: []
 }
 
 export type TerminalLinkTestDoubles = {
@@ -60,8 +62,19 @@ export function createTerminalLinkTestDoubles(): TerminalLinkTestDoubles {
     setPendingEditorReveal: setPendingEditorRevealMock,
     setMarkdownViewMode: setMarkdownViewModeMock,
     activeFileIdByWorktree: {} as Record<string, string | null>,
-    worktreesByRepo: {} as Record<string, { id: string; path: string }[]>
+    openFiles: [] as { id?: string; filePath: string; worktreeId: string }[],
+    worktreesByRepo: {} as Record<string, { id: string; path: string }[]>,
+    folderWorkspaces: [] as []
   }
+
+  // Mirror the store: a non-intercepted open records the tab the satellite reveal gate looks up.
+  openFileMock.mockImplementation((request: { filePath: string; worktreeId: string }) => {
+    storeState.openFiles.push({
+      id: storeState.activeFileIdByWorktree[request.worktreeId] ?? request.filePath,
+      filePath: request.filePath,
+      worktreeId: request.worktreeId
+    })
+  })
 
   return {
     openUrlMock,

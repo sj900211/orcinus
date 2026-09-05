@@ -54,7 +54,7 @@ export function createOrFocusProjectWindow(
   const worktreeParam = options.worktreeId
     ? `&orca-worktree=${encodeURIComponent(options.worktreeId)}`
     : ''
-  loadMainWindow(window, {
+  loadMainWindow(window, undefined, {
     search: `orca-project=${encodeURIComponent(projectKey)}${worktreeParam}`
   })
   return window

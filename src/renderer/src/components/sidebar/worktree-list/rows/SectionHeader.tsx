@@ -27,6 +27,7 @@ import {
 } from './indentation'
 import { FolderPathStatusIndicator } from './FolderPathStatusIndicator'
 import { ProjectWindowHeaderMarker } from './ProjectWindowHeaderMarker'
+import { RepoScanUnavailableIndicator } from './RepoScanUnavailableIndicator'
 import {
   ProjectGroupCreateWorkspaceButton,
   ProjectGroupHeaderMenu
@@ -349,6 +350,7 @@ export function renderWorktreeSectionHeaderRow(args: {
                 <ProjectWindowHeaderMarker projectKey={projectIdForHeader} />
               ) : null}
               <FolderPathStatusIndicator status={projectGroupPathStatus} />
+              {isRepoHeader ? <RepoScanUnavailableIndicator repo={row.repo!} /> : null}
             </div>
           </div>
         </div>

@@ -85,6 +85,7 @@ export function useFileExplorerTreePaneState({
   const {
     dirCache,
     setDirCache,
+    loadingDirPaths,
     rootCache,
     rootError,
     loadDir,
@@ -169,6 +170,7 @@ export function useFileExplorerTreePaneState({
     visibleFilesWorktreePath,
     expanded,
     dirCache,
+    loadingDirPaths,
     rootError,
     isDirStale,
     loadDir,
@@ -219,6 +221,7 @@ export function useFileExplorerTreePaneState({
     worktreePath: visibleFilesWorktreePath,
     expanded,
     dirCache,
+    loadingDirPaths,
     rootCache,
     loadDir,
     setSelectedPath: setSingleSelectedPath,
