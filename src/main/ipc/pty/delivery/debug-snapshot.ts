@@ -6,9 +6,9 @@ import {
 } from '../../../../shared/pty-delivery-diagnostics'
 import {
   getHiddenRendererPtyDeliveryDebug,
-  getHiddenRendererPtyIds,
-  isHiddenRendererPty
+  getHiddenRendererPtyIds
 } from '../../pty-hidden-delivery-gate'
+import { isHiddenRendererPtyForOwner } from '../pty-owner-gate'
 import {
   lastPowerResumeAtMs,
   lastPowerSuspendAtMs,
@@ -38,7 +38,7 @@ export function buildMainDeliveryDiagnostics(session: PtyIpcSession): PtyMainDel
       ackedChars: accounting?.ackedChars ?? 0,
       inFlightChars: accounting ? accounting.sentChars - accounting.ackedChars : 0,
       pendingChars: session.pendingData.get(id)?.data.length ?? 0,
-      hidden: isHiddenRendererPty(id),
+      hidden: isHiddenRendererPtyForOwner(id),
       visible: visibleRendererPtys.has(id),
       active: activeRendererPtys.has(id),
       msSinceLastSend: accounting ? now - accounting.lastSendAtMs : null,
@@ -83,13 +83,13 @@ export function readCurrentPtyRendererDeliveryDebugSnapshot(
   // Why: a pty both hidden-gated and reported visible means main is starving a visible pane (v1.4.124-rc.2.perf field lead).
   let hiddenDeliveryGatedVisiblePtyCount = 0
   for (const id of visibleRendererPtys) {
-    if (isHiddenRendererPty(id)) {
+    if (isHiddenRendererPtyForOwner(id)) {
       hiddenDeliveryGatedVisiblePtyCount++
     }
   }
   let hiddenDeliveryGatedActivePtyCount = 0
   for (const id of activeRendererPtys) {
-    if (isHiddenRendererPty(id)) {
+    if (isHiddenRendererPtyForOwner(id)) {
       hiddenDeliveryGatedActivePtyCount++
     }
   }

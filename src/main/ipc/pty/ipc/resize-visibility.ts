@@ -7,11 +7,11 @@ import type {
 import { redactPtyIdForDiagnostics } from '../../../../shared/pty-delivery-diagnostics'
 import { setTerminalViewAttributes } from '../../../runtime/terminal-view-attribute-store'
 import { validateTerminalViewAttributes } from '../../../../shared/terminal-view-attributes'
+import { recordHiddenRendererPtyDataDrop } from '../../pty-hidden-delivery-gate'
 import {
-  recordHiddenRendererPtyDataDrop,
-  setRendererPtyDeliveryInterest,
-  shouldDropHiddenRendererPtyData
-} from '../../pty-hidden-delivery-gate'
+  setRendererPtyDeliveryInterestForOwner,
+  shouldDropHiddenRendererPtyDataForOwner
+} from '../pty-owner-gate'
 import { tryGetProviderForPty, closeStartupQueryAuthorityForPty } from '../provider/registry'
 import {
   activeRendererPtys,
@@ -314,9 +314,9 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     }
     // Why: any delivery interest suppresses the hidden-delivery gate (raw-byte consumers keep receiving while hidden); not synced to the daemon pacer so interest churn can't un-pace a flood.
     const settings = session.getSettings?.()
-    const wasDroppable = shouldDropHiddenRendererPtyData(args.id, settings)
-    setRendererPtyDeliveryInterest(args.id, args.interested === true)
-    if (wasDroppable !== shouldDropHiddenRendererPtyData(args.id, settings)) {
+    const wasDroppable = shouldDropHiddenRendererPtyDataForOwner(args.id, settings)
+    setRendererPtyDeliveryInterestForOwner(args.id, args.interested === true)
+    if (wasDroppable !== shouldDropHiddenRendererPtyDataForOwner(args.id, settings)) {
       invalidatePendingPtyDrainPolicy(args.id)
     }
   })

@@ -128,8 +128,8 @@ describe('createMainWindow', () => {
       setSize: vi.fn(),
       maximize: vi.fn(),
       show: vi.fn(),
-      loadFile: vi.fn(),
-      loadURL: vi.fn()
+      loadFile: vi.fn(() => Promise.resolve()),
+      loadURL: vi.fn(() => Promise.resolve())
     }
     browserWindowMock.mockImplementation(function () {
       return browserWindowInstance
@@ -191,15 +191,15 @@ describe('createMainWindow', () => {
       setSize: vi.fn(),
       maximize: vi.fn(),
       show: vi.fn(),
-      loadFile: vi.fn(),
-      loadURL: vi.fn()
+      loadFile: vi.fn(() => Promise.resolve()),
+      loadURL: vi.fn(() => Promise.resolve())
     }
     browserWindowMock.mockImplementation(function () {
       return browserWindowInstance
     })
 
     const win = createMainWindow(null, { deferLoad: true })
-    loadMainWindow(win, { search: 'orca-worktree=wt-1' })
+    loadMainWindow(win, undefined, { search: 'orca-worktree=wt-1' })
 
     expect(browserWindowInstance.loadFile).toHaveBeenCalledWith(
       expect.stringMatching(/renderer[\\/]index\.html$/),
@@ -209,7 +209,7 @@ describe('createMainWindow', () => {
     try {
       isMock.dev = true
       vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
-      loadMainWindow(win, { search: 'orca-worktree=wt-1' })
+      loadMainWindow(win, undefined, { search: 'orca-worktree=wt-1' })
       expect(browserWindowInstance.loadURL).toHaveBeenCalledWith(
         'http://localhost:5173?orca-worktree=wt-1'
       )

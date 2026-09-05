@@ -317,7 +317,7 @@ export default function ServerExplorer(): React.JSX.Element {
               statusByRelativePath={EMPTY_STATUS}
               ignoredByRelativePath={EMPTY_IGNORED}
               expanded={tree.expanded}
-              dirCache={tree.dirCache}
+              loadingDirPaths={tree.loadingDirPaths}
               selectedPaths={selection.selectedPaths}
               activeFileId={null}
               flashingPath={null}

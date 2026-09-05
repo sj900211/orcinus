@@ -1,8 +1,8 @@
 import {
-  markHiddenRendererPty,
-  shouldDropHiddenRendererPtyData,
-  unmarkHiddenRendererPty
-} from '../../pty-hidden-delivery-gate'
+  markHiddenRendererPtyForOwner,
+  shouldDropHiddenRendererPtyDataForOwner,
+  unmarkHiddenRendererPtyForOwner
+} from '../pty-owner-gate'
 import { invalidatePendingPtyDrainPolicy } from './visibility-state'
 import type { PtyIpcSession } from '../session'
 
@@ -12,14 +12,14 @@ export function transitionHiddenRendererPtyDeliveryState(
   hidden: boolean
 ): { droppable: boolean; droppedWhileHidden: boolean; policyChanged: boolean } {
   const settings = session.getSettings?.()
-  const wasDroppable = shouldDropHiddenRendererPtyData(id, settings)
+  const wasDroppable = shouldDropHiddenRendererPtyDataForOwner(id, settings)
   let droppedWhileHidden = false
   if (hidden) {
-    markHiddenRendererPty(id)
+    markHiddenRendererPtyForOwner(id)
   } else {
-    droppedWhileHidden = unmarkHiddenRendererPty(id).droppedWhileHidden
+    droppedWhileHidden = unmarkHiddenRendererPtyForOwner(id).droppedWhileHidden
   }
-  const droppable = shouldDropHiddenRendererPtyData(id, settings)
+  const droppable = shouldDropHiddenRendererPtyDataForOwner(id, settings)
   return { droppable, droppedWhileHidden, policyChanged: wasDroppable !== droppable }
 }
 

@@ -9,6 +9,8 @@ function readSource(relativePath: string): string {
 const APP_PATH = 'src/renderer/src/App.tsx'
 const STARTUP_HYDRATION_PATH = 'src/renderer/src/app-shell/use-app-startup-hydration.ts'
 const DEGRADED_RECOVERY_PATH = 'src/renderer/src/startup/startup-degraded-recovery.ts'
+// The role-branched reconnect flow was split out of the hydration hook (fork max-lines).
+const STARTUP_RECONNECT_PATH = 'src/renderer/src/app-shell/startup-window-role-reconnect.ts'
 const CHROME_LAYOUT_PATH = 'src/renderer/src/app-shell/use-app-chrome-layout.ts'
 const SHELL_SERVICES_PATH = 'src/renderer/src/app-shell/use-app-shell-services.ts'
 const BACKGROUND_SERVICES_PATH = 'src/renderer/src/app-shell/AppBackgroundServices.tsx'
@@ -194,17 +196,19 @@ describe('renderer startup runtime routing', () => {
     // firstWindowStartupServicesReady + managedWslCliStartupBarrierReady in main before it
     // does anything else, so it is the renderer-side position of that fence.
     // `desktop-startup-ordering.test.ts` pins the main-side await itself.
+    const reconnectSource = readSource(STARTUP_RECONNECT_PATH)
     const servicesIndex = source.indexOf(
       "timeRendererStartupStep('prepare-terminal-startup-restoration'"
     )
-    const preReconnectRecoveryIndex = source.indexOf(
+    const reconnectCallIndex = source.indexOf('runStartupReconnectForWindowRole(')
+    const preReconnectRecoveryIndex = reconnectSource.indexOf(
       "timeRendererStartupStep('recover-legacy-worker-terminals-pre-reconnect'"
     )
-    const capabilityRefreshIndex = source.indexOf(
+    const capabilityRefreshIndex = reconnectSource.indexOf(
       "timeRendererStartupStep('terminal-provider-snapshot-capabilities'"
     )
-    const reconnectIndex = source.indexOf("timeRendererStartupStep('reconnect-terminals'")
-    const postReconnectRecoveryIndex = source.indexOf(
+    const reconnectIndex = reconnectSource.indexOf("timeRendererStartupStep('reconnect-terminals'")
+    const postReconnectRecoveryIndex = reconnectSource.indexOf(
       "timeRendererStartupStep('recover-legacy-worker-terminals-post-reconnect'"
     )
 
@@ -212,7 +216,9 @@ describe('renderer startup runtime routing', () => {
     expect(source.slice(servicesIndex)).toContain(
       'window.api.app.prepareTerminalStartupRestoration()'
     )
-    expect(preReconnectRecoveryIndex).toBeGreaterThan(servicesIndex)
+    // Hydration awaits first-window services before entering the split-out flow.
+    expect(reconnectCallIndex).toBeGreaterThan(servicesIndex)
+    expect(preReconnectRecoveryIndex).toBeGreaterThanOrEqual(0)
     expect(capabilityRefreshIndex).toBeGreaterThan(preReconnectRecoveryIndex)
     expect(reconnectIndex).toBeGreaterThan(capabilityRefreshIndex)
     expect(postReconnectRecoveryIndex).toBeGreaterThan(reconnectIndex)
@@ -351,7 +357,7 @@ describe('renderer startup runtime routing', () => {
   })
 
   it('prefetches terminal snapshot capabilities before reconnect unlocks cold activation', () => {
-    const source = readSource(STARTUP_HYDRATION_PATH)
+    const source = readSource(STARTUP_RECONNECT_PATH)
     const capabilityIndex = source.indexOf(
       "timeRendererStartupStep('terminal-provider-snapshot-capabilities'"
     )
@@ -362,7 +368,7 @@ describe('renderer startup runtime routing', () => {
   })
 
   it('skips startup structured tab projection while the host setting is off', () => {
-    const source = readSource(STARTUP_HYDRATION_PATH)
+    const source = readSource(STARTUP_RECONNECT_PATH)
     const projectIndex = source.indexOf("timeRendererStartupStep('project-structured-session-tabs'")
 
     expect(projectIndex).toBeGreaterThanOrEqual(0)
@@ -378,6 +384,10 @@ describe('renderer startup runtime routing', () => {
       join(process.cwd(), 'src/renderer/src/app-shell/use-app-startup-hydration.ts'),
       'utf8'
     )
+    const reconnectModuleSource = readFileSync(
+      join(process.cwd(), 'src/renderer/src/app-shell/startup-window-role-reconnect.ts'),
+      'utf8'
+    )
     const terminalSource = readFileSync(
       join(process.cwd(), 'src/renderer/src/components/use-terminal-watcher-effects.ts'),
       'utf8'
@@ -386,8 +396,11 @@ describe('renderer startup runtime routing', () => {
     const prepareIndex = appSource.indexOf(
       "timeRendererStartupStep('prepare-terminal-startup-restoration'"
     )
-    const reconnectIndex = appSource.indexOf("timeRendererStartupStep('reconnect-terminals'")
-    const projectIndex = appSource.indexOf(
+    const reconnectCallIndex = appSource.indexOf('runStartupReconnectForWindowRole(')
+    const reconnectIndex = reconnectModuleSource.indexOf(
+      "timeRendererStartupStep('reconnect-terminals'"
+    )
+    const projectIndex = reconnectModuleSource.indexOf(
       "timeRendererStartupStep('project-structured-session-tabs'"
     )
     const readyIndex = appSource.indexOf('actions.setTerminalStartupRestorationReady(true)')
@@ -401,9 +414,10 @@ describe('renderer startup runtime routing', () => {
 
     expect(hydrateIndex).toBeGreaterThanOrEqual(0)
     expect(hydrateIndex).toBeLessThan(prepareIndex)
-    expect(prepareIndex).toBeLessThan(reconnectIndex)
+    expect(prepareIndex).toBeLessThan(reconnectCallIndex)
+    expect(reconnectIndex).toBeGreaterThanOrEqual(0)
     expect(reconnectIndex).toBeLessThan(projectIndex)
-    expect(projectIndex).toBeLessThan(readyIndex)
+    expect(reconnectCallIndex).toBeLessThan(readyIndex)
     expect(gateBlock).toContain('terminalStartupRestorationReady')
     expect(gateBlock).not.toContain('hydrationSucceeded')
     expect(gateIndex).toBeGreaterThanOrEqual(0)

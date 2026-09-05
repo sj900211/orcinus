@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { ipcMain } from 'electron'
 import type { SFTPWrapper } from 'ssh2'
-import { removeDirectorySftp, unlinkSftp } from '../ssh/sftp-upload'
+import { removeDirectorySftp, unlinkSftp } from '../ssh/sftp-directory-removal'
 import { renameSftp } from '../ssh/sftp-rename'
 import {
   resolveConnection,

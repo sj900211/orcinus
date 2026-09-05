@@ -1,13 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DirCache } from './file-explorer-types'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { TreeNode } from './file-explorer-types'
+
+/** Fork-local cache row: upstream's DirCache dropped `loading` (loading dirs
+ *  live in a separate set there); the SFTP tree keeps its inline flag and
+ *  derives that set for the shared presentation layer. */
+type ServerExplorerDirCache = {
+  children: TreeNode[]
+  loading: boolean
+}
 import {
   readServerExplorerDirectory,
   sftpEntriesToTreeNodes
 } from './server-explorer-directory-listing'
 
 type UseServerExplorerTreeResult = {
-  dirCache: Record<string, DirCache>
-  rootCache: DirCache | undefined
+  dirCache: Record<string, ServerExplorerDirCache>
+  rootCache: ServerExplorerDirCache | undefined
+  loadingDirPaths: ReadonlySet<string>
   rootError: string | null
   expanded: Set<string>
   loadDir: (dirPath: string, depth: number, options?: { force?: boolean }) => Promise<boolean>
@@ -28,7 +37,7 @@ export function useServerExplorerTree(
   targetId: string | null,
   rootPath: string | null
 ): UseServerExplorerTreeResult {
-  const [dirCache, setDirCache] = useState<Record<string, DirCache>>({})
+  const [dirCache, setDirCache] = useState<Record<string, ServerExplorerDirCache>>({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [rootError, setRootError] = useState<string | null>(null)
   // Why: a host/root switch must invalidate in-flight reads so a slow prior host can't
@@ -151,9 +160,20 @@ export function useServerExplorerTree(
     }
   }, [targetId, rootPath, loadDir])
 
+  const loadingDirPaths = useMemo(() => {
+    const paths = new Set<string>()
+    for (const [dirPath, cache] of Object.entries(dirCache)) {
+      if (cache.loading) {
+        paths.add(dirPath)
+      }
+    }
+    return paths
+  }, [dirCache])
+
   return {
     dirCache,
     rootCache: rootPath ? dirCache[rootPath] : undefined,
+    loadingDirPaths,
     rootError,
     expanded,
     loadDir,
@@ -165,7 +185,7 @@ export function useServerExplorerTree(
 }
 
 /** A directory's own depth is the child depth of the listing that contains it (root = -1). */
-function depthOf(dirCache: Record<string, DirCache>, dirPath: string): number {
+function depthOf(dirCache: Record<string, ServerExplorerDirCache>, dirPath: string): number {
   for (const cache of Object.values(dirCache)) {
     const match = cache.children.find((child) => child.path === dirPath)
     if (match) {

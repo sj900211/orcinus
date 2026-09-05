@@ -1,6 +1,7 @@
 import type { Repo } from '../../../../shared/repo-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
+import { addVisibleLineageAncestors } from './visible-worktree-lineage-ancestors'
 export type { SidebarFilterState } from './visible-worktree-kinds'
 export {
   isAutomationGeneratedWorkspace,
@@ -34,10 +35,6 @@ import {
   type ExecutionHostScope
 } from '../../../../shared/execution-host'
 import {
-  getCyclicProjectedWorktreeLineageIds,
-  getLineageRenderInfo
-} from './worktree-lineage-projection'
-import {
   computeRenderedSidebarWorktreeOrder,
   computeRenderedSidebarWorktrees
 } from './rendered-sidebar-worktree-order'
@@ -48,7 +45,6 @@ import {
 } from './workspace-creator-visibility'
 import { isDefaultBranchWorkspace } from './default-branch-workspace'
 import { getLineageAncestorIndex, getSortedWorktreeRankIndex } from './visible-worktree-indexes'
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 
 /**
@@ -194,41 +190,6 @@ export function computeVisibleWorktrees(
   return opts.injectLineageAncestors === false
     ? all
     : addVisibleLineageAncestors(all, lineageAncestorById, opts.worktreeLineageById)
-}
-
-function addVisibleLineageAncestors(
-  worktrees: Worktree[],
-  worktreeById: Map<string, Worktree>,
-  lineageById: Record<string, WorktreeLineage>
-): Worktree[] {
-  const result: Worktree[] = []
-  const included = new Set<string>()
-  const visiting = new Set<string>()
-  const cyclicLineageIds = getCyclicProjectedWorktreeLineageIds(lineageById, worktreeById)
-
-  const addWithAncestors = (worktree: Worktree): void => {
-    const identity = getWorktreeHostIdentity(worktree)
-    if (included.has(identity) || visiting.has(identity)) {
-      return
-    }
-    visiting.add(identity)
-    const lineage = getLineageRenderInfo(worktree, lineageById, worktreeById, cyclicLineageIds)
-    if (lineage.state === 'valid') {
-      // Why: sidebar lineage is structural. If a filtered child is visible,
-      // its valid parent must be rendered too so the hierarchy remains legible.
-      addWithAncestors(lineage.parent)
-    }
-    visiting.delete(identity)
-    if (!included.has(identity)) {
-      included.add(identity)
-      result.push(worktree)
-    }
-  }
-
-  for (const worktree of worktrees) {
-    addWithAncestors(worktree)
-  }
-  return result
 }
 
 export function computeVisibleWorktreeIds(

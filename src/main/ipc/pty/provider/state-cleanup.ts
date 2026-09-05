@@ -7,10 +7,8 @@ import { piTitlebarExtensionService } from '../../../pi/titlebar-extension-servi
 import { agentHookServer } from '../../../agent-hooks/server'
 import { clearMigrationUnsupportedPty } from '../../../agent-hooks/migration-unsupported-pty-state'
 import { clearNativeWindowsConptyPty } from '../../../runtime/terminal-model-query-authority'
-import {
-  clearHiddenRendererPtyDeliveryState,
-  isHiddenRendererPty
-} from '../../pty-hidden-delivery-gate'
+import { clearHiddenRendererPtyDeliveryState } from '../../pty-hidden-delivery-gate'
+import { isHiddenRendererPtyForOwner } from '../pty-owner-gate'
 import { agentSessionOwners } from '../pane/agent-session-owners'
 import { paneKeyPtyId, paneKeyTeardownListeners, ptyPaneKey } from '../pane/key-state'
 import { ptyIncarnationById, ptyOwnership } from './ownership-state'
@@ -63,7 +61,7 @@ export function clearProviderPtyState(
   pendingHiddenRendererResizeOutputPtys.delete(id)
   deliveredHiddenRendererResizeOutputPtys.delete(id)
   // Why: every teardown path funnels through here — hidden/interest gate bits must not outlive the PTY or a reused map entry could silently gate a new one.
-  const deliveryPolicyChanged = isHiddenRendererPty(id)
+  const deliveryPolicyChanged = isHiddenRendererPtyForOwner(id)
   clearHiddenRendererPtyDeliveryState(id)
   if (activeChanged) {
     invalidatePendingPtyDrainPriority(id, false)

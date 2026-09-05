@@ -9,6 +9,7 @@ import {
   getHiddenRendererPtyDeliveryDebug,
   resetRendererScopedHiddenPtyDeliveryState
 } from '../pty-hidden-delivery-gate'
+import { setMainWindowForRouting } from '../../window/window-affinity-router'
 import { localProvider } from './provider/registry'
 import { finishPtyShutdown } from './provider/liveness'
 import type { GetSelectedCodexHomePath, PrepareClaudeAuth } from './host-env/types'
@@ -88,6 +89,11 @@ export function registerPtyHandlers(
   // Why: neutralize rebind at the same moment as drain so a daemon replace in this window cannot attach the old accept/exit closures.
   setRebindProviderListeners(() => {})
   registerRendererLifecycleResetHandlers(mainWindow.webContents)
+  // Fork B-tier regate: the per-window delivery gate resolves each pty's owner
+  // through the affinity router — inject the main fallback the moment handlers
+  // bind (the merge dropping this injection was the recorded root cause of a
+  // silently inert gate). Worktree/project resolver injection = dungeon 3.
+  setMainWindowForRouting(mainWindow)
 
   const getLocalPtyStartupPromise = (connectionId?: string | null): Promise<void> | undefined => {
     if (connectionId) {

@@ -49,7 +49,7 @@ export function loadMainWindow(
     is.dev && process.env.ELECTRON_RENDERER_URL
       ? mainWindow.loadURL(
           search
-            ? process.env.ELECTRON_RENDERER_URL + '?' + search
+            ? `${process.env.ELECTRON_RENDERER_URL}?${search}`
             : process.env.ELECTRON_RENDERER_URL
         )
       : mainWindow.loadFile(join(__dirname, '../renderer/index.html'), search ? { search } : undefined)

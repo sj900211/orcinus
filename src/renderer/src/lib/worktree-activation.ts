@@ -1,4 +1,3 @@
-import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import type {
   WorktreeDefaultTabsLaunch,
   WorktreeSetupLaunch
@@ -19,7 +18,6 @@ import { resumeSleepingAgentSessionsForWorktree } from '@/lib/resume-sleeping-ag
 import { shouldAutoCreateInitialTerminal } from '@/components/terminal/initial-terminal'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../shared/workspace-scope'
-import { projectKeyForWorkspaceKey } from '../../../shared/project-window-key'
 import {
   folderWorkspaceActivationBlocked,
   getFolderWorkspacePathStatusDescription,
@@ -34,6 +32,11 @@ import type { IssueCommandLaunch } from '@/lib/worktree-setup-issue-command-queu
 import { ensureWorktreeHasInitialTerminal } from '@/lib/worktree-initial-terminal-seeding'
 import { ensureWebRuntimeWorktreeTerminalAfterWake } from '@/lib/web-runtime-worktree-terminal-after-wake'
 import { applyWorktreeNavViewEntry } from '@/lib/worktree-nav-view-history-replay'
+import {
+  raiseOtherWindowForWorkspaceKey,
+  type ActivateOtherWindowGuardOpts
+} from '@/lib/other-window-activation-guard'
+import { ensureFolderWorkspaceInitialTerminal } from '@/lib/folder-workspace-initial-terminal'
 
 /**
  * Shared activation sequence used by the worktree palette and add-repo/worktree dialogs.
@@ -44,57 +47,6 @@ export type ActivateAndRevealResult = {
   /** Id of the primary terminal tab seeded with `opts.startup`, or null. Prefer this over
    *  `activeTabIdByWorktree`, which may point at another tab if setup/issue scripts opened their own. */
   primaryTabId: string | null
-}
-
-function ensureFolderWorkspaceInitialTerminal(
-  folderWorkspace: FolderWorkspace,
-  startup?: WorktreeStartupPayload,
-  providesInitialSurface?: boolean
-): string | null {
-  if (providesInitialSurface === true && startup === undefined) {
-    return null
-  }
-  const state = useAppStore.getState()
-  const workspaceKey = folderWorkspaceKey(folderWorkspace.id)
-  const primaryTabId = ensureWorktreeHasInitialTerminal(
-    state,
-    workspaceKey,
-    startup,
-    undefined,
-    undefined,
-    undefined,
-    { reseedEmptiedWorkspace: providesInitialSurface !== true }
-  )
-  return primaryTabId
-}
-
-/**
- * Raise-instead-of-switch: a workspace whose PROJECT is owned by another app window
- * must focus that window, not re-activate here. Returns true when the raise was
- * dispatched (caller returns `false` without side effects). `bypass` is for internal
- * flows that must not bounce — see ActivateOtherWindowGuardOpts.
- *
- * Why raise the window only (no worktree forwarding): the owning window already shows
- * that project's rows, so cross-window worktree-activation forwarding is dead weight —
- * dropping it removes the fragile forwarding bug class.
- */
-function raiseOtherWindowForWorkspaceKey(workspaceKey: string, bypass?: boolean): boolean {
-  if (bypass) {
-    return false
-  }
-  const projectKey = projectKeyForWorkspaceKey(workspaceKey)
-  if (!useAppStore.getState().projectKeysInOtherWindows.has(projectKey)) {
-    return false
-  }
-  void window.api.projectWindow?.raise?.(projectKey)
-  return true
-}
-
-type ActivateOtherWindowGuardOpts = {
-  /** Skip the raise-instead-of-switch guard. Use sparingly: takeover nav-away (the target was
-   *  just vetted as un-windowed, and bouncing there could loop) and history replay that must
-   *  not re-raise. Every other caller should let the guard run. */
-  bypassOtherWindowGuard?: boolean
 }
 
 function canInspectAgentActivationInventory(): boolean {

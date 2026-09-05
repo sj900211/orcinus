@@ -14,10 +14,8 @@ import { PtyProducerFlowController } from '../pty-producer-flow-control'
 import { PtyPendingDataDrainQueue, type PendingPtyData } from '../pty-pending-data-drain-queue'
 import type { SshPtyOutputIntake } from '../ssh-pty-output-intake'
 import { activeRendererPtys } from './delivery/visibility-state'
-import {
-  isHiddenPtyDeliveryGateEnabled,
-  shouldDropHiddenRendererPtyData
-} from '../pty-hidden-delivery-gate'
+import { isHiddenPtyDeliveryGateEnabled } from '../pty-hidden-delivery-gate'
+import { shouldDropHiddenRendererPtyDataForOwner } from './pty-owner-gate'
 import type { CodexHomePtySpawnedLifecycleArgs, PrepareCodexSessionResume } from './host-env/types'
 import { tryGetProviderForPty } from './provider/registry'
 
@@ -271,7 +269,7 @@ export function createPtyIpcSession(args: {
     (id) => {
       const runnableLane = activeRendererPtys.has(id) ? 'active' : 'background'
       // Why first: hidden bytes are dropped from main's pending queue even when renderer credit is exhausted.
-      if (shouldDropHiddenRendererPtyData(id, session.getSettings?.())) {
+      if (shouldDropHiddenRendererPtyDataForOwner(id, session.getSettings?.())) {
         return runnableLane
       }
       if (

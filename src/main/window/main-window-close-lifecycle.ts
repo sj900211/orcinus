@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, Menu, Notification } from 'electron'
+import { ipcMain, Menu, Notification, type BrowserWindow } from 'electron'
 import { QUIT_RENDERER_ACK_TIMEOUT_MS } from '../../shared/quit-teardown-deadline'
 import { translateMain } from '../i18n/main-i18n'
 import type { Store } from '../persistence'
@@ -13,13 +13,18 @@ export const WINDOW_QUIT_RENDERER_ACK_TIMEOUT_MS = QUIT_RENDERER_ACK_TIMEOUT_MS
 // Why: ipcMain.handle throws on duplicate channels; with multiple windows one app-lifetime
 // handler answers from the asking window instead of a per-window handle/removeHandler pair.
 let isMaximizedHandlerInstalled = false
+// Why a registration map instead of BrowserWindow.fromWebContents: a VALUE
+// import of electron here reaches main test graphs that resolve the real CJS
+// electron package (named-export crash); the lifecycle already knows every
+// window it serves.
+const isMaximizedWindowsByWebContentsId = new Map<number, BrowserWindow>()
 function installIsMaximizedHandler(): void {
   if (isMaximizedHandlerInstalled) {
     return
   }
   isMaximizedHandlerInstalled = true
   ipcMain.handle('window:isMaximized', (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender)
+    const window = isMaximizedWindowsByWebContentsId.get(event.sender.id)
     return !!window && !window.isDestroyed() && window.isMaximized()
   })
 }
@@ -216,11 +221,14 @@ export function installMainWindowCloseLifecycle(args: {
   ipcMain.on(popupMenuChannel, onPopupMenu)
   // Why: WindowControls mounts after window:maximize-changed already fired; the shared handler answers from the asking window.
   installIsMaximizedHandler()
+  isMaximizedWindowsByWebContentsId.set(rendererWebContentsId, mainWindow)
+  isMaximizedWindowsByWebContentsId.set(rendererWebContentsId, mainWindow)
 
   ipcMain.on(confirmCloseChannel, onConfirmClose)
   ipcMain.on(closeRequestReceivedChannel, onCloseRequestReceived)
 
   const dispose = (): void => {
+    isMaximizedWindowsByWebContentsId.delete(rendererWebContentsId)
     clearQuitRendererAckTimer()
     ipcMain.removeListener(trafficLightChannel, onSyncTrafficLights)
     ipcMain.removeListener(minimizeChannel, onMinimize)

@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import { Writable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import type { SFTPWrapper } from 'ssh2'
-import { removeDirectorySftp, uploadBuffer, uploadDirectory, uploadFile } from './sftp-upload'
+import { uploadBuffer, uploadDirectory, uploadFile } from './sftp-upload'
+import { removeDirectorySftp } from './sftp-directory-removal'
 
 function createWritable(): Writable {
   return new Writable({
@@ -23,6 +24,7 @@ function createSftpMock(): SFTPWrapper {
       cb(null, [])
     ),
     unlink: vi.fn((_path: string, cb: (err?: Error | null) => void) => cb(null)),
+    rename: vi.fn((_src: string, _dst: string, cb: (err?: Error | null) => void) => cb(null)),
     rmdir: vi.fn((_path: string, cb: (err?: Error | null) => void) => cb(null))
   } as unknown as SFTPWrapper
 }
@@ -56,9 +58,18 @@ describe('sftp-upload', () => {
     })
 
     expect(sftp.mkdir).toHaveBeenCalledWith('/remote/assets/nested', expect.any(Function))
-    expect(sftp.createWriteStream).toHaveBeenCalledWith('/remote/assets/nested/asset.txt', {
-      flags: 'wx'
-    })
+    // Fork contract: uploads stream to a temp `.orcinus-part-*` sibling with
+    // plain 'w' and publish exclusively via rename — the final path is never
+    // opened directly, so a crashed upload can't leave a clobbered target.
+    expect(sftp.createWriteStream).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/remote\/assets\/nested\/asset\.txt\.orcinus-part-/),
+      { flags: 'w' }
+    )
+    expect(sftp.rename).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/remote\/assets\/nested\/asset\.txt\.orcinus-part-/),
+      '/remote/assets/nested/asset.txt',
+      expect.any(Function)
+    )
     const writeStream = vi.mocked(sftp.createWriteStream).mock.results[0]?.value as Writable
     expect(writeStream.listenerCount('close')).toBe(0)
     // One durable 'error' listener stays for the stream's whole life: a STATUS reply that
@@ -77,9 +88,15 @@ describe('sftp-upload', () => {
     })
 
     expect(sftp.mkdir).toHaveBeenCalledWith('/remote/assets/..fixtures', expect.any(Function))
-    expect(sftp.createWriteStream).toHaveBeenCalledWith('/remote/assets/..fixtures/asset.txt', {
-      flags: 'wx'
-    })
+    expect(sftp.createWriteStream).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/remote\/assets\/\.\.fixtures\/asset\.txt\.orcinus-part-/),
+      { flags: 'w' }
+    )
+    expect(sftp.rename).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/remote\/assets\/\.\.fixtures\/asset\.txt\.orcinus-part-/),
+      '/remote/assets/..fixtures/asset.txt',
+      expect.any(Function)
+    )
   })
 
   it('rejects sibling directories outside the upload root', async () => {

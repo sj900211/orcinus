@@ -190,7 +190,13 @@ export function recordHiddenRendererPtyDataDrop(
  *  dropped bytes the old renderer never restored; the new renderer's first
  *  hidden/visible sync re-marks or unmarks and the unmark path re-emits the
  *  restore marker. */
-export function resetRendererScopedHiddenPtyDeliveryState(webContentsId: number): void {
+export function resetRendererScopedHiddenPtyDeliveryState(webContentsId?: number): void {
+  // Why optional: handler re-registration (tests) clears EVERY window's state.
+  if (webContentsId === undefined) {
+    hiddenRendererPtysByWebContents.clear()
+    deliveryInterestRendererPtysByWebContents.clear()
+    return
+  }
   hiddenRendererPtysByWebContents.delete(webContentsId)
   deliveryInterestRendererPtysByWebContents.delete(webContentsId)
 }

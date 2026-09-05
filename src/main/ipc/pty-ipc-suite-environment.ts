@@ -97,7 +97,6 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
     isMinimized: () => false,
     webContents: {
       id: 101,
-      isDestroyed: () => false,
       getType: () => 'window',
       getURL: () => 'file:///opt/orca/renderer/index.html',
       on: vi.fn(),

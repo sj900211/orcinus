@@ -1,8 +1,6 @@
 import type { LegacySshProjectionSemantics } from '../../ssh-pty-legacy-projection'
-import {
-  recordHiddenRendererPtyDataDrop,
-  shouldDropHiddenRendererPtyData
-} from '../../pty-hidden-delivery-gate'
+import { recordHiddenRendererPtyDataDrop } from '../../pty-hidden-delivery-gate'
+import { shouldDropHiddenRendererPtyDataForOwner } from '../pty-owner-gate'
 import {
   deliveredHiddenRendererResizeOutputPtys,
   pendingHiddenRendererResizeOutputPtys,
@@ -83,7 +81,7 @@ export function acceptPtyDataForRenderer(
     }
     return
   }
-  if (shouldDropHiddenRendererPtyData(payload.id, session.getSettings?.())) {
+  if (shouldDropHiddenRendererPtyDataForOwner(payload.id, session.getSettings?.())) {
     if (projectionId) {
       session.sshOutputIntake?.transferProjections([projectionId], 'hidden-drop')
     }

@@ -56,6 +56,7 @@ const {
   registerOnboardingHandlersMock,
   registerDashboardPopoutHandlersMock,
   registerProjectWindowHandlersMock,
+  registerSatelliteWindowHandlersMock,
   isDashboardPopoutRendererMock,
   registerTerminalPreviewHandlersMock,
   registerSpeechHandlersMock,
@@ -123,6 +124,7 @@ const {
   registerOnboardingHandlersMock: vi.fn(),
   registerDashboardPopoutHandlersMock: vi.fn(),
   registerProjectWindowHandlersMock: vi.fn(),
+  registerSatelliteWindowHandlersMock: vi.fn(),
   isDashboardPopoutRendererMock: vi.fn(),
   registerTerminalPreviewHandlersMock: vi.fn(),
   registerSpeechHandlersMock: vi.fn(),
@@ -164,6 +166,10 @@ vi.mock('../dashboard-popout', () => ({
 
 vi.mock('../project-window', () => ({
   registerProjectWindowHandlers: registerProjectWindowHandlersMock
+}))
+
+vi.mock('../satellite-window', () => ({
+  registerSatelliteWindowHandlers: registerSatelliteWindowHandlersMock
 }))
 
 vi.mock('../../window/dashboard-popout-window', () => ({
@@ -451,6 +457,7 @@ describe('registerCoreHandlers', () => {
     registerExportHandlersMock.mockReset()
     registerDashboardPopoutHandlersMock.mockReset()
     registerProjectWindowHandlersMock.mockReset()
+    registerSatelliteWindowHandlersMock.mockReset()
     registerTerminalPreviewHandlersMock.mockReset()
     registerSpeechHandlersMock.mockReset()
     registerSkillsHandlersMock.mockReset()
