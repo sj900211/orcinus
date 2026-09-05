@@ -44,6 +44,7 @@ export function renderTabBarSurface({
   const {
     worktreeId,
     terminalOnly = false,
+    editorOnly = false,
     showAgentLaunchItems = true,
     onNewTerminalTab,
     onOpenEntry,
@@ -193,68 +194,72 @@ export function renderTabBarSurface({
           </TooltipContent>
         </Tooltip>
       ) : null}
-      <DropdownMenu
-        open={newTabMenuOpen}
-        onOpenChange={setNewTabMenuOpen}
-        // Why: modal would disable body pointer events, making the Mobile Emulator "Hide" re-enable toast unclickable.
-        modal={false}
-      >
-        <DropdownMenuTrigger asChild>
-          <button
-            className="ml-2 my-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-            title={translate('auto.components.tab.bar.TabBar.b1a132357f', 'New tab')}
-            // Why: aria-label matches the tooltip so E2E can locate the "+" via getByRole('button', { name: 'New tab' }).
-            aria-label={translate('auto.components.tab.bar.TabBar.b1a132357f', 'New tab')}
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          sideOffset={6}
-          className="w-72 max-w-[calc(100vw-1rem)] rounded-[11px] border-border/80 p-1 shadow-[0_16px_36px_rgba(0,0,0,0.24)]"
-          onCloseAutoFocus={(event) => {
-            // Why: Radix restores focus to the "+" trigger on close, stealing it from the freshly-mounted terminal.
-            event.preventDefault()
-            runPendingNewTabMenuFocusAfterClose()
-          }}
+      {/* Why editorOnly hides the whole menu: the one unconditional item is New
+          Terminal, which a satellite editor window must never offer (D10). */}
+      {editorOnly ? null : (
+        <DropdownMenu
+          open={newTabMenuOpen}
+          onOpenChange={setNewTabMenuOpen}
+          // Why: modal would disable body pointer events, making the Mobile Emulator "Hide" re-enable toast unclickable.
+          modal={false}
         >
-          {!terminalOnly && onOpenEntry ? (
-            <>
-              <TabBarCreateEntry
-                worktreeId={worktreeId}
-                groupId={resolvedGroupId}
-                menuOpen={newTabMenuOpen}
-                menuOptions={createMenuOptions}
-                agentOptions={agentLaunchOptions}
-                onLaunchAgent={launchAgentFromNewTabEntry}
-                onOpenDefaultTerminal={() => {
-                  queueNewActiveTerminalFocusAfterNewTabMenuClose()
-                  onNewTerminalTab()
-                }}
-                onOpenEntry={onOpenEntry}
-                onQueryChange={setCreateMenuQuery}
-                onQueueSwitchFocus={queueFocusAfterNewTabMenuClose}
-                onSelectMenuOption={handleSelectCreateMenuOption}
-                onDidOpenEntry={() => setNewTabMenuOpen(false)}
-              />
-              {showStaticCreateMenuItems ? <DropdownMenuSeparator /> : null}
-            </>
-          ) : null}
-          {showStaticCreateMenuItems ? standardCreateMenuItems : null}
-          {showStaticCreateMenuItems && showAgentLaunchItems ? (
-            <>
-              <DropdownMenuSeparator />
-              <QuickLaunchAgentMenuItems
-                worktreeId={worktreeId}
-                groupId={resolvedGroupId}
-                onFocusTerminal={queueTerminalTabFocusAfterNewTabMenuClose}
-              />
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="ml-2 my-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              title={translate('auto.components.tab.bar.TabBar.b1a132357f', 'New tab')}
+              // Why: aria-label matches the tooltip so E2E can locate the "+" via getByRole('button', { name: 'New tab' }).
+              aria-label={translate('auto.components.tab.bar.TabBar.b1a132357f', 'New tab')}
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            sideOffset={6}
+            className="w-72 max-w-[calc(100vw-1rem)] rounded-[11px] border-border/80 p-1 shadow-[0_16px_36px_rgba(0,0,0,0.24)]"
+            onCloseAutoFocus={(event) => {
+              // Why: Radix restores focus to the "+" trigger on close, stealing it from the freshly-mounted terminal.
+              event.preventDefault()
+              runPendingNewTabMenuFocusAfterClose()
+            }}
+          >
+            {!terminalOnly && onOpenEntry ? (
+              <>
+                <TabBarCreateEntry
+                  worktreeId={worktreeId}
+                  groupId={resolvedGroupId}
+                  menuOpen={newTabMenuOpen}
+                  menuOptions={createMenuOptions}
+                  agentOptions={agentLaunchOptions}
+                  onLaunchAgent={launchAgentFromNewTabEntry}
+                  onOpenDefaultTerminal={() => {
+                    queueNewActiveTerminalFocusAfterNewTabMenuClose()
+                    onNewTerminalTab()
+                  }}
+                  onOpenEntry={onOpenEntry}
+                  onQueryChange={setCreateMenuQuery}
+                  onQueueSwitchFocus={queueFocusAfterNewTabMenuClose}
+                  onSelectMenuOption={handleSelectCreateMenuOption}
+                  onDidOpenEntry={() => setNewTabMenuOpen(false)}
+                />
+                {showStaticCreateMenuItems ? <DropdownMenuSeparator /> : null}
+              </>
+            ) : null}
+            {showStaticCreateMenuItems ? standardCreateMenuItems : null}
+            {showStaticCreateMenuItems && showAgentLaunchItems ? (
+              <>
+                <DropdownMenuSeparator />
+                <QuickLaunchAgentMenuItems
+                  worktreeId={worktreeId}
+                  groupId={resolvedGroupId}
+                  onFocusTerminal={queueTerminalTabFocusAfterNewTabMenuClose}
+                />
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   )
 }

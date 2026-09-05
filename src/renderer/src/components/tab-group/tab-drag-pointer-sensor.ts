@@ -14,6 +14,16 @@ const DEFAULT_COORDINATES: PointerCoordinates = { x: 0, y: 0 }
 const TAB_DRAG_EARLY_MOVE_CONFIRMATION_MS = 50
 const TAB_DRAG_CONFIRMED_DISTANCE_SAMPLE_COUNT = 2
 
+// Dungeon 6 / D20 (review C3): the outside-viewport release test needs the
+// RAW pointer. dnd-kit's DragEndEvent delta is scroll-adjusted (a mid-drag
+// tab-strip wheel scroll skews activatorEvent+delta by the scrolled
+// distance), so the sensor records the last real pointer client coordinates.
+let lastPointerClientPoint: PointerCoordinates | null = null
+
+export function getLastTabDragPointerClientPoint(): PointerCoordinates | null {
+  return lastPointerClientPoint
+}
+
 type ListenerEntry = {
   eventName: string
   handler: EventListener
@@ -154,6 +164,7 @@ export class TabDragPointerSensor implements SensorInstance {
     this.props = props
     this.document = getOwnerDocument(props.event.target)
     this.initialCoordinates = getPointerCoordinates(props.event) ?? DEFAULT_COORDINATES
+    lastPointerClientPoint = getPointerCoordinates(props.event)
     this.handleStart = this.handleStart.bind(this)
     this.handleMove = this.handleMove.bind(this)
     this.handleEnd = this.handleEnd.bind(this)
@@ -233,6 +244,7 @@ export class TabDragPointerSensor implements SensorInstance {
     if (!coordinates) {
       return
     }
+    lastPointerClientPoint = coordinates
     const delta = subtractCoordinates(this.initialCoordinates, coordinates)
 
     if (!this.activated && activationConstraint) {
@@ -276,7 +288,12 @@ export class TabDragPointerSensor implements SensorInstance {
     this.props.onMove(coordinates)
   }
 
-  private handleEnd(): void {
+  private handleEnd(event: Event): void {
+    // The final pointerup can land past the last move — record it too.
+    const coordinates = getPointerCoordinates(event)
+    if (coordinates) {
+      lastPointerClientPoint = coordinates
+    }
     this.detach()
     if (!this.activated) {
       this.props.onAbort(this.props.active)

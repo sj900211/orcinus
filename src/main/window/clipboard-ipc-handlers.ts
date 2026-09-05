@@ -243,6 +243,19 @@ function makeClipboardFileDeps(
   }
 }
 
+// Why a separate additional set (satellite editor windows): like the dashboard
+// popout, a satellite needs TEXT clipboard only - its authority must not extend
+// to image, file, or remote clipboard operations.
+const additionalTrustedClipboardTextWebContentsIds = new Set<number>()
+
+export function addTrustedClipboardTextWebContentsId(webContentsId: number): void {
+  additionalTrustedClipboardTextWebContentsIds.add(webContentsId)
+}
+
+export function removeTrustedClipboardTextWebContentsId(webContentsId: number): void {
+  additionalTrustedClipboardTextWebContentsIds.delete(webContentsId)
+}
+
 function assertTrustedClipboardSender(event: IpcMainInvokeEvent): void {
   if (!isTrustedClipboardRenderer(event.sender)) {
     throw new Error('Unauthorized clipboard IPC sender')
@@ -250,9 +263,14 @@ function assertTrustedClipboardSender(event: IpcMainInvokeEvent): void {
 }
 
 function assertTrustedClipboardTextSender(event: IpcMainInvokeEvent): void {
-  // Why: terminal copy/paste runs in the exact dashboard popout window, but its
-  // clipboard authority must not extend to image, file, or remote operations.
-  if (!isTrustedClipboardRenderer(event.sender) && !isDashboardPopoutRenderer(event.sender)) {
+  // Why: terminal copy/paste runs in the exact dashboard popout window, and
+  // satellite editors copy paths / paste text - but neither authority may
+  // extend to image, file, or remote operations.
+  if (
+    !isTrustedClipboardRenderer(event.sender) &&
+    !isDashboardPopoutRenderer(event.sender) &&
+    !additionalTrustedClipboardTextWebContentsIds.has(event.sender.id)
+  ) {
     throw new Error('Unauthorized clipboard IPC sender')
   }
 }

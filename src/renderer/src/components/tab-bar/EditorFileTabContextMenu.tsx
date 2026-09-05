@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   Copy,
   CopyX,
   ExternalLink,
@@ -24,6 +25,15 @@ import { showLocalPathOpenBlockedToast } from '@/lib/local-path-open-guard'
 import { useOptionalShortcutLabel } from '@/hooks/useShortcutLabel'
 import type { OpenFile } from '../../store/slices/editor'
 import { shouldBlockEditorTabLocalOpen } from './editor-tab-local-open-guard'
+import { getRendererWindowSurface } from '@/lib/renderer-window-surface'
+import { getConnectionIdFromState } from '@/lib/connection-context'
+import {
+  isEditorFileEntityPinned,
+  isEditorFileMovableToSatellite,
+  moveEditorFileBackToParent,
+  moveEditorFileToNewSatellite
+} from '@/lib/satellite-editor-file-move'
+import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { TabWorkspaceLayoutMenuSection } from './TabWorkspaceLayoutMenuSection'
 import { TAB_CONTEXT_MENU_CONTENT_CLASS } from './tab-context-menu-sizing'
@@ -52,7 +62,6 @@ type EditorFileTabContextMenuProps = {
   canRename: boolean
   canShowMarkdownPreview: boolean
   resolvedLanguage: string
-  repoConnectionId: string | null
   skipMenuFocusRestoreRef: React.MutableRefObject<boolean>
   onOpenChange: (open: boolean) => void
   onActivate: () => void
@@ -89,7 +98,6 @@ export function EditorFileTabContextMenu({
   canRename,
   canShowMarkdownPreview,
   resolvedLanguage,
-  repoConnectionId,
   skipMenuFocusRestoreRef,
   onOpenChange,
   onActivate,
@@ -102,6 +110,14 @@ export function EditorFileTabContextMenu({
   onCloseToLeft,
   onOpenMarkdownPreview
 }: EditorFileTabContextMenuProps): React.JSX.Element {
+  // Review C8/C10: same resolver as the drag-out path — the old prop
+  // (`repo?.connectionId ?? null`) collapsed "repo unknown" (undefined, e.g.
+  // mid-SSH-hydration after a restore) into eligible-null.
+  const repoConnectionId = useAppStore((s) => getConnectionIdFromState(s, file.worktreeId))
+  // Review C11: pin gate at entity level (cross-group duplicates of the file).
+  const isMoveEntityPinned = useAppStore((s) =>
+    isEditorFileEntityPinned(s.unifiedTabsByWorktree[file.worktreeId], file.id)
+  )
   const renameShortcut = useOptionalShortcutLabel('tab.rename')
   const closeShortcut = useOptionalShortcutLabel('tab.close')
   const closeAllShortcut = useOptionalShortcutLabel('tab.closeAll')
@@ -128,11 +144,15 @@ export function EditorFileTabContextMenu({
           event.preventDefault()
         }}
       >
-        <TabWorkspaceLayoutMenuSection
-          unifiedTabId={unifiedTabId}
-          groupId={groupId}
-          trailingSeparator
-        />
+        {/* Why hidden in satellites (D11): "Move Tab to Split" would create a
+            split group the satellite shell does not render. */}
+        {getRendererWindowSurface() !== 'satellite' ? (
+          <TabWorkspaceLayoutMenuSection
+            unifiedTabId={unifiedTabId}
+            groupId={groupId}
+            trailingSeparator
+          />
+        ) : null}
         <DropdownMenuItem
           disabled={!canRename || isRenaming}
           onSelect={() => {
@@ -251,6 +271,71 @@ export function EditorFileTabContextMenu({
           <ExternalLink className="size-3.5" />
           {revealLabel}
         </DropdownMenuItem>
+        {/* TRUE move (dungeon 5): the WHY of each gate lives on the shared
+            predicate, reused by the dungeon-6 tab drag-out so the two paths
+            never drift. Hidden in satellites: main rejects
+            satellite-of-satellite opens. */}
+        {getRendererWindowSurface() !== 'satellite' &&
+        isEditorFileMovableToSatellite({ file, isPinned: isMoveEntityPinned, repoConnectionId }) ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                void moveEditorFileToNewSatellite({
+                  file,
+                  language: resolvedLanguage,
+                  unifiedTabId: file.tabId ?? unifiedTabId
+                }).then((moved) => {
+                  if (!moved) {
+                    toast.error(
+                      translate(
+                        'components.tab.bar.EditorFileTabContextMenu.moveToNewWindowFailed',
+                        'Could not move the file to a new window.'
+                      )
+                    )
+                  }
+                })
+              }}
+            >
+              <AppWindow className="size-3.5" />
+              {translate(
+                'components.tab.bar.EditorFileTabContextMenu.moveToNewWindow',
+                'Move to New Window'
+              )}
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {/* D6 Move Back: the explicit return path — satellite tab close stays a
+            plain close. Satellite files are local edit tabs by construction. */}
+        {getRendererWindowSurface() === 'satellite' && file.mode === 'edit' ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                void moveEditorFileBackToParent({
+                  file,
+                  language: resolvedLanguage,
+                  unifiedTabId: file.tabId ?? unifiedTabId
+                }).then((moved) => {
+                  if (!moved) {
+                    toast.error(
+                      translate(
+                        'components.tab.bar.EditorFileTabContextMenu.moveBackFailed',
+                        'Could not move the file back to the main window.'
+                      )
+                    )
+                  }
+                })
+              }}
+            >
+              <AppWindow className="size-3.5" />
+              {translate(
+                'components.tab.bar.EditorFileTabContextMenu.moveBackToMainWindow',
+                'Move Back to Main Window'
+              )}
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )

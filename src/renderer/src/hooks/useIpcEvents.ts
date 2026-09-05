@@ -1,4 +1,5 @@
 /* oxlint-disable max-lines -- Why: this App-level IPC bridge intentionally keeps the renderer's main-process event contract in one place so shortcut, runtime, updater, and agent-status wiring do not drift across files. */
+import { applySatelliteReturnedFiles } from '@/lib/satellite-editor-file-move'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
 import { useAppStore } from '../store'
@@ -1357,6 +1358,32 @@ export function useIpcEvents(): void {
     )
     if (unsubscribeOpenProjectsChanged) {
       unsubs.push(unsubscribeOpenProjectsChanged)
+    }
+
+    // Why ?.: additive API. The per-window satellite mirror drives the openFile
+    // interception gate and menu gating (dungeon 5); satellites never receive it.
+    const unsubscribeSatelliteMirror = window.api.satelliteWindow?.onMirrorChanged?.((entries) => {
+      useAppStore.getState().setSatelliteMirror(entries)
+    })
+    if (unsubscribeSatelliteMirror) {
+      unsubs.push(unsubscribeSatelliteMirror)
+      // Why a snapshot fetch: the mirror is change-driven and main's
+      // did-finish-load re-broadcast lands before this subscription mounts —
+      // without this a reloaded window intercepts nothing until the next change.
+      void window.api.satelliteWindow
+        .getMirror?.()
+        .then((entries) => {
+          if (entries) {
+            useAppStore.getState().setSatelliteMirror(entries)
+          }
+        })
+        .catch(() => undefined)
+    }
+    const unsubscribeFilesMovedBack = window.api.satelliteWindow?.onFilesMovedBack?.((data) => {
+      applySatelliteReturnedFiles(data)
+    })
+    if (unsubscribeFilesMovedBack) {
+      unsubs.push(unsubscribeFilesMovedBack)
     }
 
     if (window.api.keybindings) {

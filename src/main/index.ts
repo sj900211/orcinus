@@ -1,4 +1,9 @@
 /* eslint-disable max-lines -- main-process entry point; owns app lifecycle, service wiring, window creation, and hook/daemon startup with no cleaner split seam. */
+import { markAppQuitting, resetAppQuitting } from './app-quit-state'
+import {
+  restoreMissingSatelliteWindows,
+  restoreSatelliteWindows
+} from './window/satellite-window-restore'
 import { existsSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import os from 'node:os'
@@ -1455,6 +1460,12 @@ function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}): Brow
     getIsQuitting: () => isQuitting,
     onQuitAborted: () => {
       isQuitting = false
+      resetAppQuitting()
+      // Post-review C6: satellites destroyed by the aborted quit sweep stay
+      // dead while the app lives on — recreate them from their kept entries.
+      if (store && mainWindow && !mainWindow.isDestroyed()) {
+        restoreMissingSatelliteWindows(store, mainWindow)
+      }
       clearExpectedRendererReload()
     },
     onRendererProcessGone: (details, webContentsId) => {
@@ -1633,6 +1644,9 @@ function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}): Brow
     stopAllSyntheticTitleSpinners()
   })
   mainWindow = window
+  // Satellite restore-at-launch (5-7): once per process (internal guard), after
+  // the routed parent exists and satellite IPC is registered — both true here.
+  restoreSatelliteWindows(store, window)
   window.on('show', resumeSyntheticTitleSpinnerTimer)
   window.on('restore', resumeSyntheticTitleSpinnerTimer)
   window.on('hide', stopSyntheticTitleSpinnerTimer)
@@ -3363,6 +3377,7 @@ app.on('before-quit', () => {
     })
   }
   isQuitting = true
+  markAppQuitting()
   desktopRelayService?.fenceAndCloseNow()
   runtimeRpc?.setMobileRelayPairingProvider(null)
   unsubscribeAgentAwakeStatusChanges?.()

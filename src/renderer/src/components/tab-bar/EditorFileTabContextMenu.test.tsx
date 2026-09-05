@@ -36,6 +36,9 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
 }))
 
 vi.mock('lucide-react', () => ({
+  AppWindow: function AppWindow(props: Record<string, unknown>) {
+    return { type: 'AppWindow', props }
+  },
   ArrowDown: function ArrowDown(props: Record<string, unknown>) {
     return { type: 'ArrowDown', props }
   },
@@ -141,6 +144,11 @@ vi.mock('./editor-tab-local-open-guard', () => ({
   shouldBlockEditorTabLocalOpen: () => false
 }))
 
+// The menu now derives the move-gate connection id itself (review C8/C10).
+vi.mock('@/lib/connection-context', () => ({
+  getConnectionIdFromState: () => null
+}))
+
 type ReactElementLike = {
   type: unknown
   props: Record<string, unknown>
@@ -227,7 +235,6 @@ async function renderMenu(): Promise<unknown> {
     canRename: true,
     canShowMarkdownPreview: false,
     resolvedLanguage: 'typescript',
-    repoConnectionId: null,
     skipMenuFocusRestoreRef: { current: false },
     onOpenChange: vi.fn(),
     onActivate: vi.fn(),

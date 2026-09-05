@@ -18,6 +18,7 @@ import { useWebSessionTabsSync } from '../runtime/web-session-tabs-sync'
 import { useRemoteRuntimeRecoveryTriggers } from '../runtime/use-remote-runtime-recovery-triggers'
 import { useWorktreeTakeoverNavigation } from './use-worktree-takeover-navigation'
 import { useProjectWindowActiveProjectSync } from './use-project-window-active-project-sync'
+import { useSatelliteWorktreeSync } from './use-satellite-worktree-sync'
 
 /**
  * App-level subscriptions that must outlive any individual surface. Each one is here because
@@ -39,6 +40,9 @@ export function useAppShellServices(options: { floatingPanelVisible: boolean }):
   // (workspace role only) report cross-project switches so main re-keys the window registry.
   useWorktreeTakeoverNavigation()
   useProjectWindowActiveProjectSync()
+  // Satellites (Expedition 5): worktree-granular sibling of the project reporter —
+  // subordinate satellite windows hide/show with the active workspace (spec 5).
+  useSatelliteWorktreeSync()
   useRemoteRuntimeRecoveryTriggers()
   useAutomationDispatchEvents()
   // Why: git polling lives at App level (RightSidebar unmounts when closed, stranding stale Rebasing/Merging badges); gate on workspaceSessionReady so it doesn't compete with first paint.

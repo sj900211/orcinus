@@ -239,6 +239,12 @@ export function openDetectedFilePath(
       // Why: scope the reveal to the opened editor tab id so owner-qualified tabs
       // across local/SSH/runtime contexts get it instead of an ambiguous path key.
       const fileId = openedStore.activeFileIdByWorktree[worktreeId] ?? mappedFilePath
+      // Post-review C10: an intercepted open (satellite-resident file) makes no
+      // local tab — the fallback id would point at an unrelated tab and the
+      // reveal would arm stale state. The satellite shows the file instead.
+      if (!openedStore.openFiles.some((candidate) => candidate.id === fileId)) {
+        return
+      }
       if (language === 'markdown') {
         // Why: rich Markdown has no line-based reveal consumer; line links must mount Monaco.
         openedStore.setMarkdownViewMode(fileId, 'source')

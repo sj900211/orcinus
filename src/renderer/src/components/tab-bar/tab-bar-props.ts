@@ -48,4 +48,7 @@ export type TabBarProps = {
   hoveredTabInsertion?: HoveredTabInsertion | null
   /** Floating workspace panels are rounded; skip tab top borders that clash with the curve. */
   tabStripChrome?: 'default' | 'floating-panel'
+  /** Satellite editor windows: hide the "+" create menu entirely — files
+   *  arrive via move/drag (owner decision D10), never in-window creation. */
+  editorOnly?: boolean
 }
