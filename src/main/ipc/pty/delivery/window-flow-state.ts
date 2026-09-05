@@ -20,6 +20,9 @@ export type RendererWindowFlowState = {
   // Why: mirrors this window's renderer-side cumulative processed counter per pty (it survives owner
   // changes there); a re-owning window's fresh accounting baselines against it or stale totals over-credit.
   lastCumulativeAckByPty: Map<string, number>
+  // Why: removes the webContents lifecycle listeners this session attached, so a re-registration can
+  // detach the outgoing session instead of leaking a listener (and the whole dead session) per macOS re-activate.
+  detachLifecycleListeners: (() => void) | null
 }
 
 // Why a session token (not a generation counter): a re-registration creates a new session whose
@@ -44,7 +47,8 @@ export function createWindowFlowState(
     deliveryResyncOutstandingRequestId: null,
     deliveryResyncTimer: null,
     deliveryResyncUnansweredWarnLogged: false,
-    lastCumulativeAckByPty: new Map()
+    lastCumulativeAckByPty: new Map(),
+    detachLifecycleListeners: null
   }
   session.windowFlowStates.set(webContents.id, state)
   return state
@@ -88,22 +92,12 @@ export function ownerFlowStateForPty(
   return getOrCreateWindowFlowState(session, webContents)
 }
 
-// Why: attribute sender-scoped IPC (ACKs, resync replies, health reports) to that window's state; unknown senders fall back to the main window like the single-window era.
+// Why strict for real senders: sender-scoped IPC (acks, resync replies, heal reports) mirrors each
+// window's renderer counter and drives the heal write-off, which force-acks and drops pending for the
+// reporting window's owned ptys. A real-but-unknown sender (a destroyed workspace window's queued invoke,
+// or one not yet handshaken) must NOT resolve to main, or its ack/report would corrupt main-owned
+// delivery. Only a senderless event (tests, legacy relays) falls back to main, as in the single-window era.
 export function flowStateForSenderEvent(
-  session: PtyIpcSession,
-  event: IpcMainEvent | IpcMainInvokeEvent | null | undefined
-): RendererWindowFlowState {
-  const senderId = event?.sender?.id
-  return (
-    (senderId !== undefined ? session.windowFlowStates.get(senderId) : undefined) ??
-    session.mainFlowState
-  )
-}
-
-// Why strict (no main fallback for real senders): ack crediting mirrors each window's renderer
-// counter, so a destroyed window's queued acks must be dropped, not booked onto the main window.
-// A senderless event (tests, legacy relays) still presents as main.
-export function ackAttributionFlowState(
   session: PtyIpcSession,
   event: IpcMainEvent | IpcMainInvokeEvent | null | undefined
 ): RendererWindowFlowState | null {
@@ -181,17 +175,14 @@ function trackWorkspaceWindowDeliveryLifecycle(
     resetRendererScopedHiddenPtyDeliveryState(state.webContentsId)
     session.resyncBackgroundedDeliveriesAfterGateReset()
   }
-  state.webContents.on('render-process-gone', scopedReset)
-  state.webContents.on(
-    'did-start-navigation',
-    (details: { isMainFrame: boolean; isSameDocument: boolean }) => {
-      if (!details.isMainFrame || details.isSameDocument) {
-        return
-      }
-      scopedReset()
+  const onRenderProcessGone = scopedReset
+  const onNavigation = (details: { isMainFrame: boolean; isSameDocument: boolean }): void => {
+    if (!details.isMainFrame || details.isSameDocument) {
+      return
     }
-  )
-  state.webContents.on('destroyed', () => {
+    scopedReset()
+  }
+  const onDestroyed = (): void => {
     if (activeWindowFlowSession !== session) {
       return
     }
@@ -199,9 +190,36 @@ function trackWorkspaceWindowDeliveryLifecycle(
     clearDispatcherReadyWatchdog(state)
     clearDeliveryResyncProbe(state)
     session.windowFlowStates.delete(state.webContentsId)
-  })
+  }
+  const { webContents } = state
+  webContents.on('render-process-gone', onRenderProcessGone)
+  webContents.on('did-start-navigation', onNavigation)
+  webContents.on('destroyed', onDestroyed)
+  state.detachLifecycleListeners = (): void => {
+    webContents.removeListener('render-process-gone', onRenderProcessGone)
+    webContents.removeListener('did-start-navigation', onNavigation)
+    webContents.removeListener('destroyed', onDestroyed)
+  }
   // Why: a workspace window enters tracking mid-session with no navigation reset behind it; the watchdog self-heals a lost handshake.
   armDispatcherReadyWatchdog(session, state)
+}
+
+// Why: a re-registration (macOS re-activate builds a fresh session) orphans this session. Retire it so
+// its stranded producer pauses don't wedge a surviving project-window PTY, its flush timer stops firing
+// against dead bookkeeping, and its workspace webContents listeners (which pin the whole dead session)
+// are detached. The activeWindowFlowSession token already makes any late listener a no-op; this frees them.
+export function teardownOutgoingWindowFlowStates(session: PtyIpcSession): void {
+  if (session.flushTimer) {
+    clearTimeout(session.flushTimer)
+    session.flushTimer = null
+  }
+  session.producerFlowControl.releaseAll()
+  for (const state of session.windowFlowStates.values()) {
+    clearDispatcherReadyWatchdog(state)
+    clearDeliveryResyncProbe(state)
+    state.detachLifecycleListeners?.()
+  }
+  session.windowFlowStates.clear()
 }
 
 // Why: bytes in flight to the previous owner can never be acked by the new one (renderer counters restart per window); release the debt and latch a restore marker for the new owner.

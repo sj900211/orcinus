@@ -20,11 +20,12 @@ import {
 } from '../delivery/visibility-state'
 import { mainDeliveryBreadcrumbs } from '../delivery/debug'
 import { sendModelRestoreNeededMarker } from '../delivery/payload'
+import { isPtyEventFromTrustedAppWindow } from './write-input'
 import type { PtyIpcSession } from '../session'
 
 export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
   const ipcMain = getPtyIpc()
-  const { runtime } = session
+  const { runtime, mainWindow } = session
 
   // Why: resize is fire-and-forget — ipcMain.on (not .handle) halves IPC traffic by skipping the empty acknowledgement reply.
   ipcMain.removeAllListeners('pty:resize')
@@ -120,6 +121,11 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     if (typeof args.id !== 'string' || !args.id) {
       return
     }
+    // Why trust-gate: an unhide unconditionally consumes the global dropped-while-hidden latch, so an
+    // untrusted renderer could clear another window's drop memory and suppress its repaint (dungeon-4 review).
+    if (event?.sender && !isPtyEventFromTrustedAppWindow(event, mainWindow)) {
+      return
+    }
     // Why fall back to main: senderless events (tests, legacy relays) attribute to the main window.
     const reportingWebContentsId = event?.sender?.id ?? session.mainFlowState.webContentsId
     mainDeliveryBreadcrumbs.record(args.hidden === true ? 'gate-mark' : 'gate-unmark', {
@@ -181,6 +187,11 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
   ipcMain.removeAllListeners('pty:setPtyDeliveryInterest')
   ipcMain.on('pty:setPtyDeliveryInterest', (event, args: { id: string; interested: boolean }) => {
     if (typeof args.id !== 'string' || !args.id) {
+      return
+    }
+    // Why trust-gate: delivery interest under any webContents id defeats the hidden-delivery gate for that
+    // pty; an untrusted renderer must not force-feed a pty another window has hidden (dungeon-4 review).
+    if (event?.sender && !isPtyEventFromTrustedAppWindow(event, mainWindow)) {
       return
     }
     // Why fall back to main: senderless events (tests, legacy relays) attribute to the main window.

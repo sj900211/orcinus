@@ -96,6 +96,10 @@ let resetPtyRendererDeliveryDebugSnapshotImpl: (() => void) | null = null
 let resetRendererDeliveryAccountingForLifecycleResetImpl: (() => void) | null = null
 // Bridged so a re-registration can cancel the prior closure's dispatcher-ready watchdog before wiring its own.
 let clearRendererDispatcherReadyWatchdogImpl: (() => void) | null = null
+// Bridged so a re-registration (macOS re-activate builds a new session) can fully retire the outgoing
+// session: release its stranded producer pauses, clear its flush timer, and remove the workspace-window
+// webContents listeners it attached — otherwise a project-window PTY stays paused and the dead session leaks.
+let teardownOutgoingPtyIpcSessionImpl: (() => void) | null = null
 
 export function readPtyRendererDeliveryDebugSnapshot(): PtyRendererDeliveryDebugSnapshot {
   return (
@@ -117,6 +121,10 @@ export function clearRendererDispatcherReadyWatchdog(): void {
   clearRendererDispatcherReadyWatchdogImpl?.()
 }
 
+export function teardownOutgoingPtyIpcSession(): void {
+  teardownOutgoingPtyIpcSessionImpl?.()
+}
+
 export function setReadPtyRendererDeliveryDebugSnapshot(
   fn: () => PtyRendererDeliveryDebugSnapshot
 ): void {
@@ -133,6 +141,10 @@ export function setResetRendererDeliveryAccountingForLifecycleReset(fn: () => vo
 
 export function setClearRendererDispatcherReadyWatchdog(fn: () => void): void {
   clearRendererDispatcherReadyWatchdogImpl = fn
+}
+
+export function setTeardownOutgoingPtyIpcSession(fn: () => void): void {
+  teardownOutgoingPtyIpcSessionImpl = fn
 }
 
 export function getPtyRendererDeliveryDebugSnapshot(): PtyRendererDeliveryDebugSnapshot {

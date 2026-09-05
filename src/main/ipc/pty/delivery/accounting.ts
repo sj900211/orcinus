@@ -85,6 +85,10 @@ export function canSendPtyDataToRenderer(
   const ownerState = ownerFlowStateForPty(session, id)
   return (
     ownerState !== null &&
+    // Why gate on the owner's handshake here (not only in the drain classifier): an owner flip to a
+    // freshly-opened project window leaves cached-runnable pending nodes that would otherwise be sent
+    // into a listener-less page, minting in-flight debt the renderer can never ack. See dungeon-4 review.
+    ownerState.dispatcherReady &&
     getRendererInFlightCharsForPty(session, id) < ptyLimit &&
     ownerState.inFlightTotalChars < totalLimit
   )
@@ -129,12 +133,20 @@ export function applyRendererCumulativeAck(
   id: string,
   processedChars: number
 ): number {
+  const accounting = session.rendererDeliveryAccountingByPty.get(id)
+  // Why gate the mirror on live accounting: the renderer zeroes its cumulative counter on pty:exit/reload,
+  // so a straggler ack for a dead incarnation arriving after finalizePtyExitForRenderer deleted this
+  // mirror entry must NOT resurrect it — a reused id would then baseline ackBaseChars at the dead total
+  // and discount every future ack to zero (dungeon-4 review). While accounting exists (including an owner
+  // flip, where the new owner holds it), recording the sender's counter keeps a flip-back baseline honest.
+  if (!accounting) {
+    return 0
+  }
   senderState.lastCumulativeAckByPty.set(
     id,
     Math.max(senderState.lastCumulativeAckByPty.get(id) ?? 0, processedChars)
   )
-  const accounting = session.rendererDeliveryAccountingByPty.get(id)
-  if (!accounting || accounting.ownerWebContentsId !== senderState.webContentsId) {
+  if (accounting.ownerWebContentsId !== senderState.webContentsId) {
     return 0
   }
   return applyCumulativeAck(session, id, Math.max(0, processedChars - accounting.ackBaseChars))
@@ -155,7 +167,9 @@ export function schedulePendingDataAfterCreditReport(
 // Why: data for a fully gated PTY signals delivery may be stuck on lost ACKs (e.g. dropped across suspend); ask the pty's owner window for authoritative totals instead of a wall-clock guess.
 export function requestDeliveryResyncForGatedPty(session: PtyIpcSession, id: string): void {
   const state = ownerFlowStateForPty(session, id)
-  if (!state || state.deliveryResyncOutstandingRequestId !== null) {
+  // Why skip a pre-handshake owner: with the dispatcher gate now enforced in canSend, "gated" before the
+  // window's first handshake means held-not-lost — probing a listener-less page just times out and warns.
+  if (!state || !state.dispatcherReady || state.deliveryResyncOutstandingRequestId !== null) {
     return
   }
   session.deliveryResyncRequestSerial += 1
@@ -222,6 +236,12 @@ export function writeOffLostRendererDelivery(
       session.pendingOverflowMarkedPtys.delete(id)
       session.updateProducerFlowControl(id)
     }
+    // Why delete (not just ack-to-sent): the renderer's cumulative counter survives a push-channel wedge
+    // that recovers without a reload, still short of sentChars by the lost span. Leaving the accounting
+    // entry would let the next cumulative ack max-merge that gap back in as permanent phantom in-flight.
+    // Dropping it re-mints on the next send with ackBaseChars rebased to the mirror the heal report just
+    // refreshed, so the recovered renderer's counter maps cleanly to zero in-flight (dungeon-4 review).
+    session.rendererDeliveryAccountingByPty.delete(id)
     const markerSeq = session.runtime?.getPtyOutputSequence(id)
     writtenOff.push({
       id,

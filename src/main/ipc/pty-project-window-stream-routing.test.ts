@@ -499,4 +499,48 @@ describe('registerPtyHandlers (project-window stream routing)', () => {
       vi.useRealTimers()
     }
   })
+
+  // Dungeon-4 review R6a: a heal report from a window that owns none of these ptys (a destroyed
+  // workspace window's queued invoke, or an untrusted sender) must not write off main-owned delivery.
+  it('ignores a heal report from a window that is not a known flow-state owner', async () => {
+    vi.useFakeTimers()
+    try {
+      const worktreeIdByPty = new Map<string, string>()
+      const runtime = createRuntimeStub(worktreeIdByPty)
+      const mockProc = createMockProc()
+      spawnMock.mockReturnValue(mockProc.proc)
+      registerPtyHandlers(mainWindow as never, runtime as never)
+
+      const result = (await handlers.get('pty:spawn')!(null, {
+        cols: 80,
+        rows: 24,
+        cwd: '/tmp',
+        worktreeId: WORKTREE_ID
+      })) as { id: string }
+      worktreeIdByPty.set(result.id, WORKTREE_ID)
+      // Main owns the pty (no project window registered) and never acks: its bytes stay in flight.
+      mockProc.emitData('main-in-flight')
+      vi.advanceTimersByTime(2)
+      expect(getPtyRendererDeliveryDebugSnapshot().rendererInFlightChars).toBe(
+        'main-in-flight'.length
+      )
+
+      const reportHandler = handlers.get('pty:reportRendererDeliveryState')!
+      const reply = (await reportHandler({ sender: { id: 4242 } } as never, {
+        heal: true,
+        processedCharsByPty: {},
+        receivedCharsByPty: {}
+      })) as { inFlightTotalChars: number }
+
+      // The foreign sender resolves to no flow state, so it reports neutral and heals nothing.
+      expect(reply.inFlightTotalChars).toBe(0)
+      expect(getPtyRendererDeliveryDebugSnapshot().rendererInFlightChars).toBe(
+        'main-in-flight'.length
+      )
+
+      deletePtyOwnership(result.id)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

@@ -41,7 +41,9 @@ import {
 import {
   resetRendererDeliveryAccountingForLifecycleReset,
   setResetRendererDeliveryAccountingForLifecycleReset,
-  clearRendererDispatcherReadyWatchdog
+  clearRendererDispatcherReadyWatchdog,
+  teardownOutgoingPtyIpcSession,
+  setTeardownOutgoingPtyIpcSession
 } from './delivery/debug'
 import {
   registerRendererLifecycleResetHandlers,
@@ -88,7 +90,12 @@ export function registerPtyHandlers(
   resetRendererDeliveryAccountingForLifecycleReset()
   // Why: a re-registration means a new window owns delivery — cancel the prior closure's watchdog and neutralize its bridged reset so mark-hidden below can't arm a timer against the dead closure.
   clearRendererDispatcherReadyWatchdog()
+  // Why: fully retire the outgoing session — release its stranded producer pauses (a surviving
+  // project-window PTY would otherwise stay paused and wedge), stop its flush timer, and detach its
+  // workspace webContents listeners so the whole dead session can be collected.
+  teardownOutgoingPtyIpcSession()
   setResetRendererDeliveryAccountingForLifecycleReset(() => {})
+  setTeardownOutgoingPtyIpcSession(() => {})
   setInvalidatePendingPtyDrainPriority(() => {})
   setInvalidatePendingPtyDrainPolicy(() => {})
   // Why: neutralize rebind at the same moment as drain so a daemon replace in this window cannot attach the old accept/exit closures.
@@ -173,7 +180,10 @@ export function registerPtyHandlers(
   clearRendererGateResetHandlers()
   const resetRendererPtyDeliveryGateState = (): void => {
     const gateDebug = getHiddenRendererPtyDeliveryDebug()
-    resetRendererScopedHiddenPtyDeliveryState()
+    // Why scope to the main window's id: this handler fires on the MAIN window's reload/crash only, so it
+    // must clear the main window's hidden/interest marks, not every workspace window's (whose renderers did
+    // not reload and re-report marks only on visibility transitions) (dungeon-4 review).
+    resetRendererScopedHiddenPtyDeliveryState(mainWindow.webContents.id)
     if (gateDebug.hiddenDeliveryGatedPtyCount > 0 || gateDebug.deliveryInterestPtyCount > 0) {
       invalidatePendingPtyDrainPolicy()
     }

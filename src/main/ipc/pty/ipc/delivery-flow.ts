@@ -8,7 +8,6 @@ import { tryGetProviderForPty } from '../provider/registry'
 import { PTY_DELIVERY_HEAL_MIN_ACK_SILENCE_MS } from '../delivery/constants'
 import { applyRendererCumulativeAck, writeOffLostRendererDelivery } from '../delivery/accounting'
 import {
-  ackAttributionFlowState,
   clearDeliveryResyncProbe,
   clearDispatcherReadyWatchdog,
   flowStateForSenderEvent,
@@ -31,17 +30,17 @@ export function installPtyDeliveryFlowIpc(session: PtyIpcSession): void {
     'pty:ackData',
     (event, args: { id: string; charCount?: number; processedChars?: number }) => {
       const senderFlowState = flowStateForSenderEvent(session, event)
+      if (!senderFlowState) {
+        return
+      }
       senderFlowState.lastAckReceivedAtMs = Date.now()
       // Why: a live ACK channel means a future unanswered probe is a fresh diagnostic event, not a continuation of the last silent streak.
       senderFlowState.deliveryResyncUnansweredWarnLogged = false
-      const ackSenderState = ackAttributionFlowState(session, event)
       let acknowledged = 0
-      if (!ackSenderState) {
-        acknowledged = 0
-      } else if (typeof args.processedChars === 'number' && Number.isFinite(args.processedChars)) {
+      if (typeof args.processedChars === 'number' && Number.isFinite(args.processedChars)) {
         acknowledged = applyRendererCumulativeAck(
           session,
-          ackSenderState,
+          senderFlowState,
           args.id,
           Math.max(0, args.processedChars)
         )
@@ -52,10 +51,10 @@ export function installPtyDeliveryFlowIpc(session: PtyIpcSession): void {
         const accounting = session.rendererDeliveryAccountingByPty.get(args.id)
         const delta = Number.isFinite(args.charCount) ? Math.max(0, args.charCount ?? 0) : 0
         acknowledged =
-          accounting && accounting.ownerWebContentsId === ackSenderState.webContentsId
+          accounting && accounting.ownerWebContentsId === senderFlowState.webContentsId
             ? applyRendererCumulativeAck(
                 session,
-                ackSenderState,
+                senderFlowState,
                 args.id,
                 accounting.ackBaseChars + accounting.ackedChars + delta
               )
@@ -72,6 +71,7 @@ export function installPtyDeliveryFlowIpc(session: PtyIpcSession): void {
     (event, args: { requestId: number; processedCharsByPty: Record<string, number> }) => {
       const senderFlowState = flowStateForSenderEvent(session, event)
       if (
+        !senderFlowState ||
         senderFlowState.deliveryResyncOutstandingRequestId === null ||
         args?.requestId !== senderFlowState.deliveryResyncOutstandingRequestId
       ) {
@@ -80,23 +80,20 @@ export function installPtyDeliveryFlowIpc(session: PtyIpcSession): void {
       clearDeliveryResyncProbe(senderFlowState)
       senderFlowState.deliveryResyncUnansweredWarnLogged = false
       // Why max-merge: the renderer's cumulative totals are authoritative for what it processed, draining exactly the in-flight debt from lost ACKs.
-      const ackSenderState = ackAttributionFlowState(session, event)
       let creditedAny = false
-      if (ackSenderState) {
-        for (const [id, processedChars] of Object.entries(args.processedCharsByPty ?? {})) {
-          if (typeof processedChars !== 'number' || !Number.isFinite(processedChars)) {
-            continue
-          }
-          const acknowledged = applyRendererCumulativeAck(
-            session,
-            ackSenderState,
-            id,
-            Math.max(0, processedChars)
-          )
-          if (acknowledged > 0) {
-            creditedAny = true
-            tryGetProviderForPty(id)?.acknowledgeDataEvent(id, acknowledged)
-          }
+      for (const [id, processedChars] of Object.entries(args.processedCharsByPty ?? {})) {
+        if (typeof processedChars !== 'number' || !Number.isFinite(processedChars)) {
+          continue
+        }
+        const acknowledged = applyRendererCumulativeAck(
+          session,
+          senderFlowState,
+          id,
+          Math.max(0, processedChars)
+        )
+        if (acknowledged > 0) {
+          creditedAny = true
+          tryGetProviderForPty(id)?.acknowledgeDataEvent(id, acknowledged)
         }
       }
       session.schedulePendingDataAfterCreditReport(creditedAny)
@@ -109,24 +106,25 @@ export function installPtyDeliveryFlowIpc(session: PtyIpcSession): void {
     'pty:reportRendererDeliveryState',
     (event, args: PtyRendererDeliveryStateReport): PtyRendererDeliveryHealthReply => {
       const senderFlowState = flowStateForSenderEvent(session, event)
+      // Why neutral for an unknown real sender: a destroyed/not-yet-known window must not heal against main's delivery.
+      if (!senderFlowState) {
+        return { inFlightTotalChars: 0, inFlightPtyCount: 0, msSinceLastAck: null }
+      }
       // Extra repair lane for the lost-ACK variant: identical max-merge to the resync response, so a heal is only reached when merging cannot drain.
-      const ackSenderState = ackAttributionFlowState(session, event)
       let creditedAny = false
-      if (ackSenderState) {
-        for (const [id, processedChars] of Object.entries(args?.processedCharsByPty ?? {})) {
-          if (typeof processedChars !== 'number' || !Number.isFinite(processedChars)) {
-            continue
-          }
-          const acknowledged = applyRendererCumulativeAck(
-            session,
-            ackSenderState,
-            id,
-            Math.max(0, processedChars)
-          )
-          if (acknowledged > 0) {
-            creditedAny = true
-            tryGetProviderForPty(id)?.acknowledgeDataEvent(id, acknowledged)
-          }
+      for (const [id, processedChars] of Object.entries(args?.processedCharsByPty ?? {})) {
+        if (typeof processedChars !== 'number' || !Number.isFinite(processedChars)) {
+          continue
+        }
+        const acknowledged = applyRendererCumulativeAck(
+          session,
+          senderFlowState,
+          id,
+          Math.max(0, processedChars)
+        )
+        if (acknowledged > 0) {
+          creditedAny = true
+          tryGetProviderForPty(id)?.acknowledgeDataEvent(id, acknowledged)
         }
       }
       let writtenOff: PtyDeliveryWriteOff[] = []

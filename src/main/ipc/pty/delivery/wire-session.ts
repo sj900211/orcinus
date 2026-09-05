@@ -3,7 +3,8 @@ import {
   setReadPtyRendererDeliveryDebugSnapshot,
   setResetPtyRendererDeliveryDebugSnapshot,
   setResetRendererDeliveryAccountingForLifecycleReset,
-  setClearRendererDispatcherReadyWatchdog
+  setClearRendererDispatcherReadyWatchdog,
+  setTeardownOutgoingPtyIpcSession
 } from './debug'
 import {
   setInvalidatePendingPtyDrainPolicy,
@@ -29,7 +30,8 @@ import {
 import {
   clearDeliveryResyncProbe,
   clearDispatcherReadyWatchdog,
-  resetWindowScopedDeliveryStateForLifecycle
+  resetWindowScopedDeliveryStateForLifecycle,
+  teardownOutgoingWindowFlowStates
 } from './window-flow-state'
 import { sendModelRestoreNeededMarker, sendPtyDataToRenderer } from './payload'
 import {
@@ -130,6 +132,9 @@ export function wirePtyIpcSession(session: PtyIpcSession): void {
       clearDeliveryResyncProbe(state)
     }
   })
+  // Why the bridge: a re-registration retires this whole session — release its stranded producer pauses,
+  // stop its flush timer, and detach its workspace webContents listeners before the new session wires up.
+  setTeardownOutgoingPtyIpcSession(() => teardownOutgoingWindowFlowStates(session))
   setInvalidatePendingPtyDrainPriority((id, schedule) =>
     invalidatePendingPtyDrainClassification(session, id, schedule)
   )
