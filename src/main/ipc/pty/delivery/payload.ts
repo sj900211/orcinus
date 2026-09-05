@@ -1,7 +1,9 @@
 import { redactPtyIdForDiagnostics } from '../../../../shared/pty-delivery-diagnostics'
 import type { PtyModelRestoreReason } from '../../../../shared/pty-model-restore-marker'
+import { sendToPtyOwner } from '../../../window/window-affinity-router'
 import { mainDeliveryBreadcrumbs } from './debug'
 import { recordPtyRendererDeliveryPressure } from './accounting'
+import { ownerFlowStateForPty, releasePtyAccountingForOwnerChange } from './window-flow-state'
 import type { PtyDataPayload, PtyIpcSession } from '../session'
 
 export function makePtyDataPayload(
@@ -32,27 +34,17 @@ export function getPtyPayloadCharCount(payload: { data: string; rawLength?: numb
   return Math.max(0, payload.rawLength ?? payload.data.length)
 }
 
+// Why out-of-band (not pty:data): an in-band empty chunk is indistinguishable from one fully consumed by renderer-side OSC-9999 stripping, which spuriously restored visible panes.
 export function sendModelRestoreNeededMarker(
-  session: PtyIpcSession,
   id: string,
   reason: PtyModelRestoreReason,
   markerSeq: number | undefined
 ): boolean {
-  if (session.mainWindow.isDestroyed()) {
-    return false
-  }
-  try {
-    session.mainWindow.webContents.send('pty:modelRestoreNeeded', {
-      id,
-      reason,
-      ...(typeof markerSeq === 'number' ? { markerSeq } : {})
-    })
-  } catch (error) {
-    // Why: a disposed render frame throws synchronously here, and this rides the data path.
-    console.error('[pty] renderer model-restore marker send failed', error)
-    return false
-  }
-  return true
+  return sendToPtyOwner(id, 'pty:modelRestoreNeeded', {
+    id,
+    reason,
+    ...(typeof markerSeq === 'number' ? { markerSeq } : {})
+  })
 }
 
 export function sendPtyDataToRenderer(
@@ -62,7 +54,23 @@ export function sendPtyDataToRenderer(
   projectionAdmissionIds?: readonly string[]
 ): { sent: boolean; projectionsTransferred: boolean } {
   const charCount = getPtyPayloadCharCount(payload)
-  const accounting = session.rendererDeliveryAccountingByPty.get(id)
+  const ownerState = ownerFlowStateForPty(session, id)
+  if (!ownerState) {
+    session.rendererDeliveryRestoreNeededPtys.add(id)
+    if (projectionAdmissionIds) {
+      session.sshOutputIntake?.transferProjections(projectionAdmissionIds, 'renderer-send-failed')
+    }
+    mainDeliveryBreadcrumbs.record('pty-data-send-failed', {
+      id: redactPtyIdForDiagnostics(id),
+      chars: charCount
+    })
+    return { sent: false, projectionsTransferred: projectionAdmissionIds !== undefined }
+  }
+  let accounting = session.rendererDeliveryAccountingByPty.get(id)
+  if (accounting && accounting.ownerWebContentsId !== ownerState.webContentsId) {
+    releasePtyAccountingForOwnerChange(session, id, accounting)
+    accounting = undefined
+  }
   const hadAccounting = accounting !== undefined
   if (accounting) {
     accounting.sentChars += charCount
@@ -72,13 +80,15 @@ export function sendPtyDataToRenderer(
       sentChars: charCount,
       ackedChars: 0,
       lastSendAtMs: Date.now(),
-      lastAckAtMs: null
+      lastAckAtMs: null,
+      ownerWebContentsId: ownerState.webContentsId,
+      ackBaseChars: ownerState.lastCumulativeAckByPty.get(id) ?? 0
     })
   }
-  session.rendererInFlightTotalChars += charCount
+  ownerState.inFlightTotalChars += charCount
   recordPtyRendererDeliveryPressure(session, id)
   try {
-    session.mainWindow.webContents.send('pty:data', payload)
+    ownerState.webContents.send('pty:data', payload)
   } catch (error) {
     const current = session.rendererDeliveryAccountingByPty.get(id)
     if (current) {
@@ -86,9 +96,9 @@ export function sendPtyDataToRenderer(
       current.sentChars = Math.max(0, current.sentChars - charCount)
       current.ackedChars = Math.min(current.ackedChars, current.sentChars)
       const inFlightAfterRollback = current.sentChars - current.ackedChars
-      session.rendererInFlightTotalChars = Math.max(
+      ownerState.inFlightTotalChars = Math.max(
         0,
-        session.rendererInFlightTotalChars - (inFlightBeforeRollback - inFlightAfterRollback)
+        ownerState.inFlightTotalChars - (inFlightBeforeRollback - inFlightAfterRollback)
       )
       if (!hadAccounting && current.sentChars === 0) {
         session.rendererDeliveryAccountingByPty.delete(id)
@@ -121,17 +131,15 @@ export function sendPtyDataToRenderer(
       projectionsTransferred = true
     }
   }
-  if (
-    session.rendererDeliveryRestoreNeededPtys.has(id) &&
-    sendModelRestoreNeededMarker(
-      session,
-      id,
-      'delivery-heal',
-      session.runtime?.getPtyOutputSequence(id)
-    )
-  ) {
-    // Why cleared only on a successful send: an unsent marker leaves the restore pending.
-    session.rendererDeliveryRestoreNeededPtys.delete(id)
+  if (session.rendererDeliveryRestoreNeededPtys.has(id)) {
+    // Why keep the latch on failure: the marker must eventually reach the owner or the pane repaints from a gapped stream.
+    if (
+      sendModelRestoreNeededMarker(id, 'delivery-heal', session.runtime?.getPtyOutputSequence(id))
+    ) {
+      session.rendererDeliveryRestoreNeededPtys.delete(id)
+    } else {
+      console.error('[pty] renderer delivery-heal marker send failed; restore remains pending')
+    }
   }
   return { sent: true, projectionsTransferred }
 }

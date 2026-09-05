@@ -11,27 +11,26 @@ import {
 } from './visibility-state'
 import { setClearBackgroundedDeliverySyncForPty } from '../provider/listener-lifecycle'
 import {
-  applyCumulativeAck,
   canSendPtyDataToRenderer,
-  clearDeliveryResyncProbe,
   clearPendingPtyData,
   deletePendingPtyData,
-  getRendererInFlightCharsForPty,
   schedulePendingDataAfterCreditReport,
-  setPendingPtyData,
-  writeOffLostRendererDelivery
+  setPendingPtyData
 } from './accounting'
 import {
   readCurrentPtyRendererDeliveryDebugSnapshot,
   seedPtyRendererDeliveryPeaksFromCurrentState
 } from './debug-snapshot'
 import {
-  armDispatcherReadyWatchdog,
-  clearDispatcherReadyWatchdog,
   flushPendingData,
   invalidatePendingPtyDrainClassification,
   schedulePendingDataFlush
 } from './flush'
+import {
+  clearDeliveryResyncProbe,
+  clearDispatcherReadyWatchdog,
+  resetWindowScopedDeliveryStateForLifecycle
+} from './window-flow-state'
 import { sendModelRestoreNeededMarker, sendPtyDataToRenderer } from './payload'
 import {
   resyncBackgroundedDeliveriesAfterGateReset,
@@ -68,18 +67,13 @@ export function wirePtyIpcSession(session: PtyIpcSession): void {
   session.sendPtyDataToRenderer = (id, payload, projectionAdmissionIds) =>
     sendPtyDataToRenderer(session, id, payload, projectionAdmissionIds)
   session.sendModelRestoreNeededMarker = (id, reason, markerSeq) =>
-    sendModelRestoreNeededMarker(session, id, reason, markerSeq)
+    sendModelRestoreNeededMarker(id, reason, markerSeq)
   session.updateProducerFlowControl = (id) => updateProducerFlowControl(session, id)
-  session.applyCumulativeAck = (id, processedChars) =>
-    applyCumulativeAck(session, id, processedChars)
   session.readCurrentPtyRendererDeliveryDebugSnapshot = () =>
     readCurrentPtyRendererDeliveryDebugSnapshot(session)
-  session.clearDeliveryResyncProbe = () => clearDeliveryResyncProbe(session)
   session.clearPendingPtyData = () => clearPendingPtyData(session)
   session.deletePendingPtyData = (id) => deletePendingPtyData(session, id)
   session.setPendingPtyData = (id, pending) => setPendingPtyData(session, id, pending)
-  session.clearDispatcherReadyWatchdog = () => clearDispatcherReadyWatchdog(session)
-  session.armDispatcherReadyWatchdog = () => armDispatcherReadyWatchdog(session)
   session.acceptPtyDataForRenderer = (payload, outputSeq, projection) =>
     acceptPtyDataForRenderer(session, payload, outputSeq, projection)
   session.preparePtyExitForRenderer = (payload) => preparePtyExitForRenderer(session, payload)
@@ -96,17 +90,15 @@ export function wirePtyIpcSession(session: PtyIpcSession): void {
     syncPtyBackgroundedDelivery(session, id, caller)
   session.resyncBackgroundedDeliveriesAfterGateReset = () =>
     resyncBackgroundedDeliveriesAfterGateReset(session)
-  session.transitionHiddenRendererPtyDeliveryState = (id, hidden) =>
-    transitionHiddenRendererPtyDeliveryState(session, id, hidden)
-  session.transitionSpawnHiddenRendererPtyDeliveryState = (id, hidden) =>
-    transitionSpawnHiddenRendererPtyDeliveryState(session, id, hidden)
+  session.transitionHiddenRendererPtyDeliveryState = (reportingWebContentsId, id, hidden) =>
+    transitionHiddenRendererPtyDeliveryState(session, reportingWebContentsId, id, hidden)
+  session.transitionSpawnHiddenRendererPtyDeliveryState = (id, hidden, worktreeId) =>
+    transitionSpawnHiddenRendererPtyDeliveryState(session, id, hidden, worktreeId)
   session.rendererPtyIsKnownHidden = rendererPtyIsKnownHidden
   session.clearHiddenRendererResizeOutput = clearHiddenRendererResizeOutput
   session.clearDeliveredHiddenRendererResizeOutput = clearDeliveredHiddenRendererResizeOutput
   session.schedulePendingDataAfterCreditReport = (creditedAny) =>
     schedulePendingDataAfterCreditReport(session, creditedAny)
-  session.writeOffLostRendererDelivery = (report) => writeOffLostRendererDelivery(session, report)
-  session.getRendererInFlightCharsForPty = (id) => getRendererInFlightCharsForPty(session, id)
 
   setClearBackgroundedDeliverySyncForPty((id: string) => {
     session.backgroundedDeliverySyncByPty.delete(id)
@@ -128,28 +120,16 @@ export function wirePtyIpcSession(session: PtyIpcSession): void {
     seedPtyRendererDeliveryPeaksFromCurrentState(session)
   })
   setResetRendererDeliveryAccountingForLifecycleReset(() => {
-    // Why lossless: pendingData bytes were bound for the dead page; the replacement repaints from main's authoritative sources, which superset it.
-    session.lastLifecycleResetClearedChars = session.rendererInFlightTotalChars
-    session.rendererLifecycleResetCount += 1
-    // Why release before clearing: pending bytes and credits belonged to the dead page; releasing producer pauses first keeps no shell wedged.
-    session.producerFlowControl.releaseAll()
-    session.clearDeliveryResyncProbe()
-    session.deliveryResyncUnansweredWarnLogged = false
-    for (const id of session.rendererDeliveryAccountingByPty.keys()) {
-      session.sshOutputIntake?.transferPtyProjections(id, 'renderer-lifecycle-reset')
-    }
-    session.rendererDeliveryAccountingByPty.clear()
-    session.rendererInFlightTotalChars = 0
-    session.clearPendingPtyData()
-    session.pendingOverflowMarkedPtys.clear()
-    session.rendererDeliveryRestoreNeededPtys.clear()
-    // Why hold sends: the reloading page's pty:data listener is gone until it re-registers/handshakes, so bytes would drop into a listener-less page and re-pin the gate.
-    session.rendererPtyDispatcherReady = false
-    // Why: arm the self-heal watchdog so a never-arriving handshake can't hold the gate forever; the real handshake cancels it.
-    session.armDispatcherReadyWatchdog()
+    // Why main-scoped: a main-window reload resets only main-owned delivery; workspace windows carry their own lifecycle listeners.
+    resetWindowScopedDeliveryStateForLifecycle(session, session.mainFlowState.webContentsId)
   })
-  // Why the bridge: let a later re-registration cancel this closure's watchdog (armed via a hoisted fn, so this assignment can precede its definition).
-  setClearRendererDispatcherReadyWatchdog(session.clearDispatcherReadyWatchdog)
+  // Why the bridge: let a later re-registration cancel this closure's timers before wiring its own.
+  setClearRendererDispatcherReadyWatchdog(() => {
+    for (const state of session.windowFlowStates.values()) {
+      clearDispatcherReadyWatchdog(state)
+      clearDeliveryResyncProbe(state)
+    }
+  })
   setInvalidatePendingPtyDrainPriority((id, schedule) =>
     invalidatePendingPtyDrainClassification(session, id, schedule)
   )

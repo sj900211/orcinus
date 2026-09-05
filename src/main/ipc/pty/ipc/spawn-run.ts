@@ -57,7 +57,11 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
   } catch (err) {
     releaseAbandonedAgentTeamsLeader(ctx)
     if (ctx.preSpawnHiddenMarkId !== null) {
-      ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, false)
+      ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(
+        ctx.preSpawnHiddenMarkId,
+        false,
+        ctx.args.worktreeId
+      )
     }
     if (ctx.pendingRegistrationPtyId) {
       deps.runtime?.cancelPendingPtyRegistration?.(

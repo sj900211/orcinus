@@ -9,7 +9,11 @@ import {
   getHiddenRendererPtyDeliveryDebug,
   resetRendererScopedHiddenPtyDeliveryState
 } from '../pty-hidden-delivery-gate'
-import { setMainWindowForRouting } from '../../window/window-affinity-router'
+import {
+  setMainWindowForRouting,
+  setProjectKeyResolverForRouting,
+  setPtyWorktreeResolverForRouting
+} from '../../window/window-affinity-router'
 import { localProvider } from './provider/registry'
 import { finishPtyShutdown } from './provider/liveness'
 import type { GetSelectedCodexHomePath, PrepareClaudeAuth } from './host-env/types'
@@ -51,6 +55,7 @@ import { bindProviderListeners } from './provider/bind-listeners'
 import { installSessionSshOutputIntake } from './delivery/ssh-intake'
 import { installPtySerializeBufferIpc } from './ipc/serialize-buffer'
 import { installPtyResizeVisibilityIpc } from './ipc/resize-visibility'
+import { installPtyDeliveryFlowIpc } from './ipc/delivery-flow'
 import { adoptStablePane } from './pane/adopt-stable'
 import { getPtyIpc } from '../pty-host-bindings'
 import {
@@ -89,11 +94,16 @@ export function registerPtyHandlers(
   // Why: neutralize rebind at the same moment as drain so a daemon replace in this window cannot attach the old accept/exit closures.
   setRebindProviderListeners(() => {})
   registerRendererLifecycleResetHandlers(mainWindow.webContents)
-  // Fork B-tier regate: the per-window delivery gate resolves each pty's owner
-  // through the affinity router — inject the main fallback the moment handlers
-  // bind (the merge dropping this injection was the recorded root cause of a
-  // silently inert gate). Worktree/project resolver injection = dungeon 3.
+  // Fork regate: every pty stream resolves its owner window through the affinity
+  // router — main fallback plus the runtime's pty→worktree and worktree→project
+  // resolvers must be injected the moment handlers bind, or the router silently
+  // routes everything to main.
   setMainWindowForRouting(mainWindow)
+  // Optional calls: pared-down runtime stubs (tests, headless) may omit the routing accessors.
+  setPtyWorktreeResolverForRouting(runtime ? (ptyId) => runtime.getPtyWorktreeId?.(ptyId) : null)
+  setProjectKeyResolverForRouting(
+    runtime ? (worktreeId) => runtime.getWorktreeRepoId?.(worktreeId) : null
+  )
 
   const getLocalPtyStartupPromise = (connectionId?: string | null): Promise<void> | undefined => {
     if (connectionId) {
@@ -271,6 +281,7 @@ export function registerPtyHandlers(
     clearHiddenRendererResizeOutput: session.clearHiddenRendererResizeOutput
   })
   installPtyResizeVisibilityIpc(session)
+  installPtyDeliveryFlowIpc(session)
   installPtyInspectIpcHandlers({ getLocalPtyProviderStartupPromise })
   installPtyKillIpcHandler({
     store,

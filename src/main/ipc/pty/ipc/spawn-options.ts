@@ -178,7 +178,11 @@ export async function buildPtyIpcSpawnOptions(
       ? ctx.effectiveSessionAppId
       : null
   if (ctx.preSpawnHiddenMarkId !== null) {
-    ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, true)
+    ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(
+      ctx.preSpawnHiddenMarkId,
+      true,
+      ctx.args.worktreeId
+    )
   }
   const runtime = ctx.deps.runtime
   const acquireWorktreeSpawn = runtime?.acquireWorktreeTerminalSpawn

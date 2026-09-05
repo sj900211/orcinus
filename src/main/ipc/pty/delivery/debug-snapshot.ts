@@ -17,6 +17,7 @@ import {
 } from './debug'
 import { activeRendererPtys, visibleRendererPtys } from './visibility-state'
 import { DELIVERY_DIAGNOSTICS_MAX_PTYS } from './constants'
+import { totalRendererInFlightChars } from './window-flow-state'
 import type { PtyIpcSession } from '../session'
 
 export function buildMainDeliveryDiagnostics(session: PtyIpcSession): PtyMainDeliveryDiagnostics {
@@ -98,7 +99,7 @@ export function readCurrentPtyRendererDeliveryDebugSnapshot(
     pendingChars,
     maxPendingCharsByPty,
     rendererInFlightPtyCount,
-    rendererInFlightChars: session.rendererInFlightTotalChars,
+    rendererInFlightChars: totalRendererInFlightChars(session),
     maxRendererInFlightCharsByPty,
     activeRendererPtyCount: activeRendererPtys.size,
     flushScheduled: session.flushTimer !== null,
@@ -114,7 +115,7 @@ export function readCurrentPtyRendererDeliveryDebugSnapshot(
     diagnostics: buildMainDeliveryDiagnostics(session),
     rendererLifecycleResetCount: session.rendererLifecycleResetCount,
     lastLifecycleResetClearedChars: session.lastLifecycleResetClearedChars,
-    rendererPtyDispatcherReady: session.rendererPtyDispatcherReady,
+    rendererPtyDispatcherReady: session.mainFlowState.dispatcherReady,
     rendererDispatcherReadyForcedCount: session.rendererDispatcherReadyForcedCount
   }
 }
@@ -129,7 +130,7 @@ export function seedPtyRendererDeliveryPeaksFromCurrentState(session: PtyIpcSess
   }
   session.peakPendingChars = pendingChars
   session.peakMaxPendingCharsByPty = maxPendingCharsByPty
-  session.peakRendererInFlightChars = session.rendererInFlightTotalChars
+  session.peakRendererInFlightChars = totalRendererInFlightChars(session)
   let maxRendererInFlightCharsByPty = 0
   for (const accounting of session.rendererDeliveryAccountingByPty.values()) {
     maxRendererInFlightCharsByPty = Math.max(

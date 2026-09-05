@@ -44,7 +44,11 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
       ? ctx.effectiveSessionAppId
       : null
   if (ctx.preSpawnHiddenMarkId !== null) {
-    ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, true)
+    ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(
+      ctx.preSpawnHiddenMarkId,
+      true,
+      ctx.args.worktreeId
+    )
   }
   if (!ctx.earlyStablePaneOwner) {
     const pathUsable = ctx.deps.assertFolderWorkspacePtyPathUsable(args.worktreeId)
@@ -184,10 +188,18 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
         : null
     if (previousHiddenMarkId !== ctx.preSpawnHiddenMarkId) {
       if (previousHiddenMarkId !== null) {
-        ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(previousHiddenMarkId, false)
+        ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(
+          previousHiddenMarkId,
+          false,
+          ctx.args.worktreeId
+        )
       }
       if (ctx.preSpawnHiddenMarkId !== null) {
-        ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, true)
+        ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(
+          ctx.preSpawnHiddenMarkId,
+          true,
+          ctx.args.worktreeId
+        )
       }
     }
   }

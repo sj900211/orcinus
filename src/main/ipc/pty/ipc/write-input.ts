@@ -11,6 +11,8 @@ import {
   iterateTerminalInputChunks
 } from '../../../../shared/terminal-input'
 import { reportAgentSessionWriteRefusal } from '../agent-session-write-refusal-report'
+import { isTrustedUIRenderer } from '../../ui'
+import { sendToPtyOwner } from '../../../window/window-affinity-router'
 import { ptyOwnership } from '../provider/ownership-state'
 import { tryGetProviderForPty } from '../provider/registry'
 import {
@@ -29,6 +31,22 @@ export function isMainWindowPtyIpcEvent(
     !mainWindow.isDestroyed() &&
     !(typeof mainWebContents.isDestroyed === 'function' && mainWebContents.isDestroyed())
   )
+}
+
+// Why: workspace windows are equally privileged app UI (typing, ACKs, visibility); guests/popouts/stale windows stay rejected.
+export function isPtyEventFromTrustedAppWindow(
+  event: IpcMainEvent | IpcMainInvokeEvent,
+  mainWindow: BrowserWindow
+): boolean {
+  if (isMainWindowPtyIpcEvent(event, mainWindow, mainWindow.webContents)) {
+    return true
+  }
+  const sender = event.sender
+  // Why the shape probe: isTrustedUIRenderer assumes a real WebContents; a torn-down sender must fail closed, not throw.
+  if (!sender || typeof sender.isDestroyed !== 'function' || typeof sender.getType !== 'function') {
+    return false
+  }
+  return isTrustedUIRenderer(sender)
 }
 
 export type PtyWritePayload = { id: string; data: string }
@@ -51,15 +69,10 @@ export function createPtyWriteInput(deps: {
   const { mainWindow, runtime, clearHiddenRendererResizeOutput } = deps
 
   const reportUnavailablePtyWrite = (id: string, error: unknown): void => {
-    if (
-      !isPtyWriteUnavailableError(error) ||
-      mainWindow.isDestroyed() ||
-      (typeof mainWindow.webContents.isDestroyed === 'function' &&
-        mainWindow.webContents.isDestroyed())
-    ) {
+    if (!isPtyWriteUnavailableError(error)) {
       return
     }
-    mainWindow.webContents.send('pty:writeUnavailable', { id })
+    sendToPtyOwner(id, 'pty:writeUnavailable', { id })
   }
 
   /** Single lease check for every byte-entry point this module owns. */

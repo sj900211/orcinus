@@ -13,6 +13,12 @@ import {
 } from './constants'
 import type { PtyIpcSession } from '../session'
 import type { PendingPtyData } from '../../pty-pending-data-drain-queue'
+import {
+  clearDeliveryResyncProbe,
+  ownerFlowStateForPty,
+  totalRendererInFlightChars,
+  type RendererWindowFlowState
+} from './window-flow-state'
 
 export function getRendererInFlightCharsForPty(session: PtyIpcSession, id: string): number {
   const accounting = session.rendererDeliveryAccountingByPty.get(id)
@@ -30,7 +36,7 @@ export function recordPtyRendererDeliveryPressure(session: PtyIpcSession, id: st
   )
   session.peakRendererInFlightChars = Math.max(
     session.peakRendererInFlightChars,
-    session.rendererInFlightTotalChars
+    totalRendererInFlightChars(session)
   )
   session.peakMaxRendererInFlightCharsByPty = Math.max(
     session.peakMaxRendererInFlightCharsByPty,
@@ -76,9 +82,11 @@ export function canSendPtyDataToRenderer(
   const ptyLimit =
     PTY_RENDERER_IN_FLIGHT_HIGH_WATER_CHARS +
     (options.interactive === true ? PTY_RENDERER_ACTIVE_PTY_IN_FLIGHT_RESERVE_CHARS : 0)
+  const ownerState = ownerFlowStateForPty(session, id)
   return (
+    ownerState !== null &&
     getRendererInFlightCharsForPty(session, id) < ptyLimit &&
-    session.rendererInFlightTotalChars < totalLimit
+    ownerState.inFlightTotalChars < totalLimit
   )
 }
 
@@ -101,14 +109,35 @@ export function applyCumulativeAck(
   if (acknowledged > 0) {
     accounting.lastAckAtMs = Date.now()
   }
-  session.rendererInFlightTotalChars = Math.max(
-    0,
-    session.rendererInFlightTotalChars - acknowledged
-  )
+  // Why the accounting's owner (not the acking sender): the debt lives on the window the bytes were sent to.
+  const ownerState = session.windowFlowStates.get(accounting.ownerWebContentsId)
+  if (ownerState) {
+    ownerState.inFlightTotalChars = Math.max(0, ownerState.inFlightTotalChars - acknowledged)
+  }
   if (acknowledged > 0) {
     session.sshOutputIntake?.settleProjectionPrefix(id, acknowledged)
   }
   return acknowledged
+}
+
+// Renderer-reported cumulative totals enter here: record the sender's counter, then credit only the
+// owner window's accounting — a demoted window's stale total would otherwise max-merge as a full ack
+// of bytes the new owner never processed.
+export function applyRendererCumulativeAck(
+  session: PtyIpcSession,
+  senderState: RendererWindowFlowState,
+  id: string,
+  processedChars: number
+): number {
+  senderState.lastCumulativeAckByPty.set(
+    id,
+    Math.max(senderState.lastCumulativeAckByPty.get(id) ?? 0, processedChars)
+  )
+  const accounting = session.rendererDeliveryAccountingByPty.get(id)
+  if (!accounting || accounting.ownerWebContentsId !== senderState.webContentsId) {
+    return 0
+  }
+  return applyCumulativeAck(session, id, Math.max(0, processedChars - accounting.ackBaseChars))
 }
 
 export function schedulePendingDataAfterCreditReport(
@@ -123,47 +152,47 @@ export function schedulePendingDataAfterCreditReport(
   }
 }
 
-export function clearDeliveryResyncProbe(session: PtyIpcSession): void {
-  session.deliveryResyncOutstandingRequestId = null
-  if (session.deliveryResyncTimer) {
-    clearTimeout(session.deliveryResyncTimer)
-    session.deliveryResyncTimer = null
-  }
-}
-
-export function requestDeliveryResyncForGatedPty(session: PtyIpcSession): void {
-  if (session.deliveryResyncOutstandingRequestId !== null || session.mainWindow.isDestroyed()) {
+// Why: data for a fully gated PTY signals delivery may be stuck on lost ACKs (e.g. dropped across suspend); ask the pty's owner window for authoritative totals instead of a wall-clock guess.
+export function requestDeliveryResyncForGatedPty(session: PtyIpcSession, id: string): void {
+  const state = ownerFlowStateForPty(session, id)
+  if (!state || state.deliveryResyncOutstandingRequestId !== null) {
     return
   }
   session.deliveryResyncRequestSerial += 1
   const requestId = session.deliveryResyncRequestSerial
-  session.deliveryResyncOutstandingRequestId = requestId
-  session.deliveryResyncTimer = setTimeout(() => {
-    if (session.deliveryResyncOutstandingRequestId !== requestId) {
+  state.deliveryResyncOutstandingRequestId = requestId
+  state.deliveryResyncTimer = setTimeout(() => {
+    if (state.deliveryResyncOutstandingRequestId !== requestId) {
       return
     }
-    clearDeliveryResyncProbe(session)
+    clearDeliveryResyncProbe(state)
     // Why no mutation on timeout: unanswered means dead IPC that only a reload cures; log once per silent streak to avoid spamming every probe.
-    if (session.deliveryResyncUnansweredWarnLogged) {
+    if (state.deliveryResyncUnansweredWarnLogged) {
       return
     }
-    session.deliveryResyncUnansweredWarnLogged = true
+    state.deliveryResyncUnansweredWarnLogged = true
     console.warn('[pty] delivery resync probe unanswered — renderer IPC unresponsive', {
       msSinceLastAck:
-        session.lastAckReceivedAtMs === null ? null : Date.now() - session.lastAckReceivedAtMs,
+        state.lastAckReceivedAtMs === null ? null : Date.now() - state.lastAckReceivedAtMs,
       ...session.readCurrentPtyRendererDeliveryDebugSnapshot()
     })
   }, PTY_DELIVERY_RESYNC_TIMEOUT_MS)
-  session.deliveryResyncTimer.unref?.()
-  session.mainWindow.webContents.send('pty:requestDeliveryResync', { requestId })
+  state.deliveryResyncTimer.unref?.()
+  state.webContents.send('pty:requestDeliveryResync', { requestId })
 }
 
+// Why write off: bytes sent but never received after a confirmed wedge are gone (no ACK can repay them); hand back restore markers so panes repaint from the snapshot.
 export function writeOffLostRendererDelivery(
   session: PtyIpcSession,
-  report: PtyRendererDeliveryStateReport
+  report: PtyRendererDeliveryStateReport,
+  state: RendererWindowFlowState
 ): PtyDeliveryWriteOff[] {
   const writtenOff: PtyDeliveryWriteOff[] = []
   for (const [id, accounting] of session.rendererDeliveryAccountingByPty) {
+    // Why: the reporting window can only vouch for its own delivery; other windows' debts stay.
+    if (accounting.ownerWebContentsId !== state.webContentsId) {
+      continue
+    }
     if (accounting.sentChars - accounting.ackedChars <= 0) {
       continue
     }
@@ -201,8 +230,8 @@ export function writeOffLostRendererDelivery(
     })
   }
   if (writtenOff.length > 0) {
-    clearDeliveryResyncProbe(session)
-    session.deliveryResyncUnansweredWarnLogged = false
+    clearDeliveryResyncProbe(state)
+    state.deliveryResyncUnansweredWarnLogged = false
     mainDeliveryBreadcrumbs.record('delivery-heal-writeoff', {
       writtenOffPtyCount: writtenOff.length,
       writtenOffChars: writtenOff.reduce((sum, { writtenOffChars }) => sum + writtenOffChars, 0)
@@ -210,7 +239,7 @@ export function writeOffLostRendererDelivery(
     console.warn('[pty] delivery heal: wrote off renderer-bound bytes lost in push channel', {
       rendererPtyDataListenerCount: report.rendererPtyDataListenerCount ?? null,
       msSinceLastAck:
-        session.lastAckReceivedAtMs === null ? null : Date.now() - session.lastAckReceivedAtMs,
+        state.lastAckReceivedAtMs === null ? null : Date.now() - state.lastAckReceivedAtMs,
       writtenOffByPty: writtenOff.map(({ id, writtenOffChars }) => ({ id, writtenOffChars })),
       ...session.readCurrentPtyRendererDeliveryDebugSnapshot()
     })

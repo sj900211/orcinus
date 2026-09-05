@@ -3,12 +3,13 @@ import { shouldDropHiddenRendererPtyDataForOwner } from '../pty-owner-gate'
 import { propagatePendingProjectionRemainder } from '../../pty-pending-projection-admissions'
 import type { PendingPtyData } from '../../pty-pending-data-drain-queue'
 import { activeRendererPtys } from './visibility-state'
+import { listAppWindows } from '../../../window/window-affinity-router'
 import {
   PTY_BATCH_DRAIN_CONTINUE_MS,
   PTY_BATCH_FLUSH_CHUNK_CHARS,
-  PTY_BATCH_FLUSH_MAX_WRITES,
-  PTY_DISPATCHER_READY_WATCHDOG_MS
+  PTY_BATCH_FLUSH_MAX_WRITES
 } from './constants'
+import { teardownAllRendererDeliveryState } from './window-flow-state'
 import {
   getDroppedMode2031RendererData,
   pendingProjectionAdmissionOptions,
@@ -39,32 +40,6 @@ export function invalidatePendingPtyDrainClassification(
   }
 }
 
-export function clearDispatcherReadyWatchdog(session: PtyIpcSession): void {
-  if (session.dispatcherReadyWatchdogTimer) {
-    clearTimeout(session.dispatcherReadyWatchdogTimer)
-    session.dispatcherReadyWatchdogTimer = null
-  }
-}
-
-export function armDispatcherReadyWatchdog(session: PtyIpcSession): void {
-  clearDispatcherReadyWatchdog(session)
-  if (session.mainWindow.isDestroyed()) {
-    return
-  }
-  // Why: one-shot self-heal — force the gate open if the reloaded page never signals ready, so a dropped handshake can't hold it forever. Unref'd so it can't keep the process alive.
-  session.dispatcherReadyWatchdogTimer = setTimeout(() => {
-    session.dispatcherReadyWatchdogTimer = null
-    if (session.rendererPtyDispatcherReady || session.mainWindow.isDestroyed()) {
-      return
-    }
-    session.rendererPtyDispatcherReady = true
-    session.rendererDispatcherReadyForcedCount += 1
-    session.pendingData.reactivateBlocked()
-    schedulePendingDataFlush(session, 0)
-  }, PTY_DISPATCHER_READY_WATCHDOG_MS)
-  session.dispatcherReadyWatchdogTimer.unref?.()
-}
-
 export function clearFlushTimerIfIdle(session: PtyIpcSession): void {
   if (session.pendingData.size > 0 || session.flushTimer === null) {
     return
@@ -75,15 +50,9 @@ export function clearFlushTimerIfIdle(session: PtyIpcSession): void {
 
 export function flushPendingData(session: PtyIpcSession): void {
   session.flushTimer = null
-  if (session.mainWindow.isDestroyed()) {
+  if (listAppWindows().length === 0) {
     // Why release now: bookkeeping is being wiped, so no future drain can resume these producers — local shells would wedge.
-    session.producerFlowControl.releaseAll()
-    session.clearDeliveryResyncProbe()
-    session.clearPendingPtyData()
-    session.pendingOverflowMarkedPtys.clear()
-    session.rendererDeliveryAccountingByPty.clear()
-    session.rendererInFlightTotalChars = 0
-    session.clearDispatcherReadyWatchdog()
+    teardownAllRendererDeliveryState(session)
     return
   }
   // Ordinary boot-window data is blocked in the queue; hidden-droppable entries still retire before renderer readiness.
@@ -115,12 +84,7 @@ export function flushPendingData(session: PtyIpcSession): void {
         }
         warnIfDroppingHiddenBytesForVisiblePty(session, id, pending.data.length)
         if (drop.shouldEmitRestoreMarker) {
-          sendModelRestoreNeededMarker(
-            session,
-            id,
-            'hidden-drop',
-            session.runtime?.getPtyOutputSequence(id)
-          )
+          sendModelRestoreNeededMarker(id, 'hidden-drop', session.runtime?.getPtyOutputSequence(id))
         }
         continue
       }
@@ -211,7 +175,7 @@ export function flushPendingData(session: PtyIpcSession): void {
     session.pendingData.endRound(round)
   }
   if (
-    session.rendererPtyDispatcherReady &&
+    session.mainFlowState.dispatcherReady &&
     session.pendingData.size > 0 &&
     writes === 0 &&
     !sendFailed

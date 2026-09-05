@@ -9,6 +9,7 @@ import { inspectPtyProviderProcess } from '../../../providers/pty-process-inspec
 import type { PtyRuntimeControllerDeps } from './controller-deps'
 import { agentSessionPtyWriteGate } from '../../../runtime/agent-session-pty-write-gate'
 import { reportAgentSessionWriteRefusal } from '../agent-session-write-refusal-report'
+import { sendToPtyOwner } from '../../../window/window-affinity-router'
 
 export function writePtyFromRuntimeController(
   deps: PtyRuntimeControllerDeps,
@@ -159,11 +160,11 @@ export async function hasChildProcessesFromRuntimeController(ptyId: string) {
 }
 
 export async function clearBufferFromRuntimeController(
-  deps: PtyRuntimeControllerDeps,
+  _deps: PtyRuntimeControllerDeps,
   ptyId: string
 ): Promise<void> {
   // Why: desktop xterm and daemon/SSH providers hold separate buffers; clear both so mobile resubscribe can't resurrect cleared history.
-  deps.mainWindow.webContents.send('pty:clearBuffer:request', { ptyId })
+  sendToPtyOwner(ptyId, 'pty:clearBuffer:request', { ptyId })
   try {
     await getProviderForPty(ptyId).clearBuffer(ptyId)
   } catch {

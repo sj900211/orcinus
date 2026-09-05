@@ -1,7 +1,7 @@
 import type { BrowserWindow } from 'electron'
 import { getPtyIpc } from '../../pty-host-bindings'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
-import { createPtyWriteInput } from './write-input'
+import { createPtyWriteInput, isPtyEventFromTrustedAppWindow } from './write-input'
 
 export function installPtyWriteIpcHandlers(deps: {
   mainWindow: BrowserWindow
@@ -10,18 +10,13 @@ export function installPtyWriteIpcHandlers(deps: {
 }): void {
   const ipcMain = getPtyIpc()
   const { mainWindow, runtime } = deps
-  const {
-    writePtyInput,
-    writePtyInputAccepted,
-    isPtyWritePayload,
-    isPtyViewportClaimPayload,
-    isPtyWriteEventFromMainWindow
-  } = createPtyWriteInput(deps)
+  const { writePtyInput, writePtyInputAccepted, isPtyWritePayload, isPtyViewportClaimPayload } =
+    createPtyWriteInput(deps)
 
   const hostViewportClaimTails = new Map<string, Promise<boolean>>()
 
   ipcMain.on('pty:write', (event, args: unknown) => {
-    if (!isPtyWriteEventFromMainWindow(event, mainWindow.webContents) || !isPtyWritePayload(args)) {
+    if (!isPtyEventFromTrustedAppWindow(event, mainWindow) || !isPtyWritePayload(args)) {
       return
     }
     const claimTail = hostViewportClaimTails.get(args.id)
@@ -32,7 +27,7 @@ export function installPtyWriteIpcHandlers(deps: {
     writePtyInput(args)
   })
   ipcMain.handle('pty:writeAccepted', (event, args: unknown): boolean | Promise<boolean> => {
-    if (!isPtyWriteEventFromMainWindow(event, mainWindow.webContents) || !isPtyWritePayload(args)) {
+    if (!isPtyEventFromTrustedAppWindow(event, mainWindow) || !isPtyWritePayload(args)) {
       return false
     }
     const claimTail = hostViewportClaimTails.get(args.id)
@@ -44,7 +39,7 @@ export function installPtyWriteIpcHandlers(deps: {
   ipcMain.removeAllListeners('pty:claimViewport')
   ipcMain.on('pty:claimViewport', (event, args: unknown) => {
     if (
-      !isPtyWriteEventFromMainWindow(event, mainWindow.webContents) ||
+      !isPtyEventFromTrustedAppWindow(event, mainWindow) ||
       !runtime ||
       !isPtyViewportClaimPayload(args)
     ) {

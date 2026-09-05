@@ -122,7 +122,11 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
     }
     // Why: a stale hidden mark on this session id would gate a later visible attach that reuses it.
     if (ctx.preSpawnHiddenMarkId !== null) {
-      ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, false)
+      ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(
+        ctx.preSpawnHiddenMarkId,
+        false,
+        ctx.args.worktreeId
+      )
     }
     const rawMessage = err instanceof Error ? err.message : String(err)
     if (rawMessage === 'agent_session_exited_during_start' && ctx.rejectedRegistrationCandidate) {

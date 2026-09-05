@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { getPtyIpc } from '../../pty-host-bindings'
 import { parseTerminalKittyKeyboardFlags } from '../../../../shared/terminal-kitty-keyboard-flags'
-import { isMainWindowPtyIpcEvent } from './write-input'
+import { sendToPtyOwner } from '../../../window/window-affinity-router'
+import { isPtyEventFromTrustedAppWindow } from './write-input'
 import type { PtyIpcSession, SerializeResult } from '../session'
 
 export function settleSerializeRequest(
@@ -37,9 +38,9 @@ export function installPtySerializeBufferIpc(session: PtyIpcSession): void {
         } | null
       }
     ) => {
-      // Why: the snapshot seeds terminal restore state, so only the main window may settle it.
+      // Why: the snapshot seeds terminal restore state, so only trusted app windows (main or a workspace window that streams the pane) may settle it.
       if (
-        !isMainWindowPtyIpcEvent(event, session.mainWindow, session.mainWindow.webContents) ||
+        !isPtyEventFromTrustedAppWindow(event, session.mainWindow) ||
         typeof args?.requestId !== 'string'
       ) {
         return
@@ -88,10 +89,6 @@ export function requestSerializedBuffer(
   ptyId: string,
   opts?: { scrollbackRows?: number }
 ): Promise<SerializeResult> {
-  if (session.mainWindow.isDestroyed()) {
-    return Promise.resolve(null)
-  }
-
   const requestId = randomUUID()
   return new Promise<SerializeResult>((resolve) => {
     const timeout = setTimeout(() => {
@@ -106,6 +103,9 @@ export function requestSerializedBuffer(
     if (opts) {
       payload.opts = opts
     }
-    session.mainWindow.webContents.send('pty:serializeBuffer:request', payload)
+    // Why owner window: only the window that streams this pty holds its xterm buffer.
+    if (!sendToPtyOwner(ptyId, 'pty:serializeBuffer:request', payload)) {
+      settleSerializeRequest(session, requestId, null)
+    }
   })
 }

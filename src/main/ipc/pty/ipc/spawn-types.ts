@@ -116,7 +116,11 @@ export type PtySpawnIpcDeps = {
     env: T,
     launch: CodexResumeLaunch
   ) => T
-  transitionSpawnHiddenRendererPtyDeliveryState: (id: string, hidden: boolean) => void
+  transitionSpawnHiddenRendererPtyDeliveryState: (
+    id: string,
+    hidden: boolean,
+    worktreeId?: string
+  ) => void
   trustedTerminalHandleEnv: Set<string>
   sendPtySpawnedToRenderer: (id: string) => void
   syncPtyBackgroundedDelivery: (id: string, caller: string) => void

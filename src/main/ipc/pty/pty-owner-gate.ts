@@ -1,9 +1,9 @@
-// Owner-window adaptation of the fork's per-window hidden-delivery gate
-// (expedition 7, B-tier regate): upstream's split delivery modules are
-// window-agnostic — they know only the pty id. Resolve the pty's OWNER window
-// through the affinity router (main-window fallback) and key the per-window
-// gate on it. The full per-window flow-state accounting is the dungeon-3
-// re-implant; until then a missing owner degrades to "deliver" (never drop).
+// Owner-window adaptation of the fork's per-window hidden-delivery gate:
+// upstream's split delivery modules are window-agnostic — they know only the
+// pty id. Resolve the pty's OWNER window through the affinity router
+// (main-window fallback) and key the per-window gate on it; a missing owner
+// degrades to "deliver" (never drop). Pairs with delivery/window-flow-state.ts,
+// which owns the per-window in-flight/dispatcher accounting.
 import { resolvePtyOwnerWindow } from '../../window/window-affinity-router'
 import {
   isHiddenRendererPty,
@@ -51,5 +51,7 @@ export function shouldDropHiddenRendererPtyDataForOwner(
   settings: Parameters<typeof shouldDropHiddenRendererPtyData>[2]
 ): boolean {
   const webContentsId = ownerWebContentsId(id)
-  return webContentsId === null ? false : shouldDropHiddenRendererPtyData(webContentsId, id, settings)
+  return webContentsId === null
+    ? false
+    : shouldDropHiddenRendererPtyData(webContentsId, id, settings)
 }

@@ -2,7 +2,7 @@
 import { OrcaRuntimeWithRefreshRepoWorktreeScan } from './orca-runtime-refresh-repo-worktree-scan'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
-import { splitWorktreeIdForFilesystem } from '../../shared/worktree/id'
+import { getRepoIdFromWorktreeId, splitWorktreeIdForFilesystem } from '../../shared/worktree/id'
 import { parseWslUncPath } from '../../shared/wsl-paths'
 import { cloneAgentSessionOwnerBinding } from '../../shared/claimed-agent-pty-owner-snapshot'
 import { advertisedUrlWatcher } from '../ports/advertised-url-watcher'
@@ -12,6 +12,15 @@ import { isTerminalLeafId, makePaneKey } from '../../shared/stable-pane-id'
 import { inferWorktreeIdFromPtyId } from './runtime-worktree-path-identity'
 
 export class OrcaRuntimeWithRecordPtyWorktree extends OrcaRuntimeWithRefreshRepoWorktreeScan {
+  // Fork: window-affinity stream routing resolves each pty's owner window from these (register-handlers injects them).
+  getPtyWorktreeId(ptyId: string): string | undefined {
+    return this.ptysById.get(ptyId)?.worktreeId
+  }
+
+  getWorktreeRepoId(worktreeId: string): string {
+    return getRepoIdFromWorktreeId(worktreeId)
+  }
+
   protected recordPtyWorktree(
     ptyId: string,
     worktreeId: string,

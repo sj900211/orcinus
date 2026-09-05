@@ -8,11 +8,13 @@ import {
   visibleRendererPtys,
   activeRendererPtys
 } from './visibility-state'
+import { listAppWindows, resolvePtyOwnerWindow } from '../../../window/window-affinity-router'
 import { PTY_BATCH_INTERVAL_MS } from './constants'
 import { appendPendingPtyData, getDroppedMode2031RendererData } from './pending'
 import { sendModelRestoreNeededMarker, sendPtyDataToRenderer } from './payload'
 import { shouldSendInteractiveOutputNow } from './interactive'
 import { requestDeliveryResyncForGatedPty } from './accounting'
+import { ownerFlowStateForPty, teardownAllRendererDeliveryState } from './window-flow-state'
 import { warnIfDroppingHiddenBytesForVisiblePty } from './debug-snapshot'
 import { clearFlushTimerIfIdle } from './flush'
 import type { PtyIpcSession } from '../session'
@@ -58,21 +60,18 @@ export function acceptPtyDataForRenderer(
   const preservesSeq = !payload.transformed && rawLength === payload.data.length
   const startSeq = typeof outputSeq === 'number' ? Math.max(0, outputSeq - rawLength) : undefined
   const projectionId = projection?.identity.projectionSemanticsId
-  if (session.mainWindow.isDestroyed()) {
+  if (!resolvePtyOwnerWindow(payload.id)) {
     if (projectionId) {
       session.sshOutputIntake?.transferProjections([projectionId], 'renderer-destroyed')
     }
-    if (session.flushTimer) {
-      clearTimeout(session.flushTimer)
-      session.flushTimer = null
+    // Why: only a fully windowless app wipes global bookkeeping; a single missing owner must not clobber other windows' delivery.
+    if (listAppWindows().length === 0) {
+      if (session.flushTimer) {
+        clearTimeout(session.flushTimer)
+        session.flushTimer = null
+      }
+      teardownAllRendererDeliveryState(session)
     }
-    session.producerFlowControl.releaseAll()
-    session.clearDeliveryResyncProbe()
-    session.clearPendingPtyData()
-    session.pendingOverflowMarkedPtys.clear()
-    session.rendererDeliveryAccountingByPty.clear()
-    session.rendererInFlightTotalChars = 0
-    session.clearDispatcherReadyWatchdog()
     return
   }
   if (session.rendererExitingPtyIds.has(payload.id)) {
@@ -89,7 +88,7 @@ export function acceptPtyDataForRenderer(
     const drop = recordHiddenRendererPtyDataDrop(payload.id, droppedChars)
     warnIfDroppingHiddenBytesForVisiblePty(session, payload.id, droppedChars)
     if (drop.shouldEmitRestoreMarker) {
-      sendModelRestoreNeededMarker(session, payload.id, 'hidden-drop', outputSeq)
+      sendModelRestoreNeededMarker(payload.id, 'hidden-drop', outputSeq)
     }
     return
   }
@@ -130,20 +129,20 @@ export function acceptPtyDataForRenderer(
     nextData,
     performance.now()
   )
-  if (isInteractiveOutput && session.rendererPtyDispatcherReady) {
+  if (isInteractiveOutput && ownerFlowStateForPty(session, payload.id)?.dispatcherReady) {
     if (!session.canSendPtyDataToRenderer(payload.id, { interactive: true })) {
       session.setPendingPtyData(payload.id, pending)
       if (shouldEmitPendingCapRestoreMarker) {
-        sendModelRestoreNeededMarker(session, payload.id, 'pending-cap', outputSeq)
+        sendModelRestoreNeededMarker(payload.id, 'pending-cap', outputSeq)
       }
       session.updateProducerFlowControl(payload.id)
-      requestDeliveryResyncForGatedPty(session)
+      requestDeliveryResyncForGatedPty(session, payload.id)
       return
     }
     session.deletePendingPtyData(payload.id)
     clearFlushTimerIfIdle(session)
     if (shouldEmitPendingCapRestoreMarker) {
-      sendModelRestoreNeededMarker(session, payload.id, 'pending-cap', outputSeq)
+      sendModelRestoreNeededMarker(payload.id, 'pending-cap', outputSeq)
     }
     session.pendingOverflowMarkedPtys.delete(payload.id)
     try {
@@ -172,7 +171,7 @@ export function acceptPtyDataForRenderer(
   }
   session.setPendingPtyData(payload.id, pending)
   if (shouldEmitPendingCapRestoreMarker) {
-    sendModelRestoreNeededMarker(session, payload.id, 'pending-cap', outputSeq)
+    sendModelRestoreNeededMarker(payload.id, 'pending-cap', outputSeq)
   }
   session.updateProducerFlowControl(payload.id)
   if (
@@ -180,7 +179,7 @@ export function acceptPtyDataForRenderer(
       interactive: activeRendererPtys.has(payload.id)
     })
   ) {
-    requestDeliveryResyncForGatedPty(session)
+    requestDeliveryResyncForGatedPty(session, payload.id)
   }
   if (!session.flushTimer) {
     session.schedulePendingDataFlush(PTY_BATCH_INTERVAL_MS)

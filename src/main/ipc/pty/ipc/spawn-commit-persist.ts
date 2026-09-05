@@ -59,10 +59,14 @@ export async function persistPtyIpcSpawnCommit(ctx: PtyIpcSpawnState): Promise<{
   }
   if (ctx.initiallyHidden) {
     // Why marked synchronously here: provider data events dispatch on later tasks, so this still lands ahead of the first byte's delivery decision (idempotent if already marked pre-spawn).
-    ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.result.id, true)
+    ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.result.id, true, ctx.args.worktreeId)
     if (ctx.preSpawnHiddenMarkId !== null && ctx.preSpawnHiddenMarkId !== ctx.result.id) {
       // Defense: never strand a mark on an id the provider renamed.
-      ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, false)
+      ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(
+        ctx.preSpawnHiddenMarkId,
+        false,
+        ctx.args.worktreeId
+      )
     }
     // Why after ptyOwnership.set: provider lookup routes by ownership, and a hidden-spawned agent should be paceable from its first flood.
     ctx.deps.syncPtyBackgroundedDelivery(ctx.result.id, 'spawn')

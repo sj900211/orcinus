@@ -4,6 +4,7 @@ import {
   SYNTHETIC_KILL_EXIT_DUPLICATE_WINDOW_MS
 } from './visibility-state'
 import { allocatePtyLifecycleSequence } from '../host-env/types'
+import { resolvePtyOwnerWindow, sendToPtyOwner } from '../../../window/window-affinity-router'
 import { makePtyDataPayload, sendPtyDataToRenderer } from './payload'
 import { getRendererInFlightCharsForPty } from './accounting'
 import { clearFlushTimerIfIdle } from './flush'
@@ -48,7 +49,7 @@ export function preparePtyExitForRenderer(
   session: PtyIpcSession,
   payload: { id: string; code: number; incarnationId?: string }
 ): (() => void) | null {
-  if (session.mainWindow.isDestroyed()) {
+  if (!resolvePtyOwnerWindow(payload.id)) {
     session.sshOutputIntake?.transferPtyProjections(payload.id, 'renderer-destroyed')
     return () => {}
   }
@@ -114,7 +115,7 @@ export function finalizePtyExitForRenderer(
   session: PtyIpcSession,
   payload: { id: string; code: number; incarnationId?: string }
 ): void {
-  if (session.mainWindow.isDestroyed()) {
+  if (!resolvePtyOwnerWindow(payload.id)) {
     session.rendererCreditBeforeExitByPty.delete(payload.id)
     return
   }
@@ -129,11 +130,17 @@ export function finalizePtyExitForRenderer(
   session.rendererDeliveryRestoreNeededPtys.delete(payload.id)
   lastInputAtByPty.delete(payload.id)
   interactiveOutputCharsByPty.delete(payload.id)
-  const releasedRendererCredit = getRendererInFlightCharsForPty(session, payload.id)
-  session.rendererInFlightTotalChars = Math.max(
-    0,
-    session.rendererInFlightTotalChars - releasedRendererCredit
-  )
+  const exitAccounting = session.rendererDeliveryAccountingByPty.get(payload.id)
+  if (exitAccounting) {
+    const debtOwnerState = session.windowFlowStates.get(exitAccounting.ownerWebContentsId)
+    if (debtOwnerState) {
+      debtOwnerState.inFlightTotalChars = Math.max(
+        0,
+        debtOwnerState.inFlightTotalChars -
+          Math.max(0, exitAccounting.sentChars - exitAccounting.ackedChars)
+      )
+    }
+  }
   // Why: the renderer also drops its cumulative total on pty:exit, so a reused id restarts aligned at zero on both sides.
   session.rendererDeliveryAccountingByPty.delete(payload.id)
   if (hadReleasableRendererCredit) {
@@ -145,12 +152,19 @@ export function finalizePtyExitForRenderer(
       session.schedulePendingDataAfterCreditReport(true)
     }
   }
-  session.mainWindow.webContents.send('pty:exit', {
+  sendToPtyOwner(payload.id, 'pty:exit', {
     ...payload,
     ...(session.reversibleStopOwnersByPtyId.has(payload.id)
       ? { preserveRendererBinding: true }
       : {})
   })
+  // Why: the receiving renderer drops its cumulative counter on pty:exit; drop only that window's mirror so a reused id baselines at zero (non-owners' counters live on).
+  const exitOwnerWindow = resolvePtyOwnerWindow(payload.id)
+  if (exitOwnerWindow) {
+    session.windowFlowStates
+      .get(exitOwnerWindow.webContents.id)
+      ?.lastCumulativeAckByPty.delete(payload.id)
+  }
 }
 
 export function sendPtyExitToRenderer(
@@ -170,8 +184,6 @@ export function sendPtyExitToRenderer(
   }
 }
 
-export function sendPtySpawnedToRenderer(session: PtyIpcSession, id: string): void {
-  if (!session.mainWindow.isDestroyed()) {
-    session.mainWindow.webContents.send('pty:spawned', { id })
-  }
+export function sendPtySpawnedToRenderer(_session: PtyIpcSession, id: string): void {
+  sendToPtyOwner(id, 'pty:spawned', { id })
 }

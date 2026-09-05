@@ -5,10 +5,6 @@ import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { IPtyProvider } from '../../providers/types'
 import type { LegacySshProjectionSemantics } from '../ssh-pty-legacy-projection'
 import type { PtyModelRestoreReason } from '../../../shared/pty-model-restore-marker'
-import type {
-  PtyDeliveryWriteOff,
-  PtyRendererDeliveryStateReport
-} from '../../../shared/pty-renderer-delivery-health'
 import type { PtyRendererDeliveryDebugSnapshot } from './delivery/debug'
 import { PtyProducerFlowController } from '../pty-producer-flow-control'
 import { PtyPendingDataDrainQueue, type PendingPtyData } from '../pty-pending-data-drain-queue'
@@ -16,6 +12,12 @@ import type { SshPtyOutputIntake } from '../ssh-pty-output-intake'
 import { activeRendererPtys } from './delivery/visibility-state'
 import { isHiddenPtyDeliveryGateEnabled } from '../pty-hidden-delivery-gate'
 import { shouldDropHiddenRendererPtyDataForOwner } from './pty-owner-gate'
+import {
+  createWindowFlowState,
+  ownerFlowStateForPty,
+  setActiveWindowFlowSession,
+  type RendererWindowFlowState
+} from './delivery/window-flow-state'
 import type { CodexHomePtySpawnedLifecycleArgs, PrepareCodexSessionResume } from './host-env/types'
 import { tryGetProviderForPty } from './provider/registry'
 
@@ -29,11 +31,17 @@ export type PtyDataPayload = {
   droppedOutput?: boolean
 }
 
+// Why: TCP-style cumulative accounting — monotonic sent/acked totals self-heal on any later ACK, where relative in-flight counters would make each lost ACK a permanent debt.
+// ownerWebContentsId pins the debt to the window the bytes were sent to; renderer counters restart per window.
 export type RendererPtyDeliveryAccounting = {
   sentChars: number
   ackedChars: number
   lastSendAtMs: number
   lastAckAtMs: number | null
+  ownerWebContentsId: number
+  // Why: the owner's renderer counter only resets on its own pty:exit/reload, so an accounting minted
+  // after an owner change subtracts what that window already counted before this accounting existed.
+  ackBaseChars: number
 }
 
 export type SerializeResult = {
@@ -69,16 +77,15 @@ export type PtyIpcSession = {
   pendingOverflowMarkedPtys: Set<string>
   rendererDeliveryAccountingByPty: Map<string, RendererPtyDeliveryAccounting>
   trustedTerminalHandleEnv: Set<string>
+  // Why per-window flow states: dispatcher gates, resync probes, and in-flight totals are
+  // per-renderer facts; the pty's OWNER window (affinity router) keys every delivery decision.
+  windowFlowStates: Map<number, RendererWindowFlowState>
+  mainFlowState: RendererWindowFlowState
   flushTimer: ReturnType<typeof setTimeout> | null
   pendingDataFlushActive: boolean
   pendingDataCreditReleasedDuringFlush: boolean
-  rendererInFlightTotalChars: number
   pendingDroppedChars: number
   deliveryResyncRequestSerial: number
-  deliveryResyncOutstandingRequestId: number | null
-  deliveryResyncTimer: ReturnType<typeof setTimeout> | null
-  deliveryResyncUnansweredWarnLogged: boolean
-  lastAckReceivedAtMs: number | null
   peakPendingChars: number
   peakMaxPendingCharsByPty: number
   peakRendererInFlightChars: number
@@ -87,8 +94,6 @@ export type PtyIpcSession = {
   rendererLifecycleResetCount: number
   lastLifecycleResetClearedChars: number
   rendererDispatcherReadyForcedCount: number
-  rendererPtyDispatcherReady: boolean
-  dispatcherReadyWatchdogTimer: ReturnType<typeof setTimeout> | null
   lastHiddenDropContradictionWarnAtMs: number
   pendingDataDropWarnedPtys: Set<string>
   producerFlowControl: PtyProducerFlowController
@@ -115,14 +120,10 @@ export type PtyIpcSession = {
     markerSeq: number | undefined
   ) => boolean
   updateProducerFlowControl: (id: string) => void
-  applyCumulativeAck: (id: string, processedChars: number) => number
   readCurrentPtyRendererDeliveryDebugSnapshot: () => PtyRendererDeliveryDebugSnapshot
-  clearDeliveryResyncProbe: () => void
   clearPendingPtyData: () => void
   deletePendingPtyData: (id: string) => void
   setPendingPtyData: (id: string, pending: PendingPtyData) => void
-  clearDispatcherReadyWatchdog: () => void
-  armDispatcherReadyWatchdog: () => void
   acceptPtyDataForRenderer: (
     payload: {
       id: string
@@ -160,16 +161,19 @@ export type PtyIpcSession = {
   syncPtyBackgroundedDelivery: (id: string, caller: string) => void
   resyncBackgroundedDeliveriesAfterGateReset: () => void
   transitionHiddenRendererPtyDeliveryState: (
+    reportingWebContentsId: number,
     id: string,
     hidden: boolean
   ) => { droppable: boolean; droppedWhileHidden: boolean; policyChanged: boolean }
-  transitionSpawnHiddenRendererPtyDeliveryState: (id: string, hidden: boolean) => void
+  transitionSpawnHiddenRendererPtyDeliveryState: (
+    id: string,
+    hidden: boolean,
+    worktreeId?: string
+  ) => void
   rendererPtyIsKnownHidden: (id: string) => boolean
   clearHiddenRendererResizeOutput: (id: string) => void
   clearDeliveredHiddenRendererResizeOutput: (id: string) => void
   schedulePendingDataAfterCreditReport: (creditedAny: boolean) => void
-  writeOffLostRendererDelivery: (report: PtyRendererDeliveryStateReport) => PtyDeliveryWriteOff[]
-  getRendererInFlightCharsForPty: (id: string) => number
 }
 
 const unsetSessionFn = (): never => {
@@ -197,16 +201,13 @@ export function createPtyIpcSession(args: {
     pendingOverflowMarkedPtys: new Set(),
     rendererDeliveryAccountingByPty: new Map(),
     trustedTerminalHandleEnv: new Set(),
+    windowFlowStates: new Map(),
+    mainFlowState: undefined as unknown as RendererWindowFlowState,
     flushTimer: null,
     pendingDataFlushActive: false,
     pendingDataCreditReleasedDuringFlush: false,
-    rendererInFlightTotalChars: 0,
     pendingDroppedChars: 0,
     deliveryResyncRequestSerial: 0,
-    deliveryResyncOutstandingRequestId: null,
-    deliveryResyncTimer: null,
-    deliveryResyncUnansweredWarnLogged: false,
-    lastAckReceivedAtMs: null,
     peakPendingChars: 0,
     peakMaxPendingCharsByPty: 0,
     peakRendererInFlightChars: 0,
@@ -215,8 +216,6 @@ export function createPtyIpcSession(args: {
     rendererLifecycleResetCount: 0,
     lastLifecycleResetClearedChars: 0,
     rendererDispatcherReadyForcedCount: 0,
-    rendererPtyDispatcherReady: false,
-    dispatcherReadyWatchdogTimer: null,
     lastHiddenDropContradictionWarnAtMs: 0,
     pendingDataDropWarnedPtys: new Set(),
     producerFlowControl: new PtyProducerFlowController({
@@ -235,14 +234,10 @@ export function createPtyIpcSession(args: {
     sendPtyDataToRenderer: unsetSessionFn,
     sendModelRestoreNeededMarker: unsetSessionFn,
     updateProducerFlowControl: unsetSessionFn,
-    applyCumulativeAck: unsetSessionFn,
     readCurrentPtyRendererDeliveryDebugSnapshot: unsetSessionFn,
-    clearDeliveryResyncProbe: unsetSessionFn,
     clearPendingPtyData: unsetSessionFn,
     deletePendingPtyData: unsetSessionFn,
     setPendingPtyData: unsetSessionFn,
-    clearDispatcherReadyWatchdog: unsetSessionFn,
-    armDispatcherReadyWatchdog: unsetSessionFn,
     acceptPtyDataForRenderer: unsetSessionFn,
     preparePtyExitForRenderer: unsetSessionFn,
     finalizePtyExitForRenderer: unsetSessionFn,
@@ -260,10 +255,12 @@ export function createPtyIpcSession(args: {
     rendererPtyIsKnownHidden: unsetSessionFn,
     clearHiddenRendererResizeOutput: unsetSessionFn,
     clearDeliveredHiddenRendererResizeOutput: unsetSessionFn,
-    schedulePendingDataAfterCreditReport: unsetSessionFn,
-    writeOffLostRendererDelivery: unsetSessionFn,
-    getRendererInFlightCharsForPty: unsetSessionFn
+    schedulePendingDataAfterCreditReport: unsetSessionFn
   }
+  // Why here (not wiring): the queue classifier below and workspace lifecycle tracking both read
+  // flow states before wirePtyIpcSession runs; the main window never gets workspace tracking.
+  session.mainFlowState = createWindowFlowState(session, args.mainWindow.webContents)
+  setActiveWindowFlowSession(session)
 
   session.pendingData = new PtyPendingDataDrainQueue(
     (id) => {
@@ -273,7 +270,7 @@ export function createPtyIpcSession(args: {
         return runnableLane
       }
       if (
-        !session.rendererPtyDispatcherReady ||
+        !ownerFlowStateForPty(session, id)?.dispatcherReady ||
         !session.canSendPtyDataToRenderer(id, { interactive: activeRendererPtys.has(id) })
       ) {
         return 'blocked'
