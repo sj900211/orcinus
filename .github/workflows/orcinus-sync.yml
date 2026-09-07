@@ -72,9 +72,11 @@ jobs:
             echo "clean=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upsert conflict issue
+      - name: Surface conflict (summary + best-effort issue)
         if: steps.merge.outputs.clean == 'false'
         uses: actions/github-script@v7
+        env:
+          BEHIND: ${{ steps.gap.outputs.behind }}
         with:
           script: |
             const fs = require('fs')
@@ -87,7 +89,7 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             const title = `Upstream sync conflict (${files.length} files)`
             const body = [
-              'Upstream `stablyai/orca@main` no longer merges cleanly into `main`.',
+              `Upstream \`stablyai/orca@main\` (${process.env.BEHIND} commits ahead) no longer merges cleanly into \`main\`.`,
               '',
               `**Conflicting files (${files.length}):**`,
               ...files.map((f) => `- \`${f}\``),
@@ -96,26 +98,43 @@ jobs:
               '',
               `_Radar run: ${runUrl}_`,
             ].join('\n')
+            // Always surface via the job summary — visible even when Issues are disabled.
+            await core.summary
+              .addHeading('Upstream sync conflict', 2)
+              .addRaw(
+                `\`stablyai/orca@main\` (${process.env.BEHIND} commits ahead) does not merge cleanly into \`main\`.`
+              )
+              .addHeading(`Conflicting files (${files.length})`, 3)
+              .addList(files)
+              .addRaw('Resolve locally, run the gates, and merge with a **merge commit** (never squash).')
+              .write()
+            // Best-effort dedup'd tracking issue; a warning (not a hard failure) when Issues are disabled.
             try {
-              await github.rest.issues.getLabel({ ...context.repo, name: label })
-            } catch {
-              await github.rest.issues.createLabel({ ...context.repo, name: label, color: 'd73a4a' })
-            }
-            const open = await github.rest.issues.listForRepo({
-              ...context.repo,
-              state: 'open',
-              labels: label,
-            })
-            if (open.data.length > 0) {
-              const number = open.data[0].number
-              await github.rest.issues.update({ ...context.repo, issue_number: number, title, body })
-              await github.rest.issues.createComment({
+              try {
+                await github.rest.issues.getLabel({ ...context.repo, name: label })
+              } catch {
+                await github.rest.issues.createLabel({ ...context.repo, name: label, color: 'd73a4a' })
+              }
+              const open = await github.rest.issues.listForRepo({
                 ...context.repo,
-                issue_number: number,
-                body: `Still conflicting as of ${runUrl} — ${files.length} file(s).`,
+                state: 'open',
+                labels: label,
               })
-            } else {
-              await github.rest.issues.create({ ...context.repo, title, body, labels: [label] })
+              if (open.data.length > 0) {
+                const number = open.data[0].number
+                await github.rest.issues.update({ ...context.repo, issue_number: number, title, body })
+                await github.rest.issues.createComment({
+                  ...context.repo,
+                  issue_number: number,
+                  body: `Still conflicting as of ${runUrl} — ${files.length} file(s).`,
+                })
+              } else {
+                await github.rest.issues.create({ ...context.repo, title, body, labels: [label] })
+              }
+            } catch (error) {
+              core.warning(
+                `Could not open a tracking issue (${error.message}). The conflict is surfaced via this failed run and its summary instead.`
+              )
             }
 
       - name: Install dependencies
@@ -165,3 +184,13 @@ jobs:
               --title "Upstream sync $syncdate ($BEHIND commits)" \
               --body-file "$RUNNER_TEMP/pr-body.md"
           fi
+
+      # Why fail last (not in the conflict step): the summary + tracking issue
+      # must be published first, then the red run is the radar itself — a failing
+      # scheduled run emails the repo owner, so a conflict is never silent even
+      # with Issues disabled. Never a skip rail (docs: radar must not freeze).
+      - name: Surface conflict as a failed run
+        if: steps.merge.outputs.clean == 'false'
+        run: |
+          echo "::error::Upstream diverged and no longer merges cleanly into main — see the job summary for the conflicting files. Resolve locally and merge with a merge commit."
+          exit 1
