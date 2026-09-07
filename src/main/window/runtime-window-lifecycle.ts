@@ -153,6 +153,8 @@ export function registerRuntimeWindowLifecycle(
         resolution,
         ...(ptyId ? { ptyId } : {})
       }),
+    setLegacyWorkerTerminalResumeFence: (paneKey, blocked) =>
+      send('agentStatus:legacyWorkerTerminalResumeFence', { paneKey, blocked }),
     splitTerminal: (tabId, paneRuntimeId, opts) => {
       send('ui:splitTerminal', {
         tabId,

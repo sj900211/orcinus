@@ -58,6 +58,18 @@ describe('electron-builder dev-channel identity', () => {
     expect(config.win.verifyUpdateCodeSignature).toBe(false)
   })
 
+  // Fork divergence: upstream carries a SignPath uninstaller-sign hook on every
+  // channel. The fork ships unsigned everywhere (its SignPath identity isn't
+  // transferable), so it adopts no signtoolOptions at all — orcinus-ci's smoke
+  // rejects any, and a build that claimed a publisherName would reject its own
+  // next update. No channel may carry a signing hook.
+  it('carries no signing hook on any channel (fork stays unsigned)', () => {
+    for (const env of [{}, WIN_ADHOC_ENV]) {
+      const config = loadConfigWithEnv(env)
+      expect(config.win.signtoolOptions).toBeUndefined()
+    }
+  })
+
   it.each([
     ['hourly', { ORCA_WIN_HOURLY: '1' }, 'orca-hourly'],
     ['daily', { ORCA_WIN_DAILY: '1' }, 'orca-daily'],

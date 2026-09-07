@@ -19,6 +19,8 @@ const {
 } = require('./scripts/verify-packaged-node-pty-job-ownership.cjs')
 const { verifySkillsCliRuntime } = require('./scripts/verify-skills-cli-runtime.cjs')
 const { verifyStaticAppImagePackage } = require('./scripts/static-appimage-package-contract.cjs')
+// Fork stays unsigned on every channel, so upstream's SignPath uninstaller-sign
+// hook (windows-uninstaller-signing.cjs) is deliberately not imported here.
 
 // Why: dev-channel builds must carry the *release* identity — same bundle id,
 // Developer ID signature, and notarization ticket — or Squirrel.Mac refuses to
@@ -402,6 +404,9 @@ module.exports = {
     // unsigned path upstream uses for its dev channels (see their rationale in
     // dev-channel-win-build.yml). Revisit if the fork ever acquires Windows
     // code signing — then restore the signtoolOptions.publisherName branch.
+    // Fork stays unsigned on EVERY channel — orcinus-ci's smoke rejects any
+    // signtoolOptions here, so upstream's SignPath uninstaller-sign hook is
+    // deliberately not adopted.
     verifyUpdateCodeSignature: false,
     extraResources: [
       ...commonExtraResources,
