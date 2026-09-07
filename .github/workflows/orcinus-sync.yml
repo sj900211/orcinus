@@ -10,10 +10,10 @@ name: Orcinus upstream sync
 
 on:
   workflow_dispatch:
-  # Armed after the first manual catch-up merge lands. Uncomment to enable the
-  # nightly radar (23:19 UTC ≈ 04:19 KST). Until then this workflow is manual-only.
-  # schedule:
-  #   - cron: '23 19 * * *'
+  # Nightly radar (23:19 UTC ≈ 04:19 KST). Armed after the first catch-up merge
+  # (e31f10fb40) brought main current with upstream.
+  schedule:
+    - cron: '23 19 * * *'
 
 permissions:
   contents: write
