@@ -58,6 +58,13 @@ jobs:
       - name: Smoke-load electron-builder config
         run: node -e "const c = require('./config/electron-builder.config.cjs'); if (c.win.verifyUpdateCodeSignature !== false || c.win.signtoolOptions) { throw new Error('fork builds must stay unsigned with update signature checks disabled') }"
 
+      # Why: the auto-sync gate and every push share one identity guard — it fails
+      # if a merge drifts the fork's name/appId/productName/publish target or points
+      # src/main+src/shared production code back at the upstream (stablyai/orca)
+      # release feed (guild ruling #1: the updater-feed regression).
+      - name: Verify Orcinus identity
+        run: node config/scripts/verify-orcinus-identity.mjs
+
       # Why exactly these files: they pin the fork's release contract — unsigned
       # Windows identity, publish target, and the release asset gate — and are
       # known green on the fork. Broad suites carry upstream-identity tests that
