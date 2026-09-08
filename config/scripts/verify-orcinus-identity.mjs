@@ -107,6 +107,34 @@ expect(
   `daemon-host root drift: daemon-host-relocation.ts uses "${tsRoot}" but orca-installer-hooks.nsh uninstall deletes "${nshRoot}\\daemon-host" — they must name the same directory`
 )
 
+// 5. Linux AppImage producer/validator symmetry: the artifact name electron-builder EMITS
+// (config appImage.artifactName) must be one the build-time contract ACCEPTS
+// (static-appimage-package-contract.cjs), and both must carry the fork's name — not the
+// upstream 'orca-' prefix. A half-done rebrand here passes every unit test but fails the
+// release build in CD (the only leg that packages Linux) — the v1.4.197 failure mode.
+const appImageArtifact = String(builder.appImage?.artifactName ?? '')
+const appImageName = appImageArtifact.replace(/\.\$\{ext\}$/, '.AppImage')
+const contractSrc = readFileSync(
+  join(ROOT, 'config', 'scripts', 'static-appimage-package-contract.cjs'),
+  'utf8'
+)
+const contractNames = [...contractSrc.matchAll(/'([A-Za-z0-9._-]+\.AppImage)'/g)].map((m) => m[1])
+const appImagePrefix = `${builder.productName.toLowerCase()}-`
+expect(appImageArtifact.length > 0, 'could not read appImage.artifactName from electron-builder config')
+expect(
+  contractNames.length > 0,
+  'could not find accepted *.AppImage names in static-appimage-package-contract.cjs'
+)
+const foreignAppImageNames = contractNames.filter((name) => !name.startsWith(appImagePrefix))
+expect(
+  foreignAppImageNames.length === 0,
+  `static-appimage contract accepts non-fork AppImage names: ${foreignAppImageNames.join(', ')} (expected the "${appImagePrefix}…" prefix, not upstream 'orca-')`
+)
+expect(
+  contractNames.includes(appImageName),
+  `electron-builder emits "${appImageName}" but static-appimage-package-contract.cjs does not accept it (accepts: ${contractNames.join(', ')}) — producer/validator drift`
+)
+
 if (failures.length > 0) {
   console.error('[verify-orcinus-identity] FAILED — fork identity has drifted:')
   for (const f of failures) {
@@ -116,5 +144,5 @@ if (failures.length > 0) {
 }
 console.log(
   `[verify-orcinus-identity] OK — name=${pkg.name} appId=${builder.appId} productName=${builder.productName} ` +
-    `publish=${publish.owner}/${publish.repo} feedRefs=${positiveHits} upstreamRefs=0 hostRoot=${tsRoot}`
+    `publish=${publish.owner}/${publish.repo} feedRefs=${positiveHits} upstreamRefs=0 hostRoot=${tsRoot} appImage=${appImageName}`
 )
