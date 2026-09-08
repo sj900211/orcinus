@@ -118,7 +118,7 @@ describe('electron-builder markdown file associations', () => {
     // Scopes both kills to the uninstalling user: an elevated machine-wide uninstall must
     // not reach another logged-on user's session.
     expect(script).toMatch(/\/FI\s+"USERNAME eq /)
-    expect(script).toContain('$LOCALAPPDATA\\Orca\\daemon-host')
+    expect(script).toContain('$LOCALAPPDATA\\Orcinus\\daemon-host')
     // Without this guard, uninstallOldVersion would kill the daemon on every update —
     // defeating the relocation that keeps terminals alive across updates.
     expect(script).toMatch(/\$\{ifNot\}\s+\$\{isUpdated\}/)

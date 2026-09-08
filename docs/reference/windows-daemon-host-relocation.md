@@ -2,7 +2,7 @@
 
 On Windows the terminal daemon does not run from the install directory. Before it forks the
 daemon, Orca materializes a trimmed copy of its own runtime under
-`%LOCALAPPDATA%\Orca\daemon-host\<app version>\` and forks the daemon from there
+`%LOCALAPPDATA%\Orcinus\daemon-host\<app version>\` and forks the daemon from there
 (`src/main/daemon/daemon-host-relocation.ts`). This is what keeps live terminals alive across an
 auto-update and across a crash of the main process.
 
@@ -98,7 +98,16 @@ stop being scored.
   `uninstallOldVersion`, and killing the daemon there defeats the whole feature. The legacy
   `orca-terminal-daemon.exe` name stays in the macro to reap hosts left by older builds.
 - `LOCAL_HOST_ROOT_NAME` in `daemon-host-relocation.ts` and the path in the uninstall macro are the
-  same directory. Change both together.
+  same directory. Change both together — `config/scripts/verify-orcinus-identity.mjs` (orcinus-ci +
+  the upstream auto-sync gate) fails the build if they drift apart or revert to the upstream `Orca`
+  root. The root is the fork's `Orcinus`, not upstream `Orca`: sharing `%LOCALAPPDATA%\Orca\daemon-host`
+  with a co-installed upstream Orca means an Orcinus update or uninstall could kill or delete Orca's
+  live daemon tree (and vice-versa).
+- One-time orphan: a machine that ran an older Orcinus build (which used the `Orca` root) keeps its
+  `%LOCALAPPDATA%\Orca\daemon-host` tree (~250 MB) after upgrading to an `Orcinus`-root build. It is
+  deliberately left untouched — Orcinus must never remove `%LOCALAPPDATA%\Orca\...`, because that path
+  also belongs to a co-installed upstream Orca. Accept the bounded orphan rather than risk deleting a
+  neighbour's runtime.
 
 ## Verifying a change
 

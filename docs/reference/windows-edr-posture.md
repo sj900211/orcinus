@@ -53,7 +53,7 @@ and `orca-terminal-daemon.exe` report `Valid CN=SignPath Foundation`.
 ### The daemon runs from a copy of our own image
 
 `src/main/daemon/daemon-host-relocation.ts` copies the Electron runtime into
-`%LOCALAPPDATA%\Orca\daemon-host\<version>\` and forks the terminal daemon from
+`%LOCALAPPDATA%\Orcinus\daemon-host\<version>\` and forks the terminal daemon from
 there.
 
 It exists because the NSIS installer deletes the old install directory and force-
@@ -423,7 +423,7 @@ on:
   actually produced. Take the titles from your own incidents rather than from
   this list.
 - **File paths** — `Orca.exe` and `orca-terminal-daemon.exe` under
-  `%LOCALAPPDATA%\Programs\orca\` and `%LOCALAPPDATA%\Orca\daemon-host\`.
+  `%LOCALAPPDATA%\Programs\orca\` and `%LOCALAPPDATA%\Orcinus\daemon-host\`.
 
 Scope it as narrowly as your tenant will tolerate, and review it when Orca
 updates: the `daemon-host` path carries a `<version>` segment, so a rule pinned
@@ -432,8 +432,8 @@ Materialization stages into a `<version>.staging-<hex>` sibling before renaming
 it into place, so an exact-version rule misses the tree **mid-update** — which is
 precisely when the update-cluster incidents fire. And the root falls back to the
 Electron `userData` path when `LOCALAPPDATA` is unset, so
-`%LOCALAPPDATA%\Orca\daemon-host\` is the normal location rather than a
-guaranteed one. Prefer a prefix match on `…\Orca\daemon-host\` over a rule
+`%LOCALAPPDATA%\Orcinus\daemon-host\` is the normal location rather than a
+guaranteed one. Prefer a prefix match on `…\Orcinus\daemon-host\` over a rule
 pinned to one full path.
 
 Add AV path exclusions for those two directories as well — they cut scan cost on

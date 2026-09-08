@@ -88,6 +88,25 @@ expect(
   `production code still points at the upstream release feed (stablyai/orca): ${negativeHits.join(', ')}`
 )
 
+// 4. daemon-host relocation root: the %LOCALAPPDATA%\<root>\daemon-host tree must be the fork's own
+// (not upstream 'Orca'), and the TS constant and the NSIS uninstall path must name the SAME root —
+// a drift or an 'Orca' revert makes Orcinus share/delete a co-installed upstream Orca's live daemon
+// tree. See docs/reference/windows-daemon-host-relocation.md.
+const relocationSrc = readFileSync(join(ROOT, 'src', 'main', 'daemon', 'daemon-host-relocation.ts'), 'utf8')
+const nshSrc = readFileSync(join(ROOT, 'config', 'nsis', 'orca-installer-hooks.nsh'), 'utf8')
+const tsRoot = relocationSrc.match(/LOCAL_HOST_ROOT_NAME\s*=\s*'([^']+)'/)?.[1]
+const nshRoot = nshSrc.match(/RMDir\s+\/r\s+"\$LOCALAPPDATA\\([^\\"]+)\\daemon-host"/)?.[1]
+expect(tsRoot != null, 'could not find LOCAL_HOST_ROOT_NAME in daemon-host-relocation.ts')
+expect(nshRoot != null, 'could not find the daemon-host RMDir path in orca-installer-hooks.nsh')
+expect(
+  tsRoot === builder.productName,
+  `daemon-host root LOCAL_HOST_ROOT_NAME is "${tsRoot}", expected the fork productName "${builder.productName}" (an 'Orca' root shares upstream Orca's %LOCALAPPDATA% tree)`
+)
+expect(
+  tsRoot === nshRoot,
+  `daemon-host root drift: daemon-host-relocation.ts uses "${tsRoot}" but orca-installer-hooks.nsh uninstall deletes "${nshRoot}\\daemon-host" — they must name the same directory`
+)
+
 if (failures.length > 0) {
   console.error('[verify-orcinus-identity] FAILED — fork identity has drifted:')
   for (const f of failures) {
@@ -97,5 +116,5 @@ if (failures.length > 0) {
 }
 console.log(
   `[verify-orcinus-identity] OK — name=${pkg.name} appId=${builder.appId} productName=${builder.productName} ` +
-    `publish=${publish.owner}/${publish.repo} feedRefs=${positiveHits} upstreamRefs=0`
+    `publish=${publish.owner}/${publish.repo} feedRefs=${positiveHits} upstreamRefs=0 hostRoot=${tsRoot}`
 )
