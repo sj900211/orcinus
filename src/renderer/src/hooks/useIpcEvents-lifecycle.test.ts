@@ -5,7 +5,6 @@ import { createHarnessStoreState } from './ipc-events-test-harness'
 const EXPECTED_DIRECT_CALLBACK_METHODS = [
   'agentStatus.onClear',
   'agentStatus.onLegacyWorkerTerminalRecovery',
-  'agentStatus.onLegacyWorkerTerminalResumeFence',
   'agentStatus.onMigrationUnsupported',
   'agentStatus.onMigrationUnsupportedClear',
   'agentStatus.onSet',
@@ -32,7 +31,7 @@ const EXPECTED_DIRECT_CALLBACK_METHODS = [
   'runtime.onNativeChatLaunchDraftResolved',
   'runtime.onTerminalDriverChanged',
   'runtime.onTerminalFitOverrideChanged',
-  'runtimeEnvironments.onSharedControlDiagnostics',
+  'runtimeEnvironments.onStatusChanged',
   'satelliteWindow.onFilesMovedBack',
   'satelliteWindow.onMirrorChanged',
   'settings.onChanged',
@@ -110,7 +109,7 @@ const EXPECTED_DIRECT_CALLBACK_METHODS = [
 const EXPECTED_CALLBACK_REGISTRATION_SEQUENCE = [
   'ui.onMobileMarkdownRequest',
   'automations.onChanged',
-  'runtimeEnvironments.onSharedControlDiagnostics',
+  'runtimeEnvironments.onStatusChanged',
   'repos.onChanged',
   'worktrees.onChanged',
   'worktrees.onHeadIdentitiesChanged',
@@ -205,7 +204,6 @@ const EXPECTED_CALLBACK_REGISTRATION_SEQUENCE = [
   'agentStatus.onMigrationUnsupported',
   'agentStatus.onMigrationUnsupportedClear',
   'agentStatus.onLegacyWorkerTerminalRecovery',
-  'agentStatus.onLegacyWorkerTerminalResumeFence',
   'runtime.onTerminalFitOverrideChanged',
   'runtime.onTerminalDriverChanged',
   'runtime.onNativeChatLaunchDraftResolved',
@@ -390,7 +388,7 @@ describe('useIpcEvents App-lifetime lifecycle', () => {
     ).toEqual([
       'ui.onMobileMarkdownRequest',
       'automations.onChanged',
-      'runtimeEnvironments.onSharedControlDiagnostics',
+      'runtimeEnvironments.onStatusChanged',
       'runtimeEnvironments.subscribe',
       ...EXPECTED_CALLBACK_REGISTRATION_SEQUENCE.slice(3)
     ])

@@ -150,6 +150,7 @@ export class TabDragPointerSensor implements SensorInstance {
   autoScrollEnabled = true
 
   private activated = false
+  private ended = false
   private readonly document: Document
   private readonly initialCoordinates: PointerCoordinates
   private readonly pointerDownTime = performance.now()
@@ -185,6 +186,7 @@ export class TabDragPointerSensor implements SensorInstance {
     this.windowListeners.add(win, 'dragstart', preventDefault)
     this.windowListeners.add(win, 'visibilitychange', this.handleCancel)
     this.windowListeners.add(win, 'contextmenu', preventDefault)
+    this.windowListeners.add(win, 'blur', this.handleCancel)
     this.windowListeners.add(win, 'focus', this.handleCancel)
     this.documentListeners.add(this.document, 'keydown', this.handleKeydown)
 
@@ -211,6 +213,7 @@ export class TabDragPointerSensor implements SensorInstance {
   }
 
   private detach(): void {
+    this.ended = true
     this.pointerListeners.removeAll()
     this.windowListeners.removeAll()
     window.setTimeout(this.documentListeners.removeAll, 50)
@@ -228,7 +231,7 @@ export class TabDragPointerSensor implements SensorInstance {
   }
 
   private handleStart(): void {
-    if (this.activated) {
+    if (this.activated || this.ended) {
       return
     }
     this.activated = true
@@ -239,6 +242,9 @@ export class TabDragPointerSensor implements SensorInstance {
   }
 
   private handleMove(event: PointerEvent): void {
+    if (this.ended) {
+      return
+    }
     const coordinates = getPointerCoordinates(event)
     const { activationConstraint } = this.props.options
     if (!coordinates) {
@@ -289,6 +295,9 @@ export class TabDragPointerSensor implements SensorInstance {
   }
 
   private handleEnd(event: Event): void {
+    if (this.ended) {
+      return
+    }
     // The final pointerup can land past the last move — record it too.
     const coordinates = getPointerCoordinates(event)
     if (coordinates) {
@@ -302,6 +311,9 @@ export class TabDragPointerSensor implements SensorInstance {
   }
 
   private handleCancel(): void {
+    if (this.ended) {
+      return
+    }
     this.detach()
     if (!this.activated) {
       this.props.onAbort(this.props.active)

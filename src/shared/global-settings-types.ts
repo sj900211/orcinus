@@ -42,6 +42,9 @@ import type {
   WorktreeVisibilitySourcePreferences
 } from './repo-types'
 
+/** MiniMax account region used to select the quota endpoint. */
+export type MiniMaxEndpoint = 'overseas' | 'cn'
+
 export type WorktreeVisibilityDefaults = {
   /** Default for worktrees outside a recognized source. */
   external?: ExternalWorktreeVisibility
@@ -141,6 +144,10 @@ export type GlobalSettings = {
   terminalPaneOpacityTransitionMs: number
   terminalDividerThicknessPx: number
   terminalBackgroundOpacity?: number
+  /** xterm minimumContrastRatio floor for terminal panes (#10754). Undefined keeps the automatic,
+   *  background-luminance-gated floor (3 dark / 4.5 light); 1 disables contrast correction so TUIs
+   *  that rely on deliberately low contrast (Powerline seams, dimmed secondary text) render as sent. */
+  terminalMinimumContrastRatio?: number
   terminalColorOverrides?: TerminalColorOverrides
   terminalPaddingX?: number
   terminalPaddingY?: number
@@ -360,6 +367,8 @@ export type GlobalSettings = {
   minimaxGroupId: string
   /** Comma-separated MiniMax model names to show in the status bar usage window. */
   minimaxUsageModels: string
+  /** MiniMax account region; defaults to overseas for existing users. */
+  minimaxEndpoint: MiniMaxEndpoint
   /** Extract OAuth credentials from the local Gemini CLI for rate-limit fetching. Off by default (explicit opt-in). */
   geminiCliOAuthEnabled: boolean
   /** Per-agent CLI command overrides. A missing key means use the catalog default binary name. */
