@@ -1,3 +1,4 @@
+import type { UsageSnapshot, UsageShape, UsageData, UsageApi } from './usage-provider-types'
 import type { UsageRange } from '../../../../shared/usage-range'
 import {
   createAllUsageFiltersActions,
@@ -21,48 +22,6 @@ import type {
   OpenCodeUsageSnapshot
 } from '../../../../shared/opencode-usage-types'
 import type { AppState } from '../types'
-
-type UsageSnapshot = {
-  scanState: {
-    enabled: boolean
-    isScanning: boolean
-    lastScanCompletedAt: number | null
-    lastScanError: string | null
-  }
-  summary: object
-  daily: object[]
-  modelBreakdown: object[]
-  projectBreakdown: object[]
-  recentSessions: object[]
-}
-
-type UsageShape<Scope extends string, Range extends UsageRange, Snapshot extends UsageSnapshot> = {
-  scope: Scope
-  range: Range
-  snapshot: Snapshot
-}
-
-type UsageData<T extends UsageShape<string, UsageRange, UsageSnapshot>> = {
-  scope: T['scope']
-  range: T['range']
-  scanState: T['snapshot']['scanState'] | null
-  summary: T['snapshot']['summary'] | null
-  daily: T['snapshot']['daily']
-  modelBreakdown: T['snapshot']['modelBreakdown']
-  projectBreakdown: T['snapshot']['projectBreakdown']
-  recentSessions: T['snapshot']['recentSessions']
-}
-
-type UsageApi<T extends UsageShape<string, UsageRange, UsageSnapshot>> = {
-  getScanState: () => Promise<T['snapshot']['scanState']>
-  setEnabled: (args: { enabled: boolean }) => Promise<T['snapshot']['scanState']>
-  refresh: (args?: { force?: boolean }) => Promise<T['snapshot']['scanState']>
-  getSnapshot: (args: {
-    scope: T['scope']
-    range: T['range']
-    limit?: number
-  }) => Promise<T['snapshot']>
-}
 
 type ProviderUsageSlice<
   Prefix extends string,
@@ -137,13 +96,24 @@ function createUsageProviderSlice<
     const update = (patch: Partial<UsageData<T>>): void =>
       set(createUsagePatch(config.prefix, patch))
     const read = (): UsageData<T> => readUsageData<T>(get(), config.prefix)
+    let requestGeneration = 0
+    const updateSnapshot = (snapshot: T['snapshot']): void =>
+      update({
+        scanState: snapshot.scanState,
+        summary: snapshot.summary,
+        daily: snapshot.daily,
+        modelBreakdown: snapshot.modelBreakdown,
+        projectBreakdown: snapshot.projectBreakdown,
+        recentSessions: snapshot.recentSessions
+      })
 
     const fetchUsage = async (opts?: { forceRefresh?: boolean }): Promise<void> => {
+      const generation = ++requestGeneration
       try {
         const api = config.getApi()
         const scanState = (await api.getScanState()) as T['snapshot']['scanState'] | undefined
         // Desktop-only usage APIs resolve undefined in paired web clients.
-        if (!scanState) {
+        if (!scanState || generation !== requestGeneration) {
           return
         }
 
@@ -172,11 +142,14 @@ function createUsageProviderSlice<
           range: selection.range,
           limit: 10
         })
+        if (generation !== requestGeneration) {
+          return
+        }
         if (
           snapshot.scanState.lastScanCompletedAt !== null ||
           config.hasCachedData(snapshot.scanState)
         ) {
-          update({
+          updateSnapshot({
             ...snapshot,
             scanState:
               opts?.forceRefresh === true
@@ -188,20 +161,26 @@ function createUsageProviderSlice<
         }
 
         await api.refresh({ force: opts?.forceRefresh ?? false })
+        if (generation !== requestGeneration) {
+          return
+        }
         const refreshedSelection = read()
-        update(
-          await api.getSnapshot({
-            scope: refreshedSelection.scope,
-            range: refreshedSelection.range,
-            limit: 10
-          })
-        )
+        const refreshedSnapshot = await api.getSnapshot({
+          scope: refreshedSelection.scope,
+          range: refreshedSelection.range,
+          limit: 10
+        })
+        if (generation !== requestGeneration) {
+          return
+        }
+        updateSnapshot(refreshedSnapshot)
       } catch (error) {
         console.error(`Failed to fetch ${config.name} usage:`, error)
       }
     }
 
     const setEnabled = async (enabled: boolean): Promise<void> => {
+      ++requestGeneration
       try {
         const nextScanState = (await config.getApi().setEnabled({ enabled })) as
           | T['snapshot']['scanState']
@@ -232,19 +211,17 @@ function createUsageProviderSlice<
       }
     }
 
-    const initialData: UsageData<T> = {
-      scope: config.initialScope,
-      range: config.initialRange,
-      scanState: null,
-      summary: null,
-      daily: [],
-      modelBreakdown: [],
-      projectBreakdown: [],
-      recentSessions: []
-    }
-
     return {
-      ...createUsagePatch(config.prefix, initialData),
+      ...createUsagePatch(config.prefix, {
+        scope: config.initialScope,
+        range: config.initialRange,
+        scanState: null,
+        summary: null,
+        daily: [],
+        modelBreakdown: [],
+        projectBreakdown: [],
+        recentSessions: []
+      }),
       [`set${config.name}UsageEnabled`]: setEnabled,
       [`set${config.name}UsageScope`]: async (scope: T['scope']) => {
         update({ scope })
