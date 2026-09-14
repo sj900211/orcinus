@@ -32,7 +32,7 @@ export function formatCost(value: number | null): string {
 }
 
 export function formatDateRange(range: string): string {
-  const parsed = range.startsWith('custom:') ? parseUsageRange(range) : null
+  const parsed = parseUsageRange(range)
   if (parsed?.since && parsed.until) {
     return `${parsed.since} – ${parsed.until}`
   }
@@ -41,11 +41,10 @@ export function formatDateRange(range: string): string {
   if (range === 'all') {
     return `Through ${end}`
   }
-  const days = Number.parseInt(range)
-  if (Number.isNaN(days)) {
+  if (!parsed?.since) {
     return end
   }
-  const start = new Date(now.getTime() - days * 86_400_000)
+  const start = new Date(`${parsed.since}T00:00:00`)
   const startStr = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   return `${startStr} – ${end}`
 }
