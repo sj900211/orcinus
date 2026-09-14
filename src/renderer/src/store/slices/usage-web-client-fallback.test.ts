@@ -63,3 +63,41 @@ describe('usage slices in the web client (preload fallback -> undefined)', () =>
     expect(store.getState().openCodeUsageSummary).toBeNull()
   })
 })
+
+it('defaults all provider scopes to all and normalizes custom ranges', async () => {
+  stubWebClientFallback()
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date(2026, 8, 14, 12))
+  try {
+    const store = create<AppState>()(
+      (...args) =>
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This test accesses only the initialized usage slices.
+        ({
+          ...createClaudeUsageSlice(...args),
+          ...createCodexUsageSlice(...args),
+          ...createOpenCodeUsageSlice(...args)
+        }) as AppState
+    )
+    expect([
+      store.getState().claudeUsageScope,
+      store.getState().codexUsageScope,
+      store.getState().openCodeUsageScope
+    ]).toEqual(['all', 'all', 'all'])
+    for (const setter of [
+      store.getState().setClaudeUsageRange,
+      store.getState().setCodexUsageRange,
+      store.getState().setOpenCodeUsageRange
+    ]) {
+      await setter('custom:2026-06-13..2026-09-14')
+      await setter('custom:2026-09-14..2026-06-13')
+      await setter('custom:invalid')
+    }
+    expect([
+      store.getState().claudeUsageRange,
+      store.getState().codexUsageRange,
+      store.getState().openCodeUsageRange
+    ]).toEqual(Array(3).fill('custom:2026-06-13..2026-09-13'))
+  } finally {
+    vi.useRealTimers()
+  }
+})

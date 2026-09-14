@@ -1,3 +1,10 @@
+import {
+  buildCustomRange,
+  clampCustomRange,
+  formatUsageDay,
+  parseUsageRange,
+  type UsageRange
+} from '../../../../shared/usage-range'
 import type { StateCreator } from 'zustand'
 import type {
   ClaudeUsageRange,
@@ -30,13 +37,13 @@ type UsageSnapshot = {
   recentSessions: object[]
 }
 
-type UsageShape<Scope extends string, Range extends string, Snapshot extends UsageSnapshot> = {
+type UsageShape<Scope extends string, Range extends UsageRange, Snapshot extends UsageSnapshot> = {
   scope: Scope
   range: Range
   snapshot: Snapshot
 }
 
-type UsageData<T extends UsageShape<string, string, UsageSnapshot>> = {
+type UsageData<T extends UsageShape<string, UsageRange, UsageSnapshot>> = {
   scope: T['scope']
   range: T['range']
   scanState: T['snapshot']['scanState'] | null
@@ -47,7 +54,7 @@ type UsageData<T extends UsageShape<string, string, UsageSnapshot>> = {
   recentSessions: T['snapshot']['recentSessions']
 }
 
-type UsageApi<T extends UsageShape<string, string, UsageSnapshot>> = {
+type UsageApi<T extends UsageShape<string, UsageRange, UsageSnapshot>> = {
   getScanState: () => Promise<T['snapshot']['scanState']>
   setEnabled: (args: { enabled: boolean }) => Promise<T['snapshot']['scanState']>
   refresh: (args?: { force?: boolean }) => Promise<T['snapshot']['scanState']>
@@ -61,7 +68,7 @@ type UsageApi<T extends UsageShape<string, string, UsageSnapshot>> = {
 type ProviderUsageSlice<
   Prefix extends string,
   Name extends string,
-  T extends UsageShape<string, string, UsageSnapshot>
+  T extends UsageShape<string, UsageRange, UsageSnapshot>
 > = {
   [K in keyof UsageData<T> as `${Prefix}Usage${Capitalize<K & string>}`]: UsageData<T>[K]
 } & Record<`set${Name}UsageEnabled`, (enabled: boolean) => Promise<void>> &
@@ -74,7 +81,7 @@ type ProviderUsageSlice<
 type UsageProviderConfig<
   Prefix extends string,
   Name extends string,
-  T extends UsageShape<string, string, UsageSnapshot>
+  T extends UsageShape<string, UsageRange, UsageSnapshot>
 > = {
   prefix: Prefix
   name: Name
@@ -93,13 +100,13 @@ const usageDataFields = [
   'modelBreakdown',
   'projectBreakdown',
   'recentSessions'
-] as const satisfies readonly (keyof UsageData<UsageShape<string, string, UsageSnapshot>>)[]
+] as const satisfies readonly (keyof UsageData<UsageShape<string, UsageRange, UsageSnapshot>>)[]
 
 function usageDataKey(prefix: string, field: string): string {
   return `${prefix}Usage${field[0].toUpperCase()}${field.slice(1)}`
 }
 
-function readUsageData<T extends UsageShape<string, string, UsageSnapshot>>(
+function readUsageData<T extends UsageShape<string, UsageRange, UsageSnapshot>>(
   state: AppState,
   prefix: string
 ): UsageData<T> {
@@ -109,7 +116,7 @@ function readUsageData<T extends UsageShape<string, string, UsageSnapshot>>(
   ) as UsageData<T>
 }
 
-function createUsagePatch<T extends UsageShape<string, string, UsageSnapshot>>(
+function createUsagePatch<T extends UsageShape<string, UsageRange, UsageSnapshot>>(
   prefix: string,
   patch: Partial<UsageData<T>>
 ): Partial<AppState> {
@@ -123,7 +130,7 @@ function createUsagePatch<T extends UsageShape<string, string, UsageSnapshot>>(
 function createUsageProviderSlice<
   Prefix extends string,
   Name extends string,
-  T extends UsageShape<string, string, UsageSnapshot>
+  T extends UsageShape<string, UsageRange, UsageSnapshot>
 >(
   config: UsageProviderConfig<Prefix, Name, T>
 ): StateCreator<AppState, [], [], ProviderUsageSlice<Prefix, Name, T>> {
@@ -245,6 +252,17 @@ function createUsageProviderSlice<
         await fetchUsage()
       },
       [`set${config.name}UsageRange`]: async (range: T['range']) => {
+        const parsed = parseUsageRange(range)
+        if (!parsed) {
+          return
+        }
+        if (parsed.since && parsed.until) {
+          const clamped = clampCustomRange(parsed.since, parsed.until, formatUsageDay())
+          if (!clamped) {
+            return
+          }
+          range = buildCustomRange(clamped.start, clamped.end)
+        }
         update({ range })
         await fetchUsage()
       },
@@ -270,7 +288,7 @@ export const createClaudeUsageSlice = createUsageProviderSlice<
 >({
   prefix: 'claude',
   name: 'Claude',
-  initialScope: 'orca',
+  initialScope: 'all',
   initialRange: '30d',
   getApi: () => window.api.claudeUsage,
   hasCachedData: (state) => state.hasAnyClaudeData
@@ -279,7 +297,7 @@ export const createClaudeUsageSlice = createUsageProviderSlice<
 export const createCodexUsageSlice = createUsageProviderSlice<'codex', 'Codex', CodexUsageShape>({
   prefix: 'codex',
   name: 'Codex',
-  initialScope: 'orca',
+  initialScope: 'all',
   initialRange: '30d',
   getApi: () => window.api.codexUsage,
   hasCachedData: (state) => state.hasAnyCodexData
@@ -292,7 +310,7 @@ export const createOpenCodeUsageSlice = createUsageProviderSlice<
 >({
   prefix: 'openCode',
   name: 'OpenCode',
-  initialScope: 'orca',
+  initialScope: 'all',
   initialRange: '30d',
   getApi: () => window.api.openCodeUsage,
   hasCachedData: (state) => state.hasAnyOpenCodeData

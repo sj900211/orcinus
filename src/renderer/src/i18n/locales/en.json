@@ -4308,6 +4308,11 @@
           "e5a6b7c8d9": "Weekly credits used",
           "f6b7c8d9e0": "Billing period reset",
           "a7b8c9d0e1": "Grok account settings"
+        },
+        "UsageCustomRangeFields": {
+          "custom": "Custom range",
+          "start": "Start date",
+          "end": "End date"
         }
       },
       "sparse": {
