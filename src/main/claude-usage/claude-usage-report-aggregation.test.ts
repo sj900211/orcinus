@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ClaudeUsageDailyAggregate, ClaudeUsagePersistedState } from './types'
-import { buildSummary } from './claude-usage-report-aggregation'
+import { buildSummary, buildBreakdown } from './claude-usage-report-aggregation'
 
 function dailyRow(day: string, model: string): ClaudeUsageDailyAggregate {
   return {
@@ -37,6 +37,27 @@ function stateWithDaily(dailyAggregates: ClaudeUsageDailyAggregate[]): ClaudeUsa
 }
 
 describe('buildSummary Claude Sonnet 5 pricing over time', () => {
+  it.each(['cacheReadTokens', 'cacheWriteTokens'] as const)(
+    'ranks models and projects by totals including %s',
+    (cacheField) => {
+      const state = stateWithDaily(
+        Array.from({ length: 6 }, (_, index) => ({
+          ...dailyRow('2026-06-01', `model${index}`),
+          projectKey: `project${index}`,
+          projectLabel: `project${index}`,
+          inputTokens: 6 - index,
+          outputTokens: 0,
+          [cacheField]: index === 5 ? 1_000_000 : 0
+        }))
+      )
+      expect(buildSummary(state, 'all', 'all')).toMatchObject({
+        topModel: 'model5',
+        topProject: 'project5'
+      })
+      expect(buildBreakdown(state, 'all', 'all', 'model')[0].key).toBe('model5')
+      expect(buildBreakdown(state, 'all', 'all', 'project')[0].key).toBe('project5')
+    }
+  )
   it('includes cache reads and writes in the selected range total', () => {
     const state = stateWithDaily([
       { ...dailyRow('2026-06-01', 'claude-sonnet-5'), cacheReadTokens: 300, cacheWriteTokens: 400 },

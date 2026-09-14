@@ -38,11 +38,10 @@ export function buildSummary(
     turns += row.turnCount
     zeroCacheReadTurns += row.zeroCacheReadTurnCount
     const modelKey = row.model ?? 'Unknown model'
-    byModel.set(modelKey, (byModel.get(modelKey) ?? 0) + row.inputTokens + row.outputTokens)
-    byProject.set(
-      row.projectLabel,
-      (byProject.get(row.projectLabel) ?? 0) + row.inputTokens + row.outputTokens
-    )
+    const totalTokens =
+      row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheWriteTokens
+    byModel.set(modelKey, (byModel.get(modelKey) ?? 0) + totalTokens)
+    byProject.set(row.projectLabel, (byProject.get(row.projectLabel) ?? 0) + totalTokens)
     const cost = estimateCostUsd(
       row.model,
       row.inputTokens,
@@ -183,8 +182,10 @@ export function buildBreakdown(
   }
 
   return [...rows.values()].sort((left, right) => {
-    const leftTotal = left.inputTokens + left.outputTokens
-    const rightTotal = right.inputTokens + right.outputTokens
+    const leftTotal =
+      left.inputTokens + left.outputTokens + left.cacheReadTokens + left.cacheWriteTokens
+    const rightTotal =
+      right.inputTokens + right.outputTokens + right.cacheReadTokens + right.cacheWriteTokens
     return rightTotal - leftTotal
   })
 }
