@@ -90,9 +90,10 @@ describe('usage overview model', () => {
       events: 2,
       inputTokens: 1_000,
       cachedInputTokens: 250,
+      cacheWriteTokens: 1_000,
       outputTokens: 500,
       reasoningOutputTokens: 100,
-      totalTokens: 1_600,
+      totalTokens: 2_850,
       estimatedCostUsd: 0.03,
       topModel: 'anthropic/claude-sonnet-4-5',
       topProject: 'orca-third',
@@ -137,9 +138,10 @@ describe('usage overview model', () => {
         day: '2026-05-15',
         inputTokens: 1_000,
         cachedInputTokens: 250,
+        cacheWriteTokens: 1_000,
         outputTokens: 500,
         reasoningOutputTokens: 100,
-        totalTokens: 1_600
+        totalTokens: 2_850
       }
     ]
 
@@ -161,16 +163,16 @@ describe('usage overview model', () => {
       }
     })
 
-    expect(overview.totalTokens).toBe(10_800)
-    expect(overview.newInputTokens).toBe(2_950)
-    expect(overview.cacheTokens).toBe(5_550)
+    expect(overview.totalTokens).toBe(12_050)
+    expect(overview.newInputTokens).toBe(3_200)
+    expect(overview.cacheTokens).toBe(6_550)
     expect(overview.outputTokens).toBe(2_200)
     expect(overview.reasoningTokens).toBe(400)
     expect(overview.sessions).toBe(4)
     expect(overview.activityCount).toBe(9)
     expect(overview.activeDays).toBe(3)
     expect(overview.estimatedCostUsd).toBeCloseTo(0.09)
-    expect(overview.cacheShare).toBeCloseTo(5_550 / 8_500)
+    expect(overview.cacheShare).toBeCloseTo(6_550 / 9_750)
     expect(overview.bestDay).toMatchObject({
       day: '2026-05-14',
       totalTokens: 4_500,
@@ -185,9 +187,9 @@ describe('usage overview model', () => {
       totalTokens: 3_200
     })
     expect(overview.providers.find((provider) => provider.id === 'opencode')).toMatchObject({
-      newInputTokens: 750,
-      cacheTokens: 250,
-      totalTokens: 1_600
+      newInputTokens: 1_000,
+      cacheTokens: 1_250,
+      totalTokens: 2_850
     })
   })
 

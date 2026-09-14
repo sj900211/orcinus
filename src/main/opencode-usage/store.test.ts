@@ -36,7 +36,7 @@ function createEmptyScanResult() {
 
 function getDefaultState(): OpenCodeUsagePersistedState {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     worktreeFingerprint: null,
     processedDatabases: [],
     sessions: [],
@@ -278,6 +278,7 @@ describe('OpenCodeUsageStore', () => {
         day: '2026-04-09',
         inputTokens: 2500,
         cachedInputTokens: 600,
+        cacheWriteTokens: 0,
         outputTokens: 750,
         reasoningOutputTokens: 100,
         totalTokens: 3350
@@ -307,6 +308,7 @@ describe('OpenCodeUsageStore', () => {
         events: 1,
         inputTokens: 1000,
         cachedInputTokens: 400,
+        cacheWriteTokens: 0,
         outputTokens: 250,
         reasoningOutputTokens: 100,
         totalTokens: 1350

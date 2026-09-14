@@ -25,6 +25,7 @@ export function buildOpenCodeUsageSummary(
 ): OpenCodeUsageSummary {
   let inputTokens = 0
   let cachedInputTokens = 0
+  let cacheWriteTokens = 0
   let outputTokens = 0
   let reasoningOutputTokens = 0
   let totalTokens = 0
@@ -36,6 +37,7 @@ export function buildOpenCodeUsageSummary(
   for (const row of filteredDaily) {
     inputTokens += row.inputTokens
     cachedInputTokens += row.cachedInputTokens
+    cacheWriteTokens += row.cacheWriteTokens ?? 0
     outputTokens += row.outputTokens
     reasoningOutputTokens += row.reasoningOutputTokens
     totalTokens += row.totalTokens
@@ -58,6 +60,7 @@ export function buildOpenCodeUsageSummary(
     events,
     inputTokens,
     cachedInputTokens,
+    cacheWriteTokens,
     outputTokens,
     reasoningOutputTokens,
     totalTokens,
@@ -77,12 +80,14 @@ export function buildOpenCodeUsageDailyPoints(
       day: row.day,
       inputTokens: 0,
       cachedInputTokens: 0,
+      cacheWriteTokens: 0,
       outputTokens: 0,
       reasoningOutputTokens: 0,
       totalTokens: 0
     }
     existing.inputTokens += row.inputTokens
     existing.cachedInputTokens += row.cachedInputTokens
+    existing.cacheWriteTokens = (existing.cacheWriteTokens ?? 0) + (row.cacheWriteTokens ?? 0)
     existing.outputTokens += row.outputTokens
     existing.reasoningOutputTokens += row.reasoningOutputTokens
     existing.totalTokens += row.totalTokens
@@ -108,6 +113,7 @@ export function buildOpenCodeUsageBreakdownRows(
       events: 0,
       inputTokens: 0,
       cachedInputTokens: 0,
+      cacheWriteTokens: 0,
       outputTokens: 0,
       reasoningOutputTokens: 0,
       totalTokens: 0,
@@ -116,6 +122,7 @@ export function buildOpenCodeUsageBreakdownRows(
     existing.events += daily.eventCount
     existing.inputTokens += daily.inputTokens
     existing.cachedInputTokens += daily.cachedInputTokens
+    existing.cacheWriteTokens = (existing.cacheWriteTokens ?? 0) + (daily.cacheWriteTokens ?? 0)
     existing.outputTokens += daily.outputTokens
     existing.reasoningOutputTokens += daily.reasoningOutputTokens
     existing.totalTokens += daily.totalTokens
@@ -165,6 +172,7 @@ export function buildOpenCodeUsageRecentSessions(
     events: session.eventCount,
     inputTokens: session.totalInputTokens,
     cachedInputTokens: session.totalCachedInputTokens,
+    cacheWriteTokens: session.cacheWriteTokens ?? 0,
     outputTokens: session.totalOutputTokens,
     reasoningOutputTokens: session.totalReasoningOutputTokens,
     totalTokens: session.totalTokens

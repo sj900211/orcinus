@@ -20,6 +20,7 @@ export type OpenCodeUsageSummary = {
   events: number
   inputTokens: number
   cachedInputTokens: number
+  cacheWriteTokens?: number
   outputTokens: number
   reasoningOutputTokens: number
   totalTokens: number
@@ -33,6 +34,7 @@ export type OpenCodeUsageDailyPoint = {
   day: string
   inputTokens: number
   cachedInputTokens: number
+  cacheWriteTokens?: number
   outputTokens: number
   reasoningOutputTokens: number
   totalTokens: number
@@ -45,6 +47,7 @@ export type OpenCodeUsageBreakdownRow = {
   events: number
   inputTokens: number
   cachedInputTokens: number
+  cacheWriteTokens?: number
   outputTokens: number
   reasoningOutputTokens: number
   totalTokens: number
@@ -60,6 +63,7 @@ export type OpenCodeUsageSessionRow = {
   events: number
   inputTokens: number
   cachedInputTokens: number
+  cacheWriteTokens?: number
   outputTokens: number
   reasoningOutputTokens: number
   totalTokens: number

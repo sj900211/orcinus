@@ -15,7 +15,7 @@ function getOpenCodeNewInputTokens(summary: OpenCodeUsageSummary | null): number
   if (!summary) {
     return 0
   }
-  return Math.max(summary.inputTokens - summary.cachedInputTokens, 0)
+  return summary.inputTokens
 }
 
 export function createClaudeProvider(input: UsageOverviewInput['claude']): UsageProviderOverview {
@@ -100,7 +100,7 @@ export function createOpenCodeProvider(
     totalTokens: summary?.totalTokens ?? 0,
     newInputTokens: getOpenCodeNewInputTokens(summary),
     outputTokens: summary?.outputTokens ?? 0,
-    cacheTokens: summary?.cachedInputTokens ?? 0,
+    cacheTokens: (summary?.cachedInputTokens ?? 0) + (summary?.cacheWriteTokens ?? 0),
     reasoningTokens: summary?.reasoningOutputTokens ?? 0,
     estimatedCostUsd: summary?.estimatedCostUsd ?? null,
     topModel: summary?.topModel ?? null,

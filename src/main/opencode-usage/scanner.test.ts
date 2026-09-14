@@ -127,6 +127,7 @@ describe('parseOpenCodeUsageRow', () => {
       estimatedCostUsd: 0.0123,
       inputTokens: 1000,
       cachedInputTokens: 400,
+      cacheWriteTokens: 25,
       outputTokens: 250,
       reasoningOutputTokens: 100,
       totalTokens: 1350
@@ -234,7 +235,7 @@ describe('parseOpenCodeUsageDatabase', () => {
       totalCachedInputTokens: 250,
       totalOutputTokens: 500,
       totalReasoningOutputTokens: 100,
-      totalTokens: 1600,
+      totalTokens: 1850,
       estimatedCostUsd: 0.06
     })
     expect(parsed.dailyAggregates).toEqual([
@@ -244,7 +245,7 @@ describe('parseOpenCodeUsageDatabase', () => {
         cachedInputTokens: 250,
         outputTokens: 500,
         reasoningOutputTokens: 100,
-        totalTokens: 1600,
+        totalTokens: 1850,
         estimatedCostUsd: 0.06
       })
     ])
@@ -297,7 +298,7 @@ describe('parseOpenCodeUsageDatabase', () => {
     expect(parsed.sessions[0]).toMatchObject({
       primaryModel: 'openai/gpt-5.5',
       primaryProjectLabel: 'Repo',
-      totalTokens: 1050,
+      totalTokens: 1150,
       estimatedCostUsd: 0.03
     })
   })
@@ -374,7 +375,7 @@ describe('parseOpenCodeUsageDatabase', () => {
 
     const parsed = await parseOpenCodeUsageDatabase(path, worktrees())
 
-    expect(parsed.sessions[0]?.totalTokens).toBe(120)
+    expect(parsed.sessions[0]?.totalTokens).toBe(130)
     expect(parsed.sessions[0]?.eventCount).toBe(1)
   })
 })

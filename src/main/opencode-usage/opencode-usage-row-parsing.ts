@@ -80,11 +80,12 @@ export function parseOpenCodeUsageRow(row: OpenCodeUsageRow): OpenCodeUsageParse
   const inputTokens = ensureNumber(tokens.input)
   const outputTokens = ensureNumber(tokens.output)
   const reasoningOutputTokens = ensureNumber(tokens.reasoning)
-  const cachedInputTokens = Math.min(ensureNumber(cache?.read), inputTokens)
+  const cachedInputTokens = ensureNumber(cache?.read)
+  const cacheWriteTokens = ensureNumber(cache?.write)
   const totalTokens =
     ensureNumber(tokens.total) > 0
       ? ensureNumber(tokens.total)
-      : inputTokens + outputTokens + reasoningOutputTokens
+      : inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens + cacheWriteTokens
 
   if (inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens + totalTokens <= 0) {
     return null
@@ -103,6 +104,7 @@ export function parseOpenCodeUsageRow(row: OpenCodeUsageRow): OpenCodeUsageParse
     estimatedCostUsd: ensureNumber(data.cost) > 0 ? ensureNumber(data.cost) : null,
     inputTokens,
     cachedInputTokens,
+    cacheWriteTokens,
     outputTokens,
     reasoningOutputTokens,
     totalTokens
