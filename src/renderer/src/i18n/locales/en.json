@@ -11841,7 +11841,17 @@
             "title": "SFTP Hosts",
             "description": "Manage SFTP file-transfer hosts.",
             "addTitle": "Add SFTP Host",
-            "addDescription": "Add a new SFTP host."
+            "addDescription": "Add a new SFTP host.",
+            "sftp": "sftp",
+            "file": "file",
+            "transfer": "transfer",
+            "remote": "remote",
+            "host": "host",
+            "server": "server",
+            "add": "add",
+            "download": "download",
+            "upload": "upload",
+            "password": "password"
           }
         },
         "RemoteHostForm": {
