@@ -1,3 +1,5 @@
+import { useUsageNumberFormat } from './use-usage-number-format'
+import { formatUsageNumber } from './usage-number-format'
 import type {
   ClaudeUsageDailyPoint,
   ClaudeUsageSummary
@@ -18,13 +20,7 @@ export type CodexShareData = {
 }
 
 export function formatTokens(value: number): string {
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(1)}k`
-  }
-  return value.toLocaleString()
+  return formatUsageNumber(value, 'compact')
 }
 
 export function formatCost(value: number | null): string {
@@ -180,6 +176,7 @@ export function BackgroundGlows(): React.JSX.Element {
 export function CardFooter(props: {
   summary: { inputTokens: number; outputTokens: number }
 }): React.JSX.Element {
+  const { formatNumber: formatTokens } = useUsageNumberFormat()
   return (
     <div
       style={{

@@ -4001,6 +4001,11 @@
         }
       },
       "stats": {
+        "UsageNumberFormatToggle": {
+          "label": "Number format",
+          "compact": "Compact (K/M/B)",
+          "full": "Full numbers"
+        },
         "ClaudeUsageDailyChart": {
           "2a6360c7cb": "Cache write",
           "61c58f8976": "Cache read",

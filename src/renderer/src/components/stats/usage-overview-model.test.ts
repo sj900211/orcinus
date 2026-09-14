@@ -279,7 +279,7 @@ describe('usage overview model', () => {
 
   it('formats token and cost values for compact UI labels', () => {
     expect(formatUsageTokens(999)).toBe('999')
-    expect(formatUsageTokens(1_200)).toBe('1.2k')
+    expect(formatUsageTokens(1_200)).toBe('1.2K')
     expect(formatUsageTokens(2_500_000)).toBe('2.5M')
     expect(formatUsageCost(null)).toBe('n/a')
     expect(formatUsageCost(0.0042)).toBe('$0.0042')

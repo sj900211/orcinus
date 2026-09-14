@@ -1,5 +1,9 @@
 import type { UISlice, UISliceGet, UISliceSet } from './ui-slice-contract'
 import {
+  DEFAULT_USAGE_NUMBER_FORMAT,
+  normalizeUsageNumberFormat
+} from '../../../../../shared/usage-number-format'
+import {
   DEFAULT_AGENTS_GROUP_BY,
   DEFAULT_AGENTS_READ_FILTER
 } from '../../../../../shared/agents-view-thread-filters'
@@ -294,6 +298,12 @@ export function createUiPreferenceActions(set: UISliceSet, get: UISliceGet): Par
         usagePercentageDisplay: normalized,
         usagePercentageDisplayChangeNoticeDismissed: true
       })
+    },
+    usageNumberFormat: DEFAULT_USAGE_NUMBER_FORMAT,
+    setUsageNumberFormat: (mode) => {
+      const normalized = normalizeUsageNumberFormat(mode)
+      window.api.ui.set({ usageNumberFormat: normalized }).catch(console.error)
+      set({ usageNumberFormat: normalized })
     },
     statusBarUsageMode: DEFAULT_STATUS_BAR_USAGE_MODE,
     setStatusBarUsageMode: (mode) => {

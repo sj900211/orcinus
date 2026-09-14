@@ -1,7 +1,8 @@
+import { useUsageNumberFormat } from './use-usage-number-format'
 import { AlertCircle } from 'lucide-react'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
-import { formatUsageCost, formatUsageTokens } from './usage-overview-model'
+import { formatUsageCost } from './usage-overview-model'
 import type {
   UsageOverviewDailyPoint,
   UsageOverviewModel,
@@ -36,6 +37,7 @@ function formatDayLabel(day: string): string {
 }
 
 export function TokenMixBar({ overview }: { overview: UsageOverviewModel }): React.JSX.Element {
+  const { formatNumber: formatUsageTokens } = useUsageNumberFormat()
   const segments = [
     {
       key: 'new-input',
@@ -116,7 +118,7 @@ export function TokenMixBar({ overview }: { overview: UsageOverviewModel }): Rea
         {segments.map((segment) => (
           <div key={segment.key} className="flex min-w-0 items-center gap-2">
             <span className={`size-2 shrink-0 rounded-full ${segment.className}`} />
-            <span className="min-w-0 truncate">
+            <span className="min-w-0 break-words">
               {segment.label}: {formatUsageTokens(segment.value)}
             </span>
           </div>
@@ -205,6 +207,7 @@ export function ProviderUsageRow({
   totalTokens: number
   onEnable: () => void
 }): React.JSX.Element {
+  const { formatNumber: formatUsageTokens } = useUsageNumberFormat()
   const share = totalTokens > 0 ? provider.totalTokens / totalTokens : 0
   const status = provider.enabled
     ? provider.isScanning
@@ -235,7 +238,7 @@ export function ProviderUsageRow({
       </div>
 
       <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-        <span>
+        <span className="break-words">
           {formatUsageTokens(provider.totalTokens)}{' '}
           {translate('auto.components.stats.usage.overview.sections.6762f6a682', 'tokens')}
         </span>

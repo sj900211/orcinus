@@ -15,6 +15,7 @@ import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { PairedUiState, PairingLocalUiField } from '../../../../shared/pairing-local-ui-fields'
 import type { PersistedUIState } from '../../../../shared/persisted-ui-state-types'
 import { normalizeStatusBarUsageMode } from '../../../../shared/status-bar-usage-mode'
+import { normalizeUsageNumberFormat } from '../../../../shared/usage-number-format'
 import { normalizeTerminalCustomThemes } from '../../../../shared/terminal-custom-themes'
 import {
   normalizeTuiAgentArgsRecord,
@@ -51,6 +52,9 @@ export function mergeWebUIState(
     ),
     usagePercentageDisplay: normalizeUsagePercentageDisplay(
       safeUpdates.usagePercentageDisplay ?? base.usagePercentageDisplay
+    ),
+    usageNumberFormat: normalizeUsageNumberFormat(
+      safeUpdates.usageNumberFormat ?? base.usageNumberFormat
     ),
     statusBarUsageMode: normalizeStatusBarUsageMode(
       safeUpdates.statusBarUsageMode ?? base.statusBarUsageMode

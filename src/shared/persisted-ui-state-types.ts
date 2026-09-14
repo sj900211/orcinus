@@ -4,6 +4,7 @@ import type { FeatureTipId } from './feature-tips'
 import type { ContextualTourId } from './contextual-tours'
 import type { FeatureInteractionState } from './feature-interactions'
 import type { UsagePercentageDisplay } from './usage-percentage-display'
+import type { UsageNumberFormat } from './usage-number-format'
 import type { StatusBarUsageMode } from './status-bar-usage-mode'
 import type { PersistedTrustedOrcaHooks } from './orca-yaml-hook-types'
 import type { CustomPet } from './pet-types'
@@ -124,6 +125,7 @@ export type PersistedUIState = {
   usagePercentageDisplay?: UsagePercentageDisplay
   /** Client-side footer presentation; verbose preserves the pre-roster all-window default. */
   statusBarUsageMode?: StatusBarUsageMode
+  usageNumberFormat?: UsageNumberFormat
   dismissedUpdateVersion: string | null
   /** App version that last dismissed the unexpected-sign-out card; null = never. Re-arms on each new version while still signed out. */
   dismissedUnexpectedSignoutVersion?: string | null

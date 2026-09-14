@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type { ClaudeUsageDailyPoint } from '../../../../shared/claude-usage-types'
 import type { CodexUsageDailyPoint } from '../../../../shared/codex-usage-types'
 import { ClaudeUsageDailyChart } from './ClaudeUsageDailyChart'
@@ -19,7 +20,7 @@ describe('usage daily charts', () => {
       totalTokens: index + 1
     }))
 
-    expect(() => CodexUsageDailyChart({ daily })).not.toThrow()
+    expect(() => renderToStaticMarkup(<CodexUsageDailyChart daily={daily} />)).not.toThrow()
   })
 
   it('renders Claude daily charts for very large histories', () => {
@@ -31,6 +32,6 @@ describe('usage daily charts', () => {
       cacheWriteTokens: 0
     }))
 
-    expect(() => ClaudeUsageDailyChart({ daily })).not.toThrow()
+    expect(() => renderToStaticMarkup(<ClaudeUsageDailyChart daily={daily} />)).not.toThrow()
   })
 })

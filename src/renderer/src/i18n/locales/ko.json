@@ -3551,6 +3551,11 @@
         }
       },
       "stats": {
+        "UsageNumberFormatToggle": {
+          "label": "숫자 표기",
+          "compact": "축약(K/M/B)",
+          "full": "전체 수치"
+        },
         "ClaudeUsageDailyChart": {
           "2a6360c7cb": "캐시 쓰기",
           "61c58f8976": "캐시 읽기",

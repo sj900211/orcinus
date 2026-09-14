@@ -19,6 +19,7 @@ import type { WorkspacePortScanResult } from '../../../../../shared/workspace-po
 import type { CustomPet } from '../../../../../shared/pet-types'
 import type { ReleaseChannel } from '../../../../../shared/release-channel'
 import type { ChangelogData, UpdateStatus } from '../../../../../shared/update-status-types'
+import type { UsageNumberFormat } from '../../../../../shared/usage-number-format'
 import type { StatusBarUsageMode } from '../../../../../shared/status-bar-usage-mode'
 import type { PersistedUIWriteBaseline } from '../persisted-ui-write-baseline'
 import type { UISliceCore } from './ui-slice-contract-core'
@@ -106,6 +107,8 @@ export type UISlicePreferences = {
   setUsagePercentageDisplay: (display: UsagePercentageDisplay) => void
   statusBarUsageMode: StatusBarUsageMode
   setStatusBarUsageMode: (mode: StatusBarUsageMode) => void
+  usageNumberFormat: UsageNumberFormat
+  setUsageNumberFormat: (mode: UsageNumberFormat) => void
 }
 
 export type UISliceSurfaces = {

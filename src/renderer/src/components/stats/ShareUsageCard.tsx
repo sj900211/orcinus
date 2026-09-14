@@ -1,3 +1,4 @@
+import { useUsageNumberFormat } from './use-usage-number-format'
 import { forwardRef } from 'react'
 import type { ClaudeUsageSummary } from '../../../../shared/claude-usage-types'
 import type { CodexUsageSummary } from '../../../../shared/codex-usage-types'
@@ -6,7 +7,6 @@ import {
   CardFooter,
   formatCost,
   formatDateRange,
-  formatTokens,
   getDailySegments,
   getDailyTotal,
   getLegendItems,
@@ -144,6 +144,7 @@ function StatsGrid(props: {
   totalTokens: number
   topModel: string
 }): React.JSX.Element {
+  const { mode, formatNumber: formatTokens } = useUsageNumberFormat()
   const cards = [
     {
       value: formatCost(props.summary.estimatedCostUsd ?? null),
@@ -155,6 +156,7 @@ function StatsGrid(props: {
     },
     {
       value: formatTokens(props.totalTokens),
+      wrap: mode === 'full',
       label: translate('auto.components.stats.ShareUsageCard.2d9eb39264', 'Total tokens'),
       bg: 'rgba(255, 255, 255, 0.04)',
       border: '1px solid rgba(255, 255, 255, 0.06)',
@@ -184,7 +186,8 @@ function StatsGrid(props: {
             border: card.border,
             borderRadius: 10,
             padding: '10px 12px',
-            height: 52,
+            height: card.wrap ? undefined : 52,
+            minHeight: 52,
             overflow: 'hidden',
             boxSizing: 'border-box'
           }}
@@ -195,7 +198,8 @@ function StatsGrid(props: {
               fontWeight: 600,
               color: card.valueColor,
               lineHeight: 1.2,
-              whiteSpace: 'nowrap',
+              whiteSpace: card.wrap ? 'normal' : 'nowrap',
+              overflowWrap: card.wrap ? 'anywhere' : undefined,
               overflow: 'hidden',
               textOverflow: 'ellipsis'
             }}
@@ -244,6 +248,7 @@ function ChartHeader(props: {
 function DailyChart(props: {
   slicedDaily: Parameters<typeof getDailySegments>[0][]
 }): React.JSX.Element {
+  const { formatNumber: formatTokens } = useUsageNumberFormat()
   const CHART_H = 120
   const maxSegSum = Math.max(
     1,
@@ -267,7 +272,13 @@ function DailyChart(props: {
             {props.slicedDaily.map((entry) => (
               <td
                 key={entry.day}
-                style={{ textAlign: 'center', padding: '0 3px', fontSize: 8, color: '#444' }}
+                style={{
+                  textAlign: 'center',
+                  padding: '0 3px',
+                  fontSize: 8,
+                  color: '#444',
+                  overflowWrap: 'anywhere'
+                }}
               >
                 {formatTokens(getDailyTotal(entry))}
               </td>

@@ -1,16 +1,7 @@
+import { useUsageNumberFormat } from './use-usage-number-format'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import type { ClaudeUsageDailyPoint } from '../../../../shared/claude-usage-types'
 import { translate } from '@/i18n/i18n'
-
-function formatTokens(value: number): string {
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(1)}k`
-  }
-  return value.toLocaleString()
-}
 
 function getDailyTotal(entry: ClaudeUsageDailyPoint): number {
   return entry.inputTokens + entry.outputTokens + entry.cacheReadTokens + entry.cacheWriteTokens
@@ -31,6 +22,7 @@ type ClaudeUsageDailyChartProps = {
 }
 
 export function ClaudeUsageDailyChart({ daily }: ClaudeUsageDailyChartProps): React.JSX.Element {
+  const { formatNumber: formatTokens } = useUsageNumberFormat()
   const maxDailyTotal = getMaxDailyTotal(daily)
 
   return (
@@ -83,7 +75,7 @@ export function ClaudeUsageDailyChart({ daily }: ClaudeUsageDailyChartProps): Re
           ]
           return (
             <div key={entry.day} className="flex h-full min-w-0 flex-col justify-end gap-2">
-              <span className="text-center text-[11px] text-muted-foreground">
+              <span className="text-center text-[11px] break-all text-muted-foreground">
                 {formatTokens(total)}
               </span>
               <div className="flex min-h-0 flex-1 items-end justify-center">

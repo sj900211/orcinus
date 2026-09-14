@@ -11,6 +11,7 @@ import {
 } from '../../../shared/workspace-statuses'
 import { normalizeUsagePercentageDisplay } from '../../../shared/usage-percentage-display'
 import { normalizeStatusBarUsageMode } from '../../../shared/status-bar-usage-mode'
+import { normalizeUsageNumberFormat } from '../../../shared/usage-number-format'
 import { clampMarkdownTocPanelWidth } from '../../../shared/markdown-toc-panel-width'
 import { clampCombinedDiffFileTreeWidth } from '../../../shared/combined-diff-file-tree-width'
 import {
@@ -138,6 +139,9 @@ export function updatePersistedUI(
         : operations.state.ui?.syncTaskStatusFromWorkspaceBoard === true,
     usagePercentageDisplay: normalizeUsagePercentageDisplay(
       sanitizedUpdates.usagePercentageDisplay ?? operations.state.ui?.usagePercentageDisplay
+    ),
+    usageNumberFormat: normalizeUsageNumberFormat(
+      sanitizedUpdates.usageNumberFormat ?? operations.state.ui?.usageNumberFormat
     ),
     statusBarUsageMode: normalizeStatusBarUsageMode(
       sanitizedUpdates.statusBarUsageMode ?? operations.state.ui?.statusBarUsageMode

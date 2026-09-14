@@ -1,5 +1,6 @@
+import { useUsageNumberFormat } from './use-usage-number-format'
 import { translate } from '@/i18n/i18n'
-import { formatCost, formatTokens } from './usage-formatters'
+import { formatCost } from './usage-formatters'
 
 export type UsageBreakdownRow = {
   key: string
@@ -26,6 +27,7 @@ export function UsageBreakdownSection({
   rows,
   eventsOrTurns
 }: UsageBreakdownSectionProps): React.JSX.Element {
+  const { formatNumber: formatTokens } = useUsageNumberFormat()
   const eventsOrTurnsLabel =
     eventsOrTurns === 'turns'
       ? translate('auto.components.stats.UsageBreakdownSection.32176e1d44', 'turns')

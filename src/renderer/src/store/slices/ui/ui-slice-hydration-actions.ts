@@ -33,8 +33,7 @@ import { PET_SIZE_DEFAULT, PET_SIZE_MAX, PET_SIZE_MIN } from '../../../../../sha
 import { clampMarkdownTocPanelWidth } from '../../../../../shared/markdown-toc-panel-width'
 import { clampCombinedDiffFileTreeWidth } from '../../../../../shared/combined-diff-file-tree-width'
 import { parsePersistedAutomationHostFilter } from '../../../../../shared/automation-host-filter'
-import { normalizeUsagePercentageDisplay } from '../../../../../shared/usage-percentage-display'
-import { normalizeStatusBarUsageMode } from '../../../../../shared/status-bar-usage-mode'
+import { normalizeUsageDisplayPreferences } from '../../../../../shared/usage-display-preferences'
 import { normalizeBrowserPageZoomLevel } from '../../../../../shared/browser-page-zoom'
 import { normalizeKagiSessionLink } from '../../../../../shared/browser-url'
 import { isReleaseChannel } from '../../../../../shared/release-channel'
@@ -202,8 +201,7 @@ export function createUiHydrationActions(set: UISliceSet, _get: UISliceGet): Par
           syncTaskStatusFromWorkspaceBoard: ui.syncTaskStatusFromWorkspaceBoard === true,
           statusBarItems: statusBarItemsWithGrok,
           statusBarVisible: ui.statusBarVisible ?? true,
-          usagePercentageDisplay: normalizeUsagePercentageDisplay(ui.usagePercentageDisplay),
-          statusBarUsageMode: normalizeStatusBarUsageMode(ui.statusBarUsageMode),
+          ...normalizeUsageDisplayPreferences(ui),
           // Why: default true so existing users see the pet on first enabling the flag; only an explicit Hide persists false.
           petVisible: ui.petVisible ?? ui.sidekickVisible ?? true,
           petSize: clampPetSize(ui.petSize ?? ui.sidekickSize ?? PET_SIZE_DEFAULT, {
