@@ -66,6 +66,8 @@ type FakeSftp = EventEmitter & {
   lstat: ReturnType<typeof vi.fn>
   mkdir: ReturnType<typeof vi.fn>
   createWriteStream: ReturnType<typeof vi.fn>
+  unlink: ReturnType<typeof vi.fn>
+  rename: ReturnType<typeof vi.fn>
   end: ReturnType<typeof vi.fn>
 }
 
@@ -118,6 +120,8 @@ function createFakeSftp(options?: { pendingRealpath?: boolean; pendingLstat?: bo
       on: ws.on.bind(ws)
     })
   })
+  sftp.unlink = vi.fn((_path: string, cb: (err: Error | null) => void) => cb(null))
+  sftp.rename = vi.fn((_src: string, _dst: string, cb: (err: Error | null) => void) => cb(null))
   sftp.end = vi.fn(() => {
     sftp.endCalls += 1
     if (sftp.emitCloseOnEnd) {
@@ -205,7 +209,11 @@ describe('SshConnection SFTP namespace resolution', () => {
       sftpNamespace: namespace
     })
 
-    expect(sftp.writtenPaths).toEqual([`${SFTP_HOME}/${RELAY_DIR}/relay.js`])
+    // uploadFile streams to a per-upload temp path and renames into place on success.
+    expect(sftp.writtenPaths).toHaveLength(1)
+    expect(sftp.writtenPaths[0].startsWith(`${SFTP_HOME}/${RELAY_DIR}/relay.js.orcinus-part-`)).toBe(
+      true
+    )
     expect(sftp.endCalls).toBe(1)
   })
 

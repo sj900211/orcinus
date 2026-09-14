@@ -1,4 +1,14 @@
-import { lstat, mkdir, mkdtemp, open, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, posix } from 'node:path'
 import { Client, Server as Ssh2Server, utils, type Connection, type SFTPWrapper } from 'ssh2'
@@ -140,6 +150,19 @@ function installSftpHandlers(sftp: SFTPWrapper, backingRoot: string, operations:
         () => sftp.status(requestId, SFTP_STATUS_OK),
         (error: unknown) => sendFsError(sftp, requestId, error)
       )
+  })
+  sftp.on('RENAME', (requestId, oldPath, newPath) => {
+    operations.push(`RENAME:${oldPath}->${newPath}`)
+    const localOldPath = backingPath(backingRoot, oldPath)
+    const localNewPath = backingPath(backingRoot, newPath)
+    if (!localOldPath || !localNewPath) {
+      sftp.status(requestId, SFTP_STATUS_NO_SUCH_FILE)
+      return
+    }
+    void rename(localOldPath, localNewPath).then(
+      () => sftp.status(requestId, SFTP_STATUS_OK),
+      (error: unknown) => sendFsError(sftp, requestId, error)
+    )
   })
   sftp.on('CLOSE', (requestId, handle) => {
     operations.push('CLOSE')
@@ -328,7 +351,16 @@ it('uploads through a verified split namespace over a real ssh2 SFTP session', a
       expect(fixture.operations).toContain(`LSTAT:${mapping.shellProbePath}`)
       expect(fixture.operations).toContain(`LSTAT:${SFTP_RELAY_DIR}/${MARKER_PATH}`)
       expect(fixture.operations).toContain(`MKDIR:${SFTP_RELAY_DIR}/nested`)
-      expect(fixture.operations).toContain(`OPEN:${SFTP_RELAY_DIR}/nested/payload.bin`)
+      // uploadFile streams to a per-upload temp path and renames into place on success.
+      const tempPathPrefix = `OPEN:${SFTP_RELAY_DIR}/nested/payload.bin.orcinus-part-`
+      expect(fixture.operations.some((op) => op.startsWith(tempPathPrefix))).toBe(true)
+      expect(
+        fixture.operations.some(
+          (op) =>
+            op.startsWith(`RENAME:${SFTP_RELAY_DIR}/nested/payload.bin.orcinus-part-`) &&
+            op.endsWith(`->${SFTP_RELAY_DIR}/nested/payload.bin`)
+        )
+      ).toBe(true)
       expect(fixture.operations).toEqual(expect.arrayContaining(['WRITE', 'CLOSE']))
     })
   } finally {

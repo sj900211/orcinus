@@ -33,6 +33,7 @@ import {
 } from '../../../shared/execution-host'
 import { mapWithConcurrency } from '../../../shared/map-with-concurrency'
 import type { OnboardingState } from '../../../shared/onboarding-state-types'
+import { ensureLocalRuntimeCapabilities } from '../runtime/local-runtime-capabilities'
 
 async function listRuntimeSessionHostIdsForStartup(): Promise<ExecutionHostId[]> {
   try {
@@ -64,6 +65,12 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
 
   // Fetch initial data + hydrate GitHub cache from disk
   useEffect(() => {
+    // Why first and ungated: the local capability set is a static fact the main process can answer
+    // immediately, but its only other writer is the structured-session-tabs sync, which waits for
+    // workspaceSessionReady + terminalStartupRestorationReady + the experimental flag. Every
+    // `resolveAgentLaunchRoute` reader treats "not asked yet" as "unsupported", so leaving the
+    // answer behind those gates degrades a pre-hydration create to a bare terminal (#19154).
+    void ensureLocalRuntimeCapabilities()
     let cancelled = false
     // Project windows (opened via projectWindow:open) hydrate read-only onto one project;
     // the main window stays the only SSH-reconnect/terminal-restore/persistence owner.

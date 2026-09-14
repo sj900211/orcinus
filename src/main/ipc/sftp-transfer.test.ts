@@ -49,7 +49,10 @@ vi.mock('node:fs/promises', () => ({
 
 vi.mock('../ssh/sftp-upload', () => ({
   uploadFile: uploadFileMock,
-  mkdirSftp: mkdirSftpMock,
+  mkdirSftp: mkdirSftpMock
+}))
+
+vi.mock('../ssh/sftp-directory-removal', () => ({
   unlinkSftp: unlinkSftpMock,
   removeDirectorySftp: removeDirectorySftpMock
 }))

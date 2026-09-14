@@ -30,7 +30,9 @@ afterEach(async () => {
 
 function sftpDoubleReturning(stream: PassThrough): SFTPWrapper {
   return Object.assign(new EventEmitter(), {
-    createWriteStream: () => stream
+    createWriteStream: () => stream,
+    unlink: (_path: string, cb: (err: Error | null) => void) => cb(null),
+    rename: (_src: string, _dst: string, cb: (err: Error | null) => void) => cb(null)
   }) as unknown as SFTPWrapper
 }
 

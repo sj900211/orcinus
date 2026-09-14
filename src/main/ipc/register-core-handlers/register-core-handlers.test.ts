@@ -30,6 +30,7 @@ const {
   registerRuntimeEnvironmentHandlersMock,
   registerEphemeralVmHandlersMock,
   registerAiVaultHandlersMock,
+  registerAiVaultSearchHandlersMock,
   registerOrcaProfileHandlersMock,
   registerCodexAccountHandlersMock,
   registerAgentHookHandlersMock,
@@ -98,6 +99,7 @@ const {
   registerRuntimeEnvironmentHandlersMock: vi.fn(),
   registerEphemeralVmHandlersMock: vi.fn(),
   registerAiVaultHandlersMock: vi.fn(),
+  registerAiVaultSearchHandlersMock: vi.fn(),
   registerOrcaProfileHandlersMock: vi.fn(),
   registerCodexAccountHandlersMock: vi.fn(),
   registerAgentHookHandlersMock: vi.fn(),
@@ -319,6 +321,10 @@ vi.mock('../ephemeral-vm', () => ({
 
 vi.mock('../ai-vault', () => ({
   registerAiVaultHandlers: registerAiVaultHandlersMock
+}))
+
+vi.mock('../ai-vault-search', () => ({
+  registerAiVaultSearchHandlers: registerAiVaultSearchHandlersMock
 }))
 
 vi.mock('../orca-profiles', () => ({
