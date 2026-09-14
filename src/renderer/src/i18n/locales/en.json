@@ -4001,6 +4001,11 @@
         }
       },
       "stats": {
+        "UsageOverviewFilters": {
+          "mixed": "Mixed",
+          "allLocal": "All local usage",
+          "options": "Usage overview filters"
+        },
         "UsageNumberFormatToggle": {
           "label": "Number format",
           "compact": "Compact (K/M/B)",

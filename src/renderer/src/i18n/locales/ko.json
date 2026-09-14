@@ -3551,6 +3551,11 @@
         }
       },
       "stats": {
+        "UsageOverviewFilters": {
+          "mixed": "혼합",
+          "allLocal": "모든 로컬 사용량",
+          "options": "사용량 개요 필터"
+        },
         "UsageNumberFormatToggle": {
           "label": "숫자 표기",
           "compact": "축약(K/M/B)",

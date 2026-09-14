@@ -1,10 +1,9 @@
+import type { UsageRange } from '../../../../shared/usage-range'
 import {
-  buildCustomRange,
-  clampCustomRange,
-  formatUsageDay,
-  parseUsageRange,
-  type UsageRange
-} from '../../../../shared/usage-range'
+  createAllUsageFiltersActions,
+  normalizeUsageFilterRange,
+  type AllUsageFiltersSlice
+} from './usage-filter-actions'
 import type { StateCreator } from 'zustand'
 import type {
   ClaudeUsageRange,
@@ -252,18 +251,11 @@ function createUsageProviderSlice<
         await fetchUsage()
       },
       [`set${config.name}UsageRange`]: async (range: T['range']) => {
-        const parsed = parseUsageRange(range)
-        if (!parsed) {
+        const normalized = normalizeUsageFilterRange(range)
+        if (!normalized) {
           return
         }
-        if (parsed.since && parsed.until) {
-          const clamped = clampCustomRange(parsed.since, parsed.until, formatUsageDay())
-          if (!clamped) {
-            return
-          }
-          range = buildCustomRange(clamped.start, clamped.end)
-        }
-        update({ range })
+        update({ range: normalized })
         await fetchUsage()
       },
       [`fetch${config.name}Usage`]: fetchUsage,
@@ -277,15 +269,12 @@ type ClaudeUsageShape = UsageShape<ClaudeUsageScope, ClaudeUsageRange, ClaudeUsa
 type CodexUsageShape = UsageShape<CodexUsageScope, CodexUsageRange, CodexUsageSnapshot>
 type OpenCodeUsageShape = UsageShape<OpenCodeUsageScope, OpenCodeUsageRange, OpenCodeUsageSnapshot>
 
-export type ClaudeUsageSlice = ProviderUsageSlice<'claude', 'Claude', ClaudeUsageShape>
+export type ClaudeUsageSlice = ProviderUsageSlice<'claude', 'Claude', ClaudeUsageShape> &
+  AllUsageFiltersSlice
 export type CodexUsageSlice = ProviderUsageSlice<'codex', 'Codex', CodexUsageShape>
 export type OpenCodeUsageSlice = ProviderUsageSlice<'openCode', 'OpenCode', OpenCodeUsageShape>
 
-export const createClaudeUsageSlice = createUsageProviderSlice<
-  'claude',
-  'Claude',
-  ClaudeUsageShape
->({
+const createClaudeProviderSlice = createUsageProviderSlice<'claude', 'Claude', ClaudeUsageShape>({
   prefix: 'claude',
   name: 'Claude',
   initialScope: 'all',
@@ -314,4 +303,11 @@ export const createOpenCodeUsageSlice = createUsageProviderSlice<
   initialRange: '30d',
   getApi: () => window.api.openCodeUsage,
   hasCachedData: (state) => state.hasAnyOpenCodeData
+})
+
+export const createClaudeUsageSlice: StateCreator<AppState, [], [], ClaudeUsageSlice> = (
+  ...args
+) => ({
+  ...createClaudeProviderSlice(...args),
+  ...createAllUsageFiltersActions(...args)
 })

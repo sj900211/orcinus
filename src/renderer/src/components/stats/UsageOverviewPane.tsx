@@ -5,12 +5,12 @@ import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { StatCard } from './StatCard'
-import { getRecentUsageDays } from './usage-overview-daily-series'
-import { buildUsageOverview, formatUsageCost, formatUsageTokens } from './usage-overview-model'
+import { buildUsageOverview, formatUsageCost } from './usage-overview-model'
+import { useUsageNumberFormat } from './use-usage-number-format'
+import { getUsageOverviewDays, useUsageOverviewFilters } from './usage-overview-filters'
+import { UsageOverviewFilters, UsageOverviewFilterSummary } from './UsageOverviewFilters'
 import { DailyIntensityGrid, ProviderUsageRow, TokenMixBar } from './usage-overview-sections'
 import { translate } from '@/i18n/i18n'
-
-const RECENT_DAY_COUNT = 42
 
 function formatPercent(value: number | null): string {
   if (value === null) {
@@ -27,6 +27,8 @@ function formatUpdatedAt(timestamp: number | null): string {
 }
 
 export function UsageOverviewPane(): React.JSX.Element {
+  const { formatNumber: formatUsageTokens } = useUsageNumberFormat()
+  const filters = useUsageOverviewFilters()
   const claudeScanState = useAppStore((state) => state.claudeUsageScanState)
   const claudeSummary = useAppStore((state) => state.claudeUsageSummary)
   const claudeDaily = useAppStore((state) => state.claudeUsageDaily)
@@ -85,8 +87,8 @@ export function UsageOverviewPane(): React.JSX.Element {
     ]
   )
   const recentDays = useMemo(
-    () => getRecentUsageDays(overview.daily, RECENT_DAY_COUNT),
-    [overview.daily]
+    () => getUsageOverviewDays(overview.daily, filters.range),
+    [overview.daily, filters.range]
   )
   const isScanning = overview.providers.some((provider) => provider.isScanning)
 
@@ -116,26 +118,30 @@ export function UsageOverviewPane(): React.JSX.Element {
                 : ''}
             </p>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={handleRefresh}
-                disabled={!overview.hasAnyEnabledProvider || isScanning}
-                aria-label={translate(
-                  'auto.components.stats.UsageOverviewPane.e06d1baf5c',
-                  'Refresh usage overview'
-                )}
-              >
-                <RefreshCw className={`size-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>
-              {translate('auto.components.stats.UsageOverviewPane.ca6bc5fded', 'Refresh')}
-            </TooltipContent>
-          </Tooltip>
+          <div className="flex items-center gap-1">
+            <UsageOverviewFilters {...filters} />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={handleRefresh}
+                  disabled={!overview.hasAnyEnabledProvider || isScanning}
+                  aria-label={translate(
+                    'auto.components.stats.UsageOverviewPane.e06d1baf5c',
+                    'Refresh usage overview'
+                  )}
+                >
+                  <RefreshCw className={`size-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6}>
+                {translate('auto.components.stats.UsageOverviewPane.ca6bc5fded', 'Refresh')}
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
+        <UsageOverviewFilterSummary scope={filters.scope} range={filters.range} />
 
         {!overview.hasAnyEnabledProvider ? (
           <div className="mt-4 rounded-lg border border-dashed border-border/60 bg-card/30 px-4 py-5">
