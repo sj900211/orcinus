@@ -1,3 +1,6 @@
+import { useUsageNumberFormat } from './use-usage-number-format'
+import { getClaudeUsageTotal } from '../../../../shared/claude-usage-total'
+import { formatCost, formatDateRange, getShareUsageRangeLabel } from './share-card-utils'
 import { useCallback, useRef, useState } from 'react'
 import { toPng } from 'html-to-image'
 import { Check, Copy, Share2 } from 'lucide-react'
@@ -18,6 +21,7 @@ function XIcon(): React.JSX.Element {
 }
 
 export function ShareUsageButton(props: ShareUsageButtonProps): React.JSX.Element {
+  const { formatNumber } = useUsageNumberFormat()
   const cardRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
   const [capturing, setCapturing] = useState(false)
@@ -77,44 +81,25 @@ export function ShareUsageButton(props: ShareUsageButtonProps): React.JSX.Elemen
   const handleShareToX = useCallback(async () => {
     const { provider, summary, range } = props
     const providerName = provider === 'claude' ? 'Claude' : 'Codex'
-    const rangeLabel =
-      range === '7d'
-        ? 'last 7 days'
-        : range === '30d'
-          ? 'last 30 days'
-          : range === '90d'
-            ? 'last 90 days'
-            : 'all-time'
-
+    const rangeLabel = range.startsWith('custom:')
+      ? `${getShareUsageRangeLabel(range)} (${formatDateRange(range)})`
+      : getShareUsageRangeLabel(range)
     const totalTokens =
       provider === 'claude'
-        ? summary.inputTokens + summary.outputTokens
-        : (summary as unknown as { totalTokens: number }).totalTokens
-
-    const cost = summary.estimatedCostUsd
-    const costStr =
-      cost === null ? 'n/a' : cost < 0.01 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(2)}`
-
-    const fmtTokens = (v: number): string => {
-      if (v >= 1_000_000) {
-        return `${(v / 1_000_000).toFixed(1)}M`
-      }
-      if (v >= 1_000) {
-        return `${(v / 1_000).toFixed(1)}k`
-      }
-      return v.toLocaleString()
-    }
+        ? (summary.totalTokens ?? getClaudeUsageTotal(summary))
+        : summary.totalTokens
+    const costStr = formatCost(summary.estimatedCostUsd)
 
     const lines = [
       `My ${rangeLabel} ${providerName} usage via @orca_build`,
       '',
-      `${fmtTokens(totalTokens)} tokens · ${costStr} est. cost`,
+      `${formatNumber(totalTokens)} tokens · ${costStr} est. cost`,
       '',
       'github.com/stablyai/orca'
     ]
     const url = `https://x.com/intent/post?text=${encodeURIComponent(lines.join('\n'))}`
     await window.api.shell.openUrl(url)
-  }, [props])
+  }, [props, formatNumber])
 
   return (
     <Dialog>

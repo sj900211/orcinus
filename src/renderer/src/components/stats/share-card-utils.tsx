@@ -1,5 +1,6 @@
 import { useUsageNumberFormat } from './use-usage-number-format'
 import { formatUsageNumber } from './usage-number-format'
+import { parseUsageRange } from '../../../../shared/usage-range'
 import type {
   ClaudeUsageDailyPoint,
   ClaudeUsageSummary
@@ -31,6 +32,10 @@ export function formatCost(value: number | null): string {
 }
 
 export function formatDateRange(range: string): string {
+  const parsed = range.startsWith('custom:') ? parseUsageRange(range) : null
+  if (parsed?.since && parsed.until) {
+    return `${parsed.since} – ${parsed.until}`
+  }
   const now = new Date()
   const end = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
   if (range === 'all') {
@@ -46,10 +51,19 @@ export function formatDateRange(range: string): string {
 }
 
 export const RANGE_LABELS: Record<string, string> = {
+  get custom() {
+    return translate('auto.components.stats.UsageCustomRangeFields.custom', 'Custom range')
+  },
   '7d': 'Last 7 days',
   '30d': 'Last 30 days',
   '90d': 'Last 90 days',
   all: 'All time'
+}
+
+export function getShareUsageRangeLabel(range: string): string {
+  return range.startsWith('custom:') && parseUsageRange(range)
+    ? RANGE_LABELS.custom
+    : (RANGE_LABELS[range] ?? range)
 }
 
 export function getDailyTotal(entry: ClaudeUsageDailyPoint | CodexUsageDailyPoint): number {

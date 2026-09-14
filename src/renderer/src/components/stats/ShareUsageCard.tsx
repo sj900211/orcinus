@@ -1,4 +1,5 @@
 import { useUsageNumberFormat } from './use-usage-number-format'
+import { getClaudeUsageTotal } from '../../../../shared/claude-usage-total'
 import { forwardRef } from 'react'
 import type { ClaudeUsageSummary } from '../../../../shared/claude-usage-types'
 import type { CodexUsageSummary } from '../../../../shared/codex-usage-types'
@@ -11,7 +12,7 @@ import {
   getDailyTotal,
   getLegendItems,
   OrcaLogo,
-  RANGE_LABELS
+  getShareUsageRangeLabel
 } from './share-card-utils'
 import type { ClaudeShareData, CodexShareData } from './share-card-utils'
 import { translate } from '@/i18n/i18n'
@@ -29,8 +30,8 @@ export const ShareUsageCard = forwardRef<HTMLDivElement, ShareUsageCardProps>(
 
     const totalTokens =
       provider === 'claude'
-        ? summary.inputTokens + summary.outputTokens
-        : (summary as CodexUsageSummary).totalTokens
+        ? (summary.totalTokens ?? getClaudeUsageTotal(summary))
+        : summary.totalTokens
 
     const topModel =
       provider === 'claude'
@@ -132,7 +133,7 @@ function CardHeader(props: { providerLabel: string; range: string }): React.JSX.
             letterSpacing: 0.3
           }}
         >
-          {RANGE_LABELS[props.range] ?? props.range}
+          {getShareUsageRangeLabel(props.range)}
         </span>
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { useUsageNumberFormat } from './use-usage-number-format'
+import { UsageNumberFormatToggle } from './UsageNumberFormatToggle'
 import type { UsageRangePreset } from '../../../../shared/usage-range'
 import { UsageRangeFilter, usageRangeLabel } from './UsageCustomRangeFields'
 import { useEffect } from 'react'
@@ -8,7 +10,7 @@ import { ClaudeUsageLoadingState } from './ClaudeUsageLoadingState'
 import { OpenCodeUsageDetails } from './OpenCodeUsageDetails'
 import { StatCard } from './StatCard'
 import { UsageFilterRadioGroup, UsageTrackingPaneShell } from './UsageTrackingPaneShell'
-import { formatCost, formatTokens, formatUpdatedAt } from './usage-formatters'
+import { formatCost, formatUpdatedAt } from './usage-formatters'
 import { translate } from '@/i18n/i18n'
 
 const SCOPE_OPTIONS: { value: OpenCodeUsageScope; label: string }[] = [
@@ -44,6 +46,7 @@ const RANGE_LABELS: Record<UsageRangePreset, string> = {
 }
 
 export function OpenCodeUsagePane(): React.JSX.Element {
+  const { formatNumber: formatTokens } = useUsageNumberFormat()
   const scanState = useAppStore((state) => state.openCodeUsageScanState)
   const summary = useAppStore((state) => state.openCodeUsageSummary)
   const daily = useAppStore((state) => state.openCodeUsageDaily)
@@ -134,6 +137,7 @@ export function OpenCodeUsagePane(): React.JSX.Element {
       )}
       refreshLabel={translate('auto.components.stats.OpenCodeUsagePane.603cd138dc', 'Refresh')}
       filterSections={[
+        <UsageNumberFormatToggle key="number-format" />,
         <UsageFilterRadioGroup
           key="scope"
           label={translate('auto.components.stats.OpenCodeUsagePane.40d283c837', 'Scope')}
@@ -164,6 +168,11 @@ export function OpenCodeUsagePane(): React.JSX.Element {
     >
       <>
         <div className="grid gap-3 md:grid-cols-3">
+          <StatCard
+            label={translate('auto.components.stats.UsageOverviewPane.3887b94ce5', 'Total tokens')}
+            value={formatTokens(summary?.totalTokens ?? 0)}
+            icon={<Sparkles className="size-4" />}
+          />
           <StatCard
             label={translate('auto.components.stats.OpenCodeUsagePane.d637a892ed', 'Input tokens')}
             value={formatTokens(summary?.inputTokens ?? 0)}
