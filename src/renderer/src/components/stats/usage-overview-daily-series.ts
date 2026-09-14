@@ -1,8 +1,9 @@
 import type { ClaudeUsageDailyPoint } from '../../../../shared/claude-usage-types'
+import { getClaudeUsageTotal } from '../../../../shared/claude-usage-total'
 import type { UsageOverviewDailyPoint, UsageOverviewInput } from './usage-overview-types'
 
 export function getClaudeDailyTotal(entry: ClaudeUsageDailyPoint): number {
-  return entry.inputTokens + entry.outputTokens + entry.cacheReadTokens + entry.cacheWriteTokens
+  return getClaudeUsageTotal(entry)
 }
 
 function getIntensity(totalTokens: number, maxTokens: number): 0 | 1 | 2 | 3 | 4 {

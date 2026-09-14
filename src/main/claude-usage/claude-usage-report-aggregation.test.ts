@@ -37,6 +37,14 @@ function stateWithDaily(dailyAggregates: ClaudeUsageDailyAggregate[]): ClaudeUsa
 }
 
 describe('buildSummary Claude Sonnet 5 pricing over time', () => {
+  it('includes cache reads and writes in the selected range total', () => {
+    const state = stateWithDaily([
+      { ...dailyRow('2026-06-01', 'claude-sonnet-5'), cacheReadTokens: 300, cacheWriteTokens: 400 },
+      dailyRow('2026-05-01', 'claude-sonnet-5')
+    ])
+    expect(buildSummary(state, 'all', 'custom:2026-06-01..2026-06-01').totalTokens).toBe(2_000_700)
+    expect(buildSummary(stateWithDaily([]), 'all', 'all').totalTokens).toBe(0)
+  })
   // Why: the "All" range re-prices historical days on every render, so a day inside the
   // announced 2026-08-31 introductory window has to price the same as a later day —
   // the scheduled $3/$15 increase was cancelled and never took effect.

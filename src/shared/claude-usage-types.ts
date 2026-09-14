@@ -14,6 +14,8 @@ export type ClaudeUsageScanState = {
 }
 
 export type ClaudeUsageSummary = {
+  /** Optional for responses from older execution hosts. */
+  totalTokens?: number
   scope: ClaudeUsageScope
   range: ClaudeUsageRange
   sessions: number

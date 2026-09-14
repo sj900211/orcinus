@@ -8,6 +8,7 @@ import { ClaudeUsageDailyChart } from './ClaudeUsageDailyChart'
 import { UsageBreakdownSection } from './UsageBreakdownSection'
 import { UsageRecentSessionsTable } from './UsageRecentSessionsTable'
 import { translate } from '@/i18n/i18n'
+import { getClaudeUsageTotal } from '../../../../shared/claude-usage-total'
 
 type ClaudeUsageDetailsProps = {
   daily: ClaudeUsageDailyPoint[]
@@ -36,7 +37,7 @@ export function ClaudeUsageDetails({
           rows={modelBreakdown.map((row) => ({
             key: row.key,
             label: row.label,
-            tokens: row.inputTokens + row.outputTokens,
+            tokens: getClaudeUsageTotal(row),
             sessions: row.sessions,
             eventsOrTurns: row.turns
           }))}
@@ -49,7 +50,7 @@ export function ClaudeUsageDetails({
           rows={projectBreakdown.map((row) => ({
             key: row.key,
             label: row.label,
-            tokens: row.inputTokens + row.outputTokens,
+            tokens: getClaudeUsageTotal(row),
             sessions: row.sessions,
             eventsOrTurns: row.turns
           }))}

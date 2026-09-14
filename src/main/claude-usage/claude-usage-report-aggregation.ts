@@ -70,6 +70,7 @@ export function buildSummary(
     outputTokens,
     cacheReadTokens,
     cacheWriteTokens,
+    totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
     cacheReuseRate:
       inputTokens + cacheReadTokens > 0 ? cacheReadTokens / (inputTokens + cacheReadTokens) : null,
     estimatedCostUsd: hasAnyBillableCost ? estimatedCostUsd : null,
