@@ -1,15 +1,15 @@
 import type { ClaudeUsageRange, ClaudeUsageScope } from '../../shared/claude-usage-types'
 import type { ClaudeUsagePersistedState } from './types'
-import { getLocalUsageDay, getUsageRangeCutoff } from '../usage/usage-calendar-range'
+import { getLocalUsageDay, getUsageRangeBounds } from '../usage/usage-calendar-range'
 
 export function getFilteredDaily(
   state: ClaudeUsagePersistedState,
   scope: ClaudeUsageScope,
   range: ClaudeUsageRange
 ) {
-  const cutoff = getUsageRangeCutoff(range)
+  const { since: cutoff, until } = getUsageRangeBounds(range)
   return state.dailyAggregates.filter((entry) => {
-    if (cutoff && entry.day < cutoff) {
+    if ((cutoff && entry.day < cutoff) || (until && entry.day > until)) {
       return false
     }
     if (scope === 'orca' && entry.worktreeId === null) {
@@ -24,7 +24,7 @@ export function getFilteredSessions(
   scope: ClaudeUsageScope,
   range: ClaudeUsageRange
 ) {
-  const cutoff = getUsageRangeCutoff(range)
+  const { since: cutoff, until } = getUsageRangeBounds(range)
   return state.sessions.filter((session) => {
     // Why: daily aggregates use local calendar days, so session filtering has
     // to use the same conversion or the sessions table/counts can disagree
@@ -33,7 +33,7 @@ export function getFilteredSessions(
     if (!day) {
       return false
     }
-    if (cutoff && day < cutoff) {
+    if ((cutoff && day < cutoff) || (until && day > until)) {
       return false
     }
     if (scope === 'orca') {

@@ -1,24 +1,33 @@
-type UsageCalendarRange = '7d' | '30d' | '90d' | 'all'
+import {
+  clampCustomRange,
+  formatUsageDay,
+  parseUsageRange,
+  type UsageRange
+} from '../../shared/usage-range'
 
-function formatLocalDay(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+export function getUsageRangeBounds(range: UsageRange): {
+  since: string | null
+  until: string | null
+} {
+  const parsed = parseUsageRange(range)
+  if (!parsed) {
+    throw new Error('Invalid usage range: expected a preset or ordered custom dates')
+  }
+  if (parsed.since && parsed.until) {
+    const clamped = clampCustomRange(parsed.since, parsed.until, formatUsageDay())
+    if (!clamped) {
+      throw new Error('Invalid custom usage range')
+    }
+    return { since: clamped.start, until: clamped.end }
+  }
+  return parsed
 }
 
-export function getUsageRangeCutoff(range: UsageCalendarRange): string | null {
-  if (range === 'all') {
-    return null
-  }
-  const days = range === '7d' ? 7 : range === '30d' ? 30 : 90
-  const cutoff = new Date()
-  cutoff.setHours(0, 0, 0, 0)
-  cutoff.setDate(cutoff.getDate() - (days - 1))
-  return formatLocalDay(cutoff)
+export function getUsageRangeCutoff(range: UsageRange): string | null {
+  return getUsageRangeBounds(range).since
 }
 
 export function getLocalUsageDay(timestamp: string): string | null {
   const parsed = new Date(timestamp)
-  return Number.isNaN(parsed.getTime()) ? null : formatLocalDay(parsed)
+  return Number.isNaN(parsed.getTime()) ? null : formatUsageDay(parsed)
 }

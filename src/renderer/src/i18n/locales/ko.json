@@ -3856,6 +3856,11 @@
           "e5a6b7c8d9": "사용한 주간 크레딧",
           "f6b7c8d9e0": "결제 기간 재설정",
           "a7b8c9d0e1": "Grok 계정 설정"
+        },
+        "UsageCustomRangeFields": {
+          "custom": "직접 입력",
+          "start": "시작일",
+          "end": "종료일"
         }
       },
       "sparse": {

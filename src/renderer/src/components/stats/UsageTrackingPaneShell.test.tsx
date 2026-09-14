@@ -33,7 +33,7 @@ function renderEnabled({
         <UsageFilterRadioGroup
           key="scope"
           label="Scope"
-          value="orca"
+          value="all"
           options={[
             { value: 'orca', label: 'Orca worktrees only' },
             { value: 'all', label: 'All local usage' }
@@ -42,7 +42,7 @@ function renderEnabled({
         />,
         <div key="range">Range filter</div>
       ]}
-      selectionSummary="Orca worktrees only • Last 7 days"
+      selectionSummary="All local usage • Last 7 days"
       emptyMessage="No local Codex usage found yet for this scope."
       onEnabledChange={onEnabledChange}
       onRefresh={onRefresh}
@@ -80,16 +80,16 @@ describe('UsageTrackingPaneShell', () => {
 
     expect(screen.getByText('Updated now')).toBeInTheDocument()
     expect(screen.getByText('Share usage')).toBeInTheDocument()
-    expect(screen.getByText('Orca worktrees only • Last 7 days')).toBeInTheDocument()
+    expect(screen.getByText('All local usage • Last 7 days')).toBeInTheDocument()
     expect(screen.getByText('No local Codex usage found yet for this scope.')).toBeInTheDocument()
     expect(screen.queryByText('Ready content')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Codex usage options' }))
     expect(screen.getByRole('separator')).toBeInTheDocument()
-    await user.click(screen.getByRole('menuitemradio', { name: 'All local usage' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Orca worktrees only' }))
     await user.click(screen.getByRole('button', { name: 'Refresh Codex usage' }))
     await user.click(screen.getByRole('switch', { name: 'Enable Codex usage analytics' }))
-    expect(onScopeChange).toHaveBeenCalledWith('all')
+    expect(onScopeChange).toHaveBeenCalledWith('orca')
     expect(onRefresh).toHaveBeenCalledOnce()
     expect(onEnabledChange).toHaveBeenCalledWith(false)
   })

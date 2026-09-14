@@ -1,3 +1,5 @@
+import type { UsageRangePreset } from '../../../../shared/usage-range'
+import { UsageRangeFilter, usageRangeLabel } from './UsageCustomRangeFields'
 import { useEffect } from 'react'
 import {
   Activity,
@@ -8,7 +10,7 @@ import {
   Sparkles,
   Waypoints
 } from 'lucide-react'
-import type { ClaudeUsageRange, ClaudeUsageScope } from '../../../../shared/claude-usage-types'
+import type { ClaudeUsageScope } from '../../../../shared/claude-usage-types'
 import { useAppStore } from '../../store'
 import { ClaudeUsageDetails } from './ClaudeUsageDetails'
 import { ClaudeUsageLoadingState } from './ClaudeUsageLoadingState'
@@ -18,7 +20,6 @@ import { UsageFilterRadioGroup, UsageTrackingPaneShell } from './UsageTrackingPa
 import { formatCost, formatTokens, formatUpdatedAt } from './usage-formatters'
 import { translate } from '@/i18n/i18n'
 
-const RANGE_OPTIONS: ClaudeUsageRange[] = ['7d', '30d', '90d', 'all']
 const SCOPE_OPTIONS: { value: ClaudeUsageScope; label: string }[] = [
   {
     value: 'orca',
@@ -33,7 +34,7 @@ const SCOPE_OPTIONS: { value: ClaudeUsageScope; label: string }[] = [
     }
   }
 ]
-const RANGE_LABELS: Record<ClaudeUsageRange, string> = {
+const RANGE_LABELS: Record<UsageRangePreset, string> = {
   get '7d'() {
     return translate('auto.components.stats.ClaudeUsagePane.rangeLast7Days', 'Last 7 days')
   },
@@ -140,17 +141,18 @@ export function ClaudeUsagePane(): React.JSX.Element {
           options={SCOPE_OPTIONS}
           onValueChange={(value) => void setClaudeUsageScope(value)}
         />,
-        <UsageFilterRadioGroup
+        <UsageRangeFilter
           key="range"
           label={translate('auto.components.stats.ClaudeUsagePane.505be9aac4', 'Range')}
-          value={range}
-          options={RANGE_OPTIONS.map((value) => ({ value, label: RANGE_LABELS[value] }))}
+          range={range}
+          presetLabels={RANGE_LABELS}
           onValueChange={(value) => void setClaudeUsageRange(value)}
         />
       ]}
       selectionSummary={
         <>
-          {SCOPE_OPTIONS.find((option) => option.value === scope)?.label} • {RANGE_LABELS[range]}
+          {SCOPE_OPTIONS.find((option) => option.value === scope)?.label} •{' '}
+          {usageRangeLabel(range, RANGE_LABELS)}
         </>
       }
       emptyMessage={translate(
