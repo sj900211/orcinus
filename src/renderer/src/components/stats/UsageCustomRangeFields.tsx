@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   buildCustomRange,
   clampCustomRange,
@@ -38,6 +38,11 @@ export function UsageCustomRangeFields({
   const parsed = range.startsWith('custom:') ? parseUsageRange(range) : null
   const [start, setStart] = useState(parsed?.since ?? '')
   const [end, setEnd] = useState(parsed?.until ?? '')
+  useEffect(() => {
+    const selection = range.startsWith('custom:') ? parseUsageRange(range) : null
+    setStart(selection?.since ?? '')
+    setEnd(selection?.until ?? '')
+  }, [range])
   const today = formatUsageDay()
   const maximumEnd = clampCustomRange(start, today, today)?.end ?? today
   const change = (nextStart: string, nextEnd: string): void => {
@@ -104,6 +109,9 @@ export function UsageRangeFilter({
   onValueChange: (range: UsageRange) => void | Promise<void>
 }): React.JSX.Element {
   const [custom, setCustom] = useState(range.startsWith('custom:'))
+  useEffect(() => {
+    setCustom(range.startsWith('custom:'))
+  }, [range])
   return (
     <>
       <DropdownMenuLabel>{label}</DropdownMenuLabel>

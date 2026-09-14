@@ -54,6 +54,29 @@ it('projects mixed agent filters, applies presets/custom dates to all providers 
   })
   expect(store.getState().openCodeUsageRange).toBe('custom:2026-01-01..2026-01-03')
   expect(screen.getByLabelText('Recent token activity heatmap').children).toHaveLength(3)
+
+  const endDate = screen.getByLabelText('End date')
+  endDate.focus()
+  await act(async () => {
+    fireEvent.change(endDate, { target: { value: '2026-01-02' } })
+  })
+  expect(screen.getByLabelText('End date')).toBe(endDate)
+  expect(endDate).toHaveFocus()
+  expect(store.getState().claudeUsageRange).toBe('custom:2026-01-01..2026-01-02')
+  await act(async () => {
+    await store.getState().setAllUsageFilters({ range: 'custom:2026-02-01..2026-02-03' })
+  })
+  expect(screen.getByLabelText('Start date')).toHaveValue('2026-02-01')
+  expect(endDate).toHaveValue('2026-02-03')
+  expect(endDate).toHaveFocus()
+  await act(async () => {
+    await store.getState().setAllUsageFilters({ range: '7d' })
+  })
+  expect(screen.queryByLabelText('End date')).not.toBeInTheDocument()
+  expect(screen.getByRole('menuitemradio', { name: 'Last 7 days' })).toHaveAttribute(
+    'aria-checked',
+    'true'
+  )
   await user.click(screen.getByRole('menuitemradio', { name: 'Full numbers' }))
   expect(screen.getByText('Total tokens').parentElement).toHaveTextContent('5,300')
 })

@@ -144,7 +144,6 @@ export function UsageOverviewFilters({ scope, range, setFilters }: FilterProps):
           <MixedRangeFilter onValueChange={(range) => setFilters({ range })} />
         ) : (
           <UsageRangeFilter
-            key={range}
             label={translate('auto.components.stats.ClaudeUsagePane.505be9aac4', 'Range')}
             range={range}
             presetLabels={rangeLabels()}
