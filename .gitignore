@@ -152,8 +152,20 @@ test-results/
 playwright-report/
 
 # Agent skill installations (machine-local, populated by agent tooling)
-/.claude/skills/
-/.agents/skills/
+# except Orcinus's own orchestration role skills, which are project-authored and git-shared
+# so every new worktree gets them automatically (원정 8 던전 D, 코드 0 경로).
+/.claude/skills/*
+!/.claude/skills/conductor/
+!/.claude/skills/musician/
+!/.claude/skills/critic/
+!/.claude/skills/audience-report/
+!/.claude/skills/audience-manage/
+/.agents/skills/*
+!/.agents/skills/conductor/
+!/.agents/skills/musician/
+!/.agents/skills/critic/
+!/.agents/skills/audience-report/
+!/.agents/skills/audience-manage/
 /skills-lock.json
 
 # Generated Clawpatch state includes machine-local paths and review records.
