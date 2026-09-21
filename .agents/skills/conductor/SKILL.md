@@ -19,6 +19,8 @@ description: Orcinus 오케스트레이션에서 그룹(여러 워크트리·Run
 
 작업 성격에 맞는 에이전트·모델을 선택해 `worker-start`로 musician 세션을 연다(정적 라우팅 — 세션 도중 토큰이 소진돼도 다른 벤더·계정으로 자동 전환하지 않는다. 2026-09-16 제작자 판정으로 드롭된 범위이며, 소진되면 사람이 직접 개입한다).
 
+**`worker-start --terminal <handle>`로 사전 생성한 터미널을 재사용할 때는 `--worktree <selector>`를 항상 같이 명시한다.** 명시하지 않으면 그 터미널이 실제로 속한 워크트리와 무관하게 conductor 자신의 바인딩 워크트리를 기준으로 불일치 검사를 해 `terminal_worktree_mismatch`로 실패한다(2026-09-20 실전 검증 발견 — task-observer 관찰 0014). `--agent`로 Orca가 터미널을 직접 만들게 하는 경로는 이 문제가 없다.
+
 ## 워커 터미널이 최초 실행 프롬프트에 막히면
 
 `worker-start --terminal`로 붙인 워커가 `turn_start_unobserved`/`agent_prompt_blocked` 등으로 멈췄을 때, 원인이 에이전트 CLI의 1회성 최초 실행 프롬프트(예: Claude Code의 폴더 신뢰 확인, Codex의 업데이트 확인)인지 `terminal read --screen`으로 먼저 확인한다. 맞다면 방향키·숫자 입력을 스크립트로 흘려보내 자동으로 통과시키려 하지 않는다 — 이런 프롬프트는 사람이 직접 보고 판단하라고 있는 동의 게이트이고, Orca 자신도(`agent_prompt_blocked`) Claude Code 자신도(안전 분류기) 이런 자동화를 차단한다. 대신 즉시 사람에게 어느 터미널 탭에서 무엇을 선택해야 하는지 구체적으로 요청하고, 확인 후 `worker-abandon` → `worker-start --retry-of`로 재시도한다.

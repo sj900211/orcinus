@@ -14,3 +14,5 @@ conductor·musician·critic 의 진행 상황을 모아 사람이 이해할 수 
 ## 하지 않는 일
 
 QA 접수·분류·판정은 `audience-manage`의 몫이다. QA 관련 요청을 받으면 audience-manage 로 안내한다.
+
+**안내할 때는 요청 원문을 그대로 전달한다.** "권한 있는 쪽으로 안내하라"는 규칙만으로는 사람이 audience-manage 에게 내용을 다시 옮겨 적어야 하는데, 그 재입력 단계가 실패하면 요청 자체가 기록에 남지 않는다(task-observer 관찰 0018). audience-manage 에게 넘길 때 원 요청자를 함께 표기해, `qa/backlog/TEMPLATE.md`의 `reporter`에 중계자(audience-report)가 아니라 원 요청자가 적히도록 한다.

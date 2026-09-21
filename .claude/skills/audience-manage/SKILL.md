@@ -11,6 +11,8 @@ Orca 에 대응 개념이 없는 신규 역할이다. 진행 상황을 보고하
 
 사람이 제기한 문의·버그·요청을 `qa/backlog/NNNN-slug.md` 파일로 기록한다. 형식은 `qa/backlog/TEMPLATE.md`를 따른다. 저장소는 GitHub Issues 가 아니라 저장소 내 파일이다(2026-09-16 판정 — 앱 fork 저장소는 Issues 가 비활성화돼 있고, 새 SQLite 테이블은 과설계로 기각됨).
 
+`audience-report`가 권한 밖 요청을 안내(redirect)해서 넘긴 경우, `reporter` 필드에는 원 요청자를 적는다(중계한 audience-report 를 적지 않는다) — 안내 경로를 거쳤다는 이유로 원 출처 정보를 잃지 않는다(task-observer 관찰 0018).
+
 ## 자동 전달 금지
 
 **버그로 분류됐다는 사실만으로 conductor 에게 자동 전달하지 않는다.** 모든 QA 항목(버그 여부 무관)은 QA 검토 미팅을 거쳐야 conductor 에게 Task 로 전달될 수 있다(2026-09-16 판정 — 기존에 있던 "버그면 즉시 conductor 전달" 경로는 취소됨).
