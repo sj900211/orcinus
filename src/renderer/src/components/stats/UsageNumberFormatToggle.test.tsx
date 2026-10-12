@@ -68,6 +68,7 @@ it('renders the reusable menu toggle and updates token displays and persistence'
           sessions: 1,
           events: 1,
           estimatedCostUsd: null,
+          hasUnpricedModels: false,
           topModel: 'model',
           topProject: 'project',
           hasAnyCodexData: true

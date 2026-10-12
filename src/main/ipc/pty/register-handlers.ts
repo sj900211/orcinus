@@ -75,7 +75,7 @@ import {
 import { ensureLinuxTerminalOrcaCliShimDir } from '../../cli/linux-terminal-orca-cli-shim'
 
 export function registerPtyHandlers(
-  mainWindow: BrowserWindow,
+  mainWindow?: BrowserWindow,
   runtime?: OrcaRuntimeService,
   getSelectedCodexHomePath?: GetSelectedCodexHomePath,
   getSettings?: () => GlobalSettings,
@@ -105,12 +105,13 @@ export function registerPtyHandlers(
   setInvalidatePendingPtyDrainPolicy(() => {})
   // Why: neutralize rebind at the same moment as drain so a daemon replace in this window cannot attach the old accept/exit closures.
   setRebindProviderListeners(() => {})
-  registerRendererLifecycleResetHandlers(mainWindow.webContents)
+  registerRendererLifecycleResetHandlers(mainWindow?.webContents)
   // Fork regate: every pty stream resolves its owner window through the affinity
   // router — main fallback plus the runtime's pty→worktree and worktree→project
   // resolvers must be injected the moment handlers bind, or the router silently
   // routes everything to main.
-  setMainWindowForRouting(mainWindow)
+  // Why: headless must clear a previously routed window, or owner-routed sends keep reaching it.
+  setMainWindowForRouting(mainWindow ?? null)
   // Optional calls: pared-down runtime stubs (tests, headless) may omit the routing accessors.
   setPtyWorktreeResolverForRouting(runtime ? (ptyId) => runtime.getPtyWorktreeId?.(ptyId) : null)
   setProjectKeyResolverForRouting(
@@ -183,29 +184,31 @@ export function registerPtyHandlers(
 
   // Why: reload/crash orphans delivery-interest holds and hidden marks; reset so surviving PTYs aren't stuck force-fed or gated — each pane's first sync re-marks.
   clearRendererGateResetHandlers()
-  const resetRendererPtyDeliveryGateState = (): void => {
-    const gateDebug = getHiddenRendererPtyDeliveryDebug()
-    // Why scope to the main window's id: this handler fires on the MAIN window's reload/crash only, so it
-    // must clear the main window's hidden/interest marks, not every workspace window's (whose renderers did
-    // not reload and re-report marks only on visibility transitions) (dungeon-4 review).
-    resetRendererScopedHiddenPtyDeliveryState(mainWindow.webContents.id)
-    if (gateDebug.hiddenDeliveryGatedPtyCount > 0 || gateDebug.deliveryInterestPtyCount > 0) {
-      invalidatePendingPtyDrainPolicy()
+  if (mainWindow) {
+    const resetRendererPtyDeliveryGateState = (): void => {
+      const gateDebug = getHiddenRendererPtyDeliveryDebug()
+      // Why scope to the main window's id: this handler fires on the MAIN window's reload/crash only, so it
+      // must clear the main window's hidden/interest marks, not every workspace window's (whose renderers did
+      // not reload and re-report marks only on visibility transitions) (dungeon-4 review).
+      resetRendererScopedHiddenPtyDeliveryState(mainWindow.webContents.id)
+      if (gateDebug.hiddenDeliveryGatedPtyCount > 0 || gateDebug.deliveryInterestPtyCount > 0) {
+        invalidatePendingPtyDrainPolicy()
+      }
+      // Why: the daemon pacer must not keep throttling ptys whose hidden marks died with the renderer; the fresh renderer's sync re-marks the still-hidden ones.
+      session.resyncBackgroundedDeliveriesAfterGateReset()
     }
-    // Why: the daemon pacer must not keep throttling ptys whose hidden marks died with the renderer; the fresh renderer's sync re-marks the still-hidden ones.
-    session.resyncBackgroundedDeliveriesAfterGateReset()
+    setRendererGateResetState({
+      contents: mainWindow.webContents,
+      load: resetRendererPtyDeliveryGateState,
+      gone: resetRendererPtyDeliveryGateState
+    })
+    mainWindow.webContents.on('did-finish-load', resetRendererPtyDeliveryGateState)
+    mainWindow.webContents.on('render-process-gone', resetRendererPtyDeliveryGateState)
   }
-  setRendererGateResetState({
-    contents: mainWindow.webContents,
-    load: resetRendererPtyDeliveryGateState,
-    gone: resetRendererPtyDeliveryGateState
-  })
-  mainWindow.webContents.on('did-finish-load', resetRendererPtyDeliveryGateState)
-  mainWindow.webContents.on('render-process-gone', resetRendererPtyDeliveryGateState)
 
   // Why: only LocalPtyProvider PTYs (main-process) can be orphaned on reload; daemon sessions survive by design and cleanup would kill them.
   clearDidFinishLoadHandler()
-  if (localProvider instanceof LocalPtyProvider) {
+  if (mainWindow && localProvider instanceof LocalPtyProvider) {
     const lp = localProvider
     const finishLoadHandler = () => {
       // Why: always advance to keep the generation monotonic, but skip the sweep on crash/freeze-recovery reload — it would kill live local PTYs before session restore (#5787).

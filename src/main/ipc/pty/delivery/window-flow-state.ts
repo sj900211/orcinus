@@ -7,7 +7,7 @@ import type { PtyIpcSession, RendererPtyDeliveryAccounting } from '../session'
 // Why: dispatcher-ready gates, ACK freshness, in-flight totals, and resync probes are per-renderer
 // facts — one Map entry per app window so a workspace window's reload can't clobber the others.
 export type RendererWindowFlowState = {
-  webContents: WebContents
+  webContents: Pick<WebContents, 'id' | 'isDestroyed' | 'send'>
   webContentsId: number
   inFlightTotalChars: number
   lastAckReceivedAtMs: number | null
@@ -35,7 +35,7 @@ export function setActiveWindowFlowSession(session: PtyIpcSession): void {
 
 export function createWindowFlowState(
   session: PtyIpcSession,
-  webContents: WebContents
+  webContents: RendererWindowFlowState['webContents']
 ): RendererWindowFlowState {
   const state: RendererWindowFlowState = {
     webContents,
@@ -64,7 +64,7 @@ export function getOrCreateWindowFlowState(
   }
   const state = createWindowFlowState(session, webContents)
   if (webContents !== session.mainFlowState.webContents) {
-    trackWorkspaceWindowDeliveryLifecycle(session, state)
+    trackWorkspaceWindowDeliveryLifecycle(session, state, webContents)
   }
   return state
 }
@@ -165,7 +165,8 @@ export function armDispatcherReadyWatchdog(
 
 function trackWorkspaceWindowDeliveryLifecycle(
   session: PtyIpcSession,
-  state: RendererWindowFlowState
+  state: RendererWindowFlowState,
+  webContents: WebContents
 ): void {
   const scopedReset = (): void => {
     if (activeWindowFlowSession !== session) {
@@ -191,7 +192,6 @@ function trackWorkspaceWindowDeliveryLifecycle(
     clearDeliveryResyncProbe(state)
     session.windowFlowStates.delete(state.webContentsId)
   }
-  const { webContents } = state
   webContents.on('render-process-gone', onRenderProcessGone)
   webContents.on('did-start-navigation', onNavigation)
   webContents.on('destroyed', onDestroyed)

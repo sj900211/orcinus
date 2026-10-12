@@ -49,6 +49,7 @@ export function createUsagePaneStore() {
       cachedInputTokens: 300,
       reasoningOutputTokens: 0,
       totalTokens: 1600,
+      hasUnpricedModels: false,
       hasAnyCodexData: true
     },
     openCodeUsageSummary: {

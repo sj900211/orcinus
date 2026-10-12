@@ -53,6 +53,12 @@ export function sendPtyDataToRenderer(
   payload: PtyDataPayload,
   projectionAdmissionIds?: readonly string[]
 ): { sent: boolean; projectionsTransferred: boolean } {
+  if (!session.mainWindow) {
+    if (projectionAdmissionIds) {
+      session.sshOutputIntake?.transferProjections(projectionAdmissionIds, 'renderer-destroyed')
+    }
+    return { sent: false, projectionsTransferred: projectionAdmissionIds !== undefined }
+  }
   const charCount = getPtyPayloadCharCount(payload)
   const ownerState = ownerFlowStateForPty(session, id)
   if (!ownerState) {

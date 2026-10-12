@@ -190,6 +190,9 @@ module.exports = {
     // Why: these repo-only inputs are either bundled into out/ or copied via
     // extraResources. Shipping them in app.asar bloats the desktop bundle.
     '!src{,/**/*}',
+    '!out/orcad{,/**/*}',
+    '!out/orcad-template{,/**/*}',
+    '!out/.orcad-*{,/**/*}',
     '!config{,/**/*}',
     '!docs{,/**/*}',
     '!mobile{,/**/*}',
@@ -283,6 +286,8 @@ module.exports = {
     'out/main/gemini/**',
     'out/main/grok/**',
     'out/main/hermes/**',
+    'out/main/persistence/profile-state/**',
+    'out/main/startup/http1-compatibility-marker.js',
     'out/main/daemon-entry.js',
     'out/main/session-scanner-service-entry.js',
     'out/main/wsl-transcript-fs-process-entry.js',

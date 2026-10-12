@@ -153,7 +153,10 @@ export function removeWorkspaceSessionOwnerInPartition(
       [resolved]: session
     }
   }
-  scheduleSave(owner[sessionHostPartitionOperationsContext].scheduling)
+  scheduleSave(
+    owner[sessionHostPartitionOperationsContext].scheduling,
+    resolved === LOCAL_EXECUTION_HOST_ID ? ['workspaceSession'] : ['workspaceSessionsByHostId']
+  )
 }
 
 export function partitionOwnsWorktreeTabs(
@@ -213,7 +216,9 @@ export function setHostWorkspaceSession(
     ...owner[sessionHostPartitionOperationsContext].runtime.state.workspaceSessionsByHostId,
     [hostId]: pruned
   }
-  scheduleSave(owner[sessionHostPartitionOperationsContext].scheduling)
+  scheduleSave(owner[sessionHostPartitionOperationsContext].scheduling, [
+    'workspaceSessionsByHostId'
+  ])
 }
 
 export function installSessionHostPartitionOperationsContext(

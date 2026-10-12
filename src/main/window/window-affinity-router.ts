@@ -18,7 +18,7 @@ function liveWindow(window: BrowserWindow | null): BrowserWindow | null {
   return window && !window.isDestroyed() ? window : null
 }
 
-export function setMainWindowForRouting(window: BrowserWindow): void {
+export function setMainWindowForRouting(window: BrowserWindow | null): void {
   mainWindowForRouting = window
 }
 

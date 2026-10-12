@@ -32,6 +32,9 @@ const dailyAggregates = days.map((day) => ({
   reasoningOutputTokens: 0,
   totalTokens: 2,
   hasInferredPricing: false,
+  longContextInputTokens: 0,
+  longContextCachedInputTokens: 0,
+  longContextOutputTokens: 0,
   estimatedCostUsd: null
 }))
 const sessions = days.map((day) => ({
@@ -59,6 +62,9 @@ const sessions = days.map((day) => ({
   totalReasoningOutputTokens: 0,
   totalTokens: 2,
   hasInferredPricing: false,
+  longContextInputTokens: 0,
+  longContextCachedInputTokens: 0,
+  longContextOutputTokens: 0,
   modelBreakdown: [],
   locationModelBreakdown: [],
   estimatedCostUsd: null
