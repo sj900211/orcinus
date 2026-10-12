@@ -8,7 +8,56 @@ import { resolvePtyOwnerWindow, sendToPtyOwner } from '../../../window/window-af
 import { makePtyDataPayload, sendPtyDataToRenderer } from './payload'
 import { getRendererInFlightCharsForPty } from './accounting'
 import { clearFlushTimerIfIdle } from './flush'
+import { ptyIncarnationById } from '../provider/ownership-state'
 import type { PtyIpcSession } from '../session'
+
+export type ReplacedPtyStop = {
+  incarnationId: string | undefined
+  expiryTimer?: NodeJS.Timeout
+}
+
+/** Labels the exit of a PTY that main stops so a new process can take its pane. Settle with
+ *  whether the stop succeeded; a failed stop leaves no label behind. */
+export function markReplacedPtyStop(
+  session: PtyIpcSession,
+  id: string
+): (stopped: boolean) => void {
+  clearTimeout(session.replacedPtyStopsById.get(id)?.expiryTimer)
+  const mark: ReplacedPtyStop = { incarnationId: ptyIncarnationById.get(id) }
+  session.replacedPtyStopsById.set(id, mark)
+  return (stopped) => {
+    if (session.replacedPtyStopsById.get(id) !== mark) {
+      return
+    }
+    if (!stopped) {
+      session.replacedPtyStopsById.delete(id)
+      return
+    }
+    // Why a window: an SSH exit can reach the renderer after the stop settles; bound it like a synthetic kill.
+    mark.expiryTimer = setTimeout(() => {
+      if (session.replacedPtyStopsById.get(id) === mark) {
+        session.replacedPtyStopsById.delete(id)
+      }
+    }, SYNTHETIC_KILL_EXIT_DUPLICATE_WINDOW_MS)
+    mark.expiryTimer.unref?.()
+  }
+}
+
+function consumeReplacedPtyStop(
+  session: PtyIpcSession,
+  payload: { id: string; incarnationId?: string }
+): boolean {
+  const mark = session.replacedPtyStopsById.get(payload.id)
+  if (
+    !mark ||
+    (mark.incarnationId && payload.incarnationId && mark.incarnationId !== payload.incarnationId)
+  ) {
+    return false
+  }
+  clearTimeout(mark.expiryTimer)
+  session.replacedPtyStopsById.delete(payload.id)
+  return true
+}
 
 export function rememberSyntheticKillExit(
   session: PtyIpcSession,
@@ -164,7 +213,8 @@ export function finalizePtyExitForRenderer(
     ...payload,
     ...(session.reversibleStopOwnersByPtyId.has(payload.id)
       ? { preserveRendererBinding: true }
-      : {})
+      : {}),
+    ...(consumeReplacedPtyStop(session, payload) ? { replacedByRestart: true } : {})
   })
   // Why: the receiving renderer drops its cumulative counter on pty:exit; drop only that window's mirror so a reused id baselines at zero (non-owners' counters live on).
   const exitOwnerWindow = resolvePtyOwnerWindow(payload.id)

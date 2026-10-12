@@ -18,7 +18,12 @@ import { localProvider } from './provider/registry'
 import { finishPtyShutdown } from './provider/liveness'
 import type { GetSelectedCodexHomePath, PrepareClaudeAuth } from './host-env/types'
 import { installPtyInspectIpcHandlers } from './ipc/inspect'
-import { installPtyKillIpcHandler } from './ipc/renderer-kill'
+import {
+  installPtyKillIpcHandler,
+  stopReplacedPanePty,
+  type PtyKillIpcDeps
+} from './ipc/renderer-kill'
+import { markReplacedPtyStop } from './delivery/exit'
 import { installPtyWriteIpcHandlers } from './ipc/write'
 import { installPtySpawnIpcHandler } from './ipc/spawn'
 import { installPtyRuntimeController } from './runtime/controller'
@@ -258,10 +263,21 @@ export function registerPtyHandlers(
     trustedTerminalHandleEnv: session.trustedTerminalHandleEnv,
     retiredRejectedPtyIds: session.retiredRejectedPtyIds,
     reversibleStopOwnersByPtyId: session.reversibleStopOwnersByPtyId,
-    mainWindow
+    mainWindow,
+    transitionSpawnHiddenRendererPtyDeliveryState:
+      session.transitionSpawnHiddenRendererPtyDeliveryState,
+    syncPtyBackgroundedDelivery: session.syncPtyBackgroundedDelivery
   })
 
   installPtySnapshotIpcHandlers({ runtime, pendingData: session.pendingData })
+  const killDeps: PtyKillIpcDeps = {
+    store,
+    runtime,
+    getLocalPtyProviderStartupPromise,
+    shutdownProviderAndDetectExit: session.shutdownProviderAndDetectExit,
+    rememberSyntheticKillExit: session.rememberSyntheticKillExit,
+    sendPtyExitToRenderer: session.sendPtyExitToRenderer
+  }
   installPtySpawnIpcHandler({
     runtime,
     store,
@@ -283,22 +299,13 @@ export function registerPtyHandlers(
       session.transitionSpawnHiddenRendererPtyDeliveryState,
     trustedTerminalHandleEnv: session.trustedTerminalHandleEnv,
     sendPtySpawnedToRenderer: session.sendPtySpawnedToRenderer,
-    syncPtyBackgroundedDelivery: session.syncPtyBackgroundedDelivery
+    syncPtyBackgroundedDelivery: session.syncPtyBackgroundedDelivery,
+    stopReplacedPty: (id) =>
+      stopReplacedPanePty(killDeps, id, (ptyId) => markReplacedPtyStop(session, ptyId))
   })
-  installPtyWriteIpcHandlers({
-    mainWindow,
-    runtime,
-    clearHiddenRendererResizeOutput: session.clearHiddenRendererResizeOutput
-  })
+  installPtyWriteIpcHandlers({ mainWindow, runtime })
   installPtyResizeVisibilityIpc(session)
   installPtyDeliveryFlowIpc(session)
   installPtyInspectIpcHandlers({ getLocalPtyProviderStartupPromise })
-  installPtyKillIpcHandler({
-    store,
-    runtime,
-    getLocalPtyProviderStartupPromise,
-    shutdownProviderAndDetectExit: session.shutdownProviderAndDetectExit,
-    rememberSyntheticKillExit: session.rememberSyntheticKillExit,
-    sendPtyExitToRenderer: session.sendPtyExitToRenderer
-  })
+  installPtyKillIpcHandler(killDeps)
 }

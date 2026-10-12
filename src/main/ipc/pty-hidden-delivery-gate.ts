@@ -32,6 +32,14 @@ const deliveryInterestRendererPtysByWebContents = new Map<number, Set<string>>()
 // hidden remounts and renderer reloads. Kept global: it records PTY history,
 // not renderer state.
 const droppedSinceHiddenPtys = new Set<string>()
+// Why: a runtime background spawn has no renderer party to re-mark it after a
+// reload/crash, so its hidden mark must outlive renderer-scoped resets until a
+// renderer unmarks it (visible mount) or the PTY is torn down. Fork note
+// (Orcinus): upstream shadows these into its single hidden set and re-adds them
+// after a reset; here they stay window-independent instead, because no window
+// owns a view of them — which makes them survive the per-window reset by
+// construction rather than by a re-add step.
+const runtimeOwnedHiddenRendererPtys = new Set<string>()
 
 let droppedHiddenDeliveryChars = 0
 let droppedHiddenDeliveryChunks = 0
@@ -70,6 +78,18 @@ function countDistinct(map: Map<number, Set<string>>): number {
   return ids.size
 }
 
+/** Every hidden PTY: marks held by any window, plus the window-independent
+ *  runtime-owned ones. */
+function collectHiddenPtyIds(): Set<string> {
+  const ids = new Set<string>(runtimeOwnedHiddenRendererPtys)
+  for (const set of hiddenRendererPtysByWebContents.values()) {
+    for (const id of set) {
+      ids.add(id)
+    }
+  }
+  return ids
+}
+
 /** Gate kill switches, both read main-side: the gate only operates under main
  *  side-effect authority AND the gate-specific setting (both default on). */
 export function isHiddenPtyDeliveryGateEnabled(
@@ -96,16 +116,34 @@ export function unmarkHiddenRendererPty(
   id: string
 ): { droppedWhileHidden: boolean } {
   deleteFromWindowSet(hiddenRendererPtysByWebContents, webContentsId, id)
+  // A renderer unmark means a view exists now, so the runtime-owned mark is spent.
+  runtimeOwnedHiddenRendererPtys.delete(id)
   const droppedWhileHidden = droppedSinceHiddenPtys.delete(id)
   return { droppedWhileHidden }
 }
 
 export function isHiddenRendererPty(webContentsId: number, id: string): boolean {
-  return hiddenRendererPtysByWebContents.get(webContentsId)?.has(id) ?? false
+  return (
+    (hiddenRendererPtysByWebContents.get(webContentsId)?.has(id) ?? false) ||
+    runtimeOwnedHiddenRendererPtys.has(id)
+  )
 }
 
-/** For teardown/diagnostics: whether any window still holds a hidden mark for this PTY. */
+/** Marks a PTY hidden on behalf of the runtime (no renderer view exists). */
+export function markRuntimeOwnedHiddenRendererPty(id: string): void {
+  runtimeOwnedHiddenRendererPtys.add(id)
+}
+
+export function isRuntimeOwnedHiddenRendererPty(id: string): boolean {
+  return runtimeOwnedHiddenRendererPtys.has(id)
+}
+
+/** For teardown/diagnostics: whether any window still holds a hidden mark for
+ *  this PTY, or the runtime holds one on no window's behalf. */
 export function isHiddenRendererPtyInAnyWindow(id: string): boolean {
+  if (runtimeOwnedHiddenRendererPtys.has(id)) {
+    return true
+  }
   for (const set of hiddenRendererPtysByWebContents.values()) {
     if (set.has(id)) {
       return true
@@ -118,13 +156,7 @@ export function isHiddenRendererPtyInAnyWindow(id: string): boolean {
  *  per-pty report table even when the gate dropped every byte before any
  *  send/accounting. */
 export function getHiddenRendererPtyIds(): string[] {
-  const ids = new Set<string>()
-  for (const set of hiddenRendererPtysByWebContents.values()) {
-    for (const id of set) {
-      ids.add(id)
-    }
-  }
-  return [...ids]
+  return [...collectHiddenPtyIds()]
 }
 
 /** Renderer-side ref-counted interest, surfaced as boolean transitions. */
@@ -147,7 +179,7 @@ export function shouldDropHiddenRendererPtyData(
 ): boolean {
   return (
     isHiddenPtyDeliveryGateEnabled(settings) &&
-    (hiddenRendererPtysByWebContents.get(webContentsId)?.has(id) ?? false) &&
+    isHiddenRendererPty(webContentsId, id) &&
     !(deliveryInterestRendererPtysByWebContents.get(webContentsId)?.has(id) ?? false)
   )
 }
@@ -186,7 +218,8 @@ export function recordHiddenRendererPtyDataDrop(
 /** One window's renderer process replaced (reload / crash): its ref-counted
  *  interest holds and hidden marks died with it, so keeping them would gate
  *  (or force-feed) PTYs no live renderer party asked about. Other windows'
- *  marks stay. Drop memory is preserved — surviving daemon/SSH PTYs may have
+ *  marks stay, and so do runtime-owned marks — no renderer party exists to
+ *  re-mark those. Drop memory is preserved — surviving daemon/SSH PTYs may have
  *  dropped bytes the old renderer never restored; the new renderer's first
  *  hidden/visible sync re-marks or unmarks and the unmark path re-emits the
  *  restore marker. */
@@ -212,6 +245,7 @@ export function clearHiddenRendererPtyDeliveryState(id: string): void {
   for (const webContentsId of deliveryInterestRendererPtysByWebContents.keys()) {
     deleteFromWindowSet(deliveryInterestRendererPtysByWebContents, webContentsId, id)
   }
+  runtimeOwnedHiddenRendererPtys.delete(id)
   droppedSinceHiddenPtys.delete(id)
 }
 
@@ -224,7 +258,7 @@ export type HiddenRendererPtyDeliveryDebug = {
 
 export function getHiddenRendererPtyDeliveryDebug(): HiddenRendererPtyDeliveryDebug {
   return {
-    hiddenDeliveryGatedPtyCount: countDistinct(hiddenRendererPtysByWebContents),
+    hiddenDeliveryGatedPtyCount: collectHiddenPtyIds().size,
     deliveryInterestPtyCount: countDistinct(deliveryInterestRendererPtysByWebContents),
     hiddenDeliveryDroppedChars: droppedHiddenDeliveryChars,
     hiddenDeliveryDroppedChunks: droppedHiddenDeliveryChunks
@@ -240,6 +274,7 @@ export function resetHiddenRendererPtyDeliveryDebugCounters(): void {
 export function _resetHiddenRendererPtyDeliveryGateForTest(): void {
   hiddenRendererPtysByWebContents.clear()
   deliveryInterestRendererPtysByWebContents.clear()
+  runtimeOwnedHiddenRendererPtys.clear()
   droppedSinceHiddenPtys.clear()
   resetHiddenRendererPtyDeliveryDebugCounters()
 }

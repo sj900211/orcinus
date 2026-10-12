@@ -39,12 +39,7 @@ import {
   syncPtyBackgroundedDelivery,
   updateProducerFlowControl
 } from './producer-sync'
-import {
-  acceptPtyDataForRenderer,
-  clearDeliveredHiddenRendererResizeOutput,
-  clearHiddenRendererResizeOutput,
-  rendererPtyIsKnownHidden
-} from './accept'
+import { acceptPtyDataForRenderer, rendererPtyIsKnownHidden } from './accept'
 import {
   consumeSyntheticKillExit,
   finalizePtyExitForRenderer,
@@ -99,8 +94,6 @@ export function wirePtyIpcSession(session: PtyIpcSession): void {
   session.transitionSpawnHiddenRendererPtyDeliveryState = (id, hidden, worktreeId) =>
     transitionSpawnHiddenRendererPtyDeliveryState(session, id, hidden, worktreeId)
   session.rendererPtyIsKnownHidden = rendererPtyIsKnownHidden
-  session.clearHiddenRendererResizeOutput = clearHiddenRendererResizeOutput
-  session.clearDeliveredHiddenRendererResizeOutput = clearDeliveredHiddenRendererResizeOutput
   session.schedulePendingDataAfterCreditReport = (creditedAny) =>
     schedulePendingDataAfterCreditReport(session, creditedAny)
 

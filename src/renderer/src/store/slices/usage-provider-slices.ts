@@ -21,6 +21,11 @@ import type {
   OpenCodeUsageScope,
   OpenCodeUsageSnapshot
 } from '../../../../shared/opencode-usage-types'
+import type {
+  MuseUsageRange,
+  MuseUsageScope,
+  MuseUsageSnapshot
+} from '../../../../shared/muse-usage-types'
 import type { AppState } from '../types'
 
 type ProviderUsageSlice<
@@ -246,10 +251,13 @@ type ClaudeUsageShape = UsageShape<ClaudeUsageScope, ClaudeUsageRange, ClaudeUsa
 type CodexUsageShape = UsageShape<CodexUsageScope, CodexUsageRange, CodexUsageSnapshot>
 type OpenCodeUsageShape = UsageShape<OpenCodeUsageScope, OpenCodeUsageRange, OpenCodeUsageSnapshot>
 
+type MuseUsageShape = UsageShape<MuseUsageScope, MuseUsageRange, MuseUsageSnapshot>
+
 export type ClaudeUsageSlice = ProviderUsageSlice<'claude', 'Claude', ClaudeUsageShape> &
   AllUsageFiltersSlice
 export type CodexUsageSlice = ProviderUsageSlice<'codex', 'Codex', CodexUsageShape>
 export type OpenCodeUsageSlice = ProviderUsageSlice<'openCode', 'OpenCode', OpenCodeUsageShape>
+export type MuseUsageSlice = ProviderUsageSlice<'muse', 'Muse', MuseUsageShape>
 
 const createClaudeProviderSlice = createUsageProviderSlice<'claude', 'Claude', ClaudeUsageShape>({
   prefix: 'claude',
@@ -280,6 +288,15 @@ export const createOpenCodeUsageSlice = createUsageProviderSlice<
   initialRange: '30d',
   getApi: () => window.api.openCodeUsage,
   hasCachedData: (state) => state.hasAnyOpenCodeData
+})
+
+export const createMuseUsageSlice = createUsageProviderSlice<'muse', 'Muse', MuseUsageShape>({
+  prefix: 'muse',
+  name: 'Muse',
+  initialScope: 'orca',
+  initialRange: '30d',
+  getApi: () => window.api.museUsage,
+  hasCachedData: (state) => state.hasAnyMuseData
 })
 
 export const createClaudeUsageSlice: StateCreator<AppState, [], [], ClaudeUsageSlice> = (

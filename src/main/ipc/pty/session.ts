@@ -5,7 +5,12 @@ import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { IPtyProvider } from '../../providers/types'
 import type { LegacySshProjectionSemantics } from '../ssh-pty-legacy-projection'
 import type { PtyModelRestoreReason } from '../../../shared/pty-model-restore-marker'
+import type {
+  PtyDeliveryWriteOff,
+  PtyRendererDeliveryStateReport
+} from '../../../shared/pty-renderer-delivery-health'
 import type { PtyRendererDeliveryDebugSnapshot } from './delivery/debug'
+import type { ReplacedPtyStop } from './delivery/exit'
 import { PtyProducerFlowController } from '../pty-producer-flow-control'
 import { PtyPendingDataDrainQueue, type PendingPtyData } from '../pty-pending-data-drain-queue'
 import type { SshPtyOutputIntake } from '../ssh-pty-output-intake'
@@ -104,6 +109,7 @@ export type PtyIpcSession = {
     { cleanupTimer: NodeJS.Timeout; incarnationId: string | undefined }
   >
   reversibleStopOwnersByPtyId: Map<string, number>
+  replacedPtyStopsById: Map<string, ReplacedPtyStop>
   retiredRejectedPtyIds: Map<string, NodeJS.Timeout>
   pendingSerializeRequests: Map<
     string,
@@ -174,9 +180,9 @@ export type PtyIpcSession = {
     worktreeId?: string
   ) => void
   rendererPtyIsKnownHidden: (id: string) => boolean
-  clearHiddenRendererResizeOutput: (id: string) => void
-  clearDeliveredHiddenRendererResizeOutput: (id: string) => void
   schedulePendingDataAfterCreditReport: (creditedAny: boolean) => void
+  writeOffLostRendererDelivery: (report: PtyRendererDeliveryStateReport) => PtyDeliveryWriteOff[]
+  getRendererInFlightCharsForPty: (id: string) => number
 }
 
 const unsetSessionFn = (): never => {
@@ -229,6 +235,7 @@ export function createPtyIpcSession(args: {
     backgroundedDeliverySyncByPty: new Map(),
     syntheticKillExitPtyIds: new Map(),
     reversibleStopOwnersByPtyId: new Map(),
+    replacedPtyStopsById: new Map(),
     retiredRejectedPtyIds: new Map(),
     pendingSerializeRequests: new Map(),
     canSendPtyDataToRenderer: unsetSessionFn,
@@ -256,9 +263,9 @@ export function createPtyIpcSession(args: {
     transitionHiddenRendererPtyDeliveryState: unsetSessionFn,
     transitionSpawnHiddenRendererPtyDeliveryState: unsetSessionFn,
     rendererPtyIsKnownHidden: unsetSessionFn,
-    clearHiddenRendererResizeOutput: unsetSessionFn,
-    clearDeliveredHiddenRendererResizeOutput: unsetSessionFn,
-    schedulePendingDataAfterCreditReport: unsetSessionFn
+    schedulePendingDataAfterCreditReport: unsetSessionFn,
+    writeOffLostRendererDelivery: unsetSessionFn,
+    getRendererInFlightCharsForPty: unsetSessionFn
   }
   // Why here (not wiring): the queue classifier below and workspace lifecycle tracking both read
   // flow states before wirePtyIpcSession runs; the main window never gets workspace tracking.
