@@ -1,5 +1,9 @@
 import type { CodexUsageRange, CodexUsageScope } from '../../shared/codex-usage-types'
 import type { CodexUsagePersistedState } from './types'
+// Fork note (Orcinus): keeps the inline filter instead of upstream's
+// usage-scope-filters helpers — those take only a `since` cutoff and would
+// silently drop the `until` bound that 원정 9's custom date range needs.
+// Matches the claude-usage and opencode-usage siblings.
 import { getLocalUsageDay, getUsageRangeBounds } from '../usage/usage-calendar-range'
 
 export type ScopedCodexUsageModelRow = {

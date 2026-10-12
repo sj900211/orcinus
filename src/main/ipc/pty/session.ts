@@ -99,7 +99,10 @@ export type PtyIpcSession = {
   producerFlowControl: PtyProducerFlowController
   sourceCreditPendingPtys: Set<string>
   backgroundedDeliverySyncByPty: Map<string, boolean>
-  syntheticKillExitPtyIds: Map<string, NodeJS.Timeout>
+  syntheticKillExitPtyIds: Map<
+    string,
+    { cleanupTimer: NodeJS.Timeout; incarnationId: string | undefined }
+  >
   reversibleStopOwnersByPtyId: Map<string, number>
   retiredRejectedPtyIds: Map<string, NodeJS.Timeout>
   pendingSerializeRequests: Map<
@@ -155,9 +158,9 @@ export type PtyIpcSession = {
     id: string,
     opts: { immediate?: boolean; keepHistory?: boolean; deadlineMs?: number }
   ) => Promise<boolean>
-  rememberSyntheticKillExit: (id: string) => void
+  rememberSyntheticKillExit: (id: string, incarnationId?: string) => void
   rememberRetiredRejectedPty: (id: string) => void
-  consumeSyntheticKillExit: (id: string) => boolean
+  consumeSyntheticKillExit: (id: string, incarnationId?: string) => boolean
   syncPtyBackgroundedDelivery: (id: string, caller: string) => void
   resyncBackgroundedDeliveriesAfterGateReset: () => void
   transitionHiddenRendererPtyDeliveryState: (

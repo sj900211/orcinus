@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import Database from '../sqlite/sync-database'
+import { createUsageWorktreeResolver } from '../usage/usage-worktree-resolver'
 import { parseOpenCodeUsageDatabase } from './scanner'
 import { parseOpenCodeUsageRow } from './opencode-usage-row-parsing'
 import {
@@ -53,7 +54,10 @@ it('preserves cache writes from session storage through all snapshot rollups', a
     } finally {
       db.close()
     }
-    const { sessions, dailyAggregates } = await parseOpenCodeUsageDatabase(path, [])
+    const { sessions, dailyAggregates } = await parseOpenCodeUsageDatabase(
+      path,
+      await createUsageWorktreeResolver([])
+    )
     const expected = { cacheWriteTokens: 1000, totalTokens: 1120 }
     expect(sessions[0]).toMatchObject(expected)
     expect(sessions[0].modelBreakdown[0]).toMatchObject(expected)

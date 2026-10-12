@@ -80,12 +80,13 @@ export function parseOpenCodeUsageRow(row: OpenCodeUsageRow): OpenCodeUsageParse
   const inputTokens = ensureNumber(tokens.input)
   const outputTokens = ensureNumber(tokens.output)
   const reasoningOutputTokens = ensureNumber(tokens.reasoning)
+  // Cache reads can exceed input; max avoids double-counting when total already includes them.
   const cachedInputTokens = ensureNumber(cache?.read)
   const cacheWriteTokens = ensureNumber(cache?.write)
-  const totalTokens =
-    ensureNumber(tokens.total) > 0
-      ? ensureNumber(tokens.total)
-      : inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens + cacheWriteTokens
+  const totalTokens = Math.max(
+    ensureNumber(tokens.total),
+    inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens + cacheWriteTokens
+  )
 
   if (inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens + totalTokens <= 0) {
     return null

@@ -18,6 +18,7 @@ import {
 } from './folder-workspace-path-status'
 import { toast } from 'sonner'
 import { isDetachedHeadWorkspace } from '@/components/sidebar/visible-worktrees'
+import { revealRepoInProjectFilter } from '@/components/sidebar/project-filter-reveal'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { findFolderWorkspaceOwner } from './folder-workspace-runtime-owner'
 import type { WorktreeStartupPayload } from '@/lib/worktree-startup-payload'
@@ -57,13 +58,14 @@ function canInspectAgentActivationInventory(): boolean {
 
 export function activateAndRevealFolderWorkspace(
   folderWorkspaceId: string,
-  opts?: ActivateOtherWindowGuardOpts & WorktreeActivationSurfaceSelection & {
-    sidebarRevealBehavior?: PendingSidebarWorktreeReveal['behavior']
-    revealInSidebar?: boolean
-    startup?: WorktreeStartupPayload
-    runtimeEnvironmentId?: string | null
-    executionHostId?: ExecutionHostId
-  }
+  opts?: ActivateOtherWindowGuardOpts &
+    WorktreeActivationSurfaceSelection & {
+      sidebarRevealBehavior?: PendingSidebarWorktreeReveal['behavior']
+      revealInSidebar?: boolean
+      startup?: WorktreeStartupPayload
+      runtimeEnvironmentId?: string | null
+      executionHostId?: ExecutionHostId
+    }
 ): ActivateAndRevealResult | false {
   // Why keyed by folder key: a folder workspace is its own single-member project (`folder:<id>`).
   if (
@@ -266,11 +268,9 @@ export function activateAndRevealWorktree(
     useAppStore.getState().queueTabInitialCwd(primaryTabId, opts.initialCwd)
   }
 
-  // 5. Clear sidebar filters hiding the target — reveal needs the card rendered, else it silently no-ops.
+  // 5. Lift the sidebar filters hiding the target — reveal needs the card rendered, else it silently no-ops.
   if (opts?.clearSidebarFilters !== false) {
-    if (state.filterRepoIds.length > 0 && !state.filterRepoIds.includes(wt.repoId)) {
-      state.setFilterRepoIds([])
-    }
+    revealRepoInProjectFilter(state, wt.repoId)
     if (
       state.hideAutomationGeneratedWorkspaces &&
       wt.automationProvenance?.kind === 'created-by-automation'
@@ -319,12 +319,13 @@ export function activateAndRevealWorktree(
  */
 export function activateAndRevealWorkspace(
   workspaceId: string,
-  opts?: ActivateOtherWindowGuardOpts & WorktreeActivationSurfaceSelection & {
-    executionHostId?: ExecutionHostId
-    revealInSidebar?: boolean
-    /** Worktree-only: folder workspaces are never filter-hidden. */
-    clearSidebarFilters?: boolean
-  }
+  opts?: ActivateOtherWindowGuardOpts &
+    WorktreeActivationSurfaceSelection & {
+      executionHostId?: ExecutionHostId
+      revealInSidebar?: boolean
+      /** Worktree-only: folder workspaces are never filter-hidden. */
+      clearSidebarFilters?: boolean
+    }
 ): ActivateAndRevealResult | false {
   const workspaceScope = parseWorkspaceKey(workspaceId)
   if (workspaceScope?.type !== 'folder') {

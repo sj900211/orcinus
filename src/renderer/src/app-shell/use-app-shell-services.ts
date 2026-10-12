@@ -1,4 +1,5 @@
 import { useAppStore } from '../store'
+import { useClosedEditorTabCleanup } from '../components/editor/useClosedEditorTabCleanup'
 import { useIpcEvents } from '../hooks/useIpcEvents'
 import { useAutomationDispatchEvents } from '../hooks/useAutomationDispatchEvents'
 import { useAutoAckViewedAgent } from '../hooks/useAutoAckViewedAgent'
@@ -20,6 +21,7 @@ import { useRemoteRuntimeRecoveryTriggers } from '../runtime/use-remote-runtime-
 import { useWorktreeTakeoverNavigation } from './use-worktree-takeover-navigation'
 import { useProjectWindowActiveProjectSync } from './use-project-window-active-project-sync'
 import { useSatelliteWorktreeSync } from './use-satellite-worktree-sync'
+import { useBrowserIdentityMigrationNotice } from '../components/browser-pane/browser-user-agent-migration-notice'
 
 /**
  * App-level subscriptions that must outlive any individual surface. Each one is here because
@@ -33,6 +35,7 @@ export function useAppShellServices(options: { floatingPanelVisible: boolean }):
     resolvePrimarySelectionMiddleClickPaste(s.settings?.primarySelectionMiddleClickPaste)
   )
 
+  useClosedEditorTabCleanup()
   useRadixBodyPointerEventsRecovery()
   useWebSessionTabsSync()
   useLocalStructuredSessionTabsSync()
@@ -58,4 +61,5 @@ export function useAppShellServices(options: { floatingPanelVisible: boolean }):
   useLargeTextControlPaste()
   usePrimarySelectionPaste(primarySelectionMiddleClickPaste)
   useOsc52ClipboardDefaultOnNotice(persistedUIReady)
+  useBrowserIdentityMigrationNotice()
 }

@@ -172,6 +172,7 @@ export function getDefaultSettings(homedir: string): GlobalSettings {
     terminalInactivePaneOpacity: DEFAULT_TERMINAL_INACTIVE_PANE_OPACITY,
     terminalRightClickToPaste: getDefaultTerminalRightClickToPaste(),
     notifications: getDefaultNotificationSettings(),
+
     voice: getDefaultVoiceSettings()
   })
 }
