@@ -2,6 +2,8 @@ import type { WorkerThreadFactory } from '../lazy-worker-thread-host'
 import { WorkerThreadRequestQueue } from '../worker-thread-request-queue'
 import type { AiVaultScanIssue, AiVaultSession } from '../../shared/ai-vault-types'
 import type {
+  OpenCodeNativeChatReadRequest,
+  OpenCodeNativeChatReadValue,
   OpenCodeSqliteCaptureValue,
   OpenCodeSqliteListValue,
   OpenCodeSqliteWorkerRequest,
@@ -98,7 +100,7 @@ export class OpenCodeSqliteWorkerClient {
     dbPaths: readonly string[]
     limit: number
     issues: AiVaultScanIssue[]
-    agent?: 'opencode2'
+    agent?: 'opencode2' | 'zcode'
     signal?: AbortSignal
   }): Promise<SessionFileCandidate[]> {
     if (args.dbPaths.length === 0) {
@@ -161,7 +163,7 @@ export class OpenCodeSqliteWorkerClient {
     dbPath: string
     sessionId: string
     platform: NodeJS.Platform
-    agent?: 'opencode2'
+    agent?: 'opencode2' | 'zcode'
     signal?: AbortSignal
   }): Promise<AiVaultSession | null> {
     try {
@@ -201,7 +203,7 @@ export class OpenCodeSqliteWorkerClient {
     dbPath: string
     sessionId: string
     platform: NodeJS.Platform
-    agent?: 'opencode2'
+    agent?: 'opencode2' | 'zcode'
     signal?: AbortSignal
   }): Promise<OpenCodeSqliteCaptureValue> {
     try {
@@ -221,6 +223,15 @@ export class OpenCodeSqliteWorkerClient {
     } catch (err) {
       throw sessionReadFailure(err)
     }
+  }
+
+  async readNativeChat(
+    args: Omit<OpenCodeNativeChatReadRequest, 'id'>,
+    signal?: AbortSignal
+  ): Promise<OpenCodeNativeChatReadValue> {
+    const value = await this.dispatch((id) => ({ ...args, id }), PARSE_TIMEOUT_MS, signal)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only this build's internal worker dispatch constructs page/signal results; they are not client-supplied paths or frames.
+    return value as OpenCodeNativeChatReadValue
   }
 
   dispose(): void {

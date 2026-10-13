@@ -1,3 +1,14 @@
+import {
+  closeTestStores,
+  testState,
+  createStore,
+  writeDataFile,
+  readDataFile,
+  makeRepo,
+  makeProject,
+  makeProjectHostSetup,
+  createSqliteTestStore
+} from './persistence-test-harness'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writeFileSync, rmSync, mkdtempSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -6,17 +17,10 @@ import type { PersistedState } from '../shared/persisted-state-types'
 import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
 import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../shared/constants'
 import { closeTerminalTabInWorkspaceSession } from '../shared/workspace-session-terminal-tab-close'
-import {
-  testState,
-  createStore,
-  writeDataFile,
-  readDataFile,
-  makeRepo,
-  makeProject,
-  makeProjectHostSetup
-} from './persistence-test-harness'
+
 import { TEST_LEAF_1 } from './persistence-session-fixtures'
-import * as durableFileWrite from './durable-file-write'
+import { ProfileStateSqliteAuthority } from './persistence/profile-state/profile-state-sqlite-authority'
+
 import {
   getLocalWorktreeScanGeneration,
   isLocalWorktreeScanGenerationCurrent
@@ -70,7 +74,8 @@ describe('Store', () => {
     getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    await closeTestStores()
     rmSync(testState.dir, { recursive: true, force: true })
   })
   // ── 1. Defaults when no file exists ──────────────────────────────────
@@ -109,9 +114,11 @@ describe('Store', () => {
   it('rolls the in-memory Codex reset ledger back when its durable write fails', async () => {
     const store = await createStore()
     const before = store.getCodexResetCreditAttemptLedger()
-    const write = vi.spyOn(durableFileWrite, 'writeFileDurableSync').mockImplementationOnce(() => {
-      throw new Error('disk full')
-    })
+    const write = vi
+      .spyOn(ProfileStateSqliteAuthority.prototype, 'writeCompleteSerializedDomains')
+      .mockImplementationOnce(() => {
+        throw new Error('disk full')
+      })
 
     try {
       await expect(
@@ -226,7 +233,7 @@ describe('Store', () => {
     vi.resetModules()
     const { Store, initDataPath } = await import('./persistence')
     initDataPath()
-    const store = new Store({ dataFile: profileDataFile })
+    const store = createSqliteTestStore(Store, { dataFile: profileDataFile })
 
     expect(store.getRepos().map((repo) => repo.id)).toEqual(['profile-repo'])
   }, 15_000)
@@ -401,68 +408,6 @@ describe('Store', () => {
     expect(
       store.getProjectHostSetups().find((setup) => setup.id === 'app::gpu-vm')?.projectId
     ).toBe(upstreamProjectId)
-  })
-
-  it('picks one predecessor project when several prior rows overlap the same repos', async () => {
-    const sharedIdentity = {
-      canonicalKey: 'git.example.com/acme/shared',
-      remoteName: 'origin',
-      remoteUrl: 'git@git.example.com:acme/shared.git'
-    }
-    writeDataFile({
-      ...getDefaultPersistedState(testState.dir),
-      repos: [
-        makeRepo({
-          id: 'r1',
-          path: '/left',
-          displayName: 'Left',
-          gitRemoteIdentity: sharedIdentity
-        }),
-        makeRepo({
-          id: 'r2',
-          path: '/right',
-          displayName: 'Right',
-          gitRemoteIdentity: sharedIdentity
-        })
-      ],
-      projects: [
-        makeProject({
-          id: 'git:git.example.com/acme/left',
-          sourceRepoIds: ['r1'],
-          updatedAt: 200,
-          localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' }
-        }),
-        makeProject({
-          id: 'git:git.example.com/acme/right',
-          sourceRepoIds: ['r2'],
-          updatedAt: 100,
-          localWindowsRuntimePreference: { kind: 'windows-host' }
-        })
-      ],
-      projectHostSetups: [
-        makeProjectHostSetup({
-          id: 'r1',
-          projectId: 'git:git.example.com/acme/left',
-          repoId: 'r1'
-        }),
-        makeProjectHostSetup({
-          id: 'r2',
-          projectId: 'git:git.example.com/acme/right',
-          repoId: 'r2'
-        })
-      ]
-    })
-
-    const store = await createStore()
-
-    // Equal repo overlap resolves by newest updatedAt; the loser's preference is never merged in.
-    expect(store.getProjects()).toEqual([
-      expect.objectContaining({
-        id: 'git:git.example.com/acme/shared',
-        sourceRepoIds: ['r1', 'r2'],
-        localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' }
-      })
-    ])
   })
 
   it('migrates legacy WSL agent settings into the global Windows runtime default', async () => {

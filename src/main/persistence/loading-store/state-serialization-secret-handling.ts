@@ -1,4 +1,7 @@
-import { serializeCompleteProfileStateDomains } from './profile-state-authority-writes'
+import {
+  serializeCompleteProfileStateDomains,
+  serializeSelectiveProfileStateDomains
+} from './profile-state-authority-writes'
 import type { ProfileStateDomainReplacement } from './profile-state-authority'
 import { randomUUID } from 'node:crypto'
 import type { PersistedState } from '../../../shared/persisted-state-types'
@@ -9,6 +12,7 @@ import {
   type ProtectedSecretRetentionUpdate
 } from '../../protected-secret-persistence'
 import { stripRetiredGlobalSettings } from '../applying-settings/terminal-settings-migrations'
+import { LEGACY_OPENCODE_GO_API_KEY_SLOT } from './legacy-opencode-go-api-key-migration'
 import { omitDefaultWorktreeMetaFieldsInMap } from '../../../shared/worktree/meta-persisted-defaults'
 import { projectWorktreeMetaByIdentityOntoLocators } from './worktree-meta-alias-projection'
 import { withoutRedundantPartitionGlobals } from '../../../shared/workspace-session-host-field-ownership'
@@ -35,7 +39,7 @@ export class StateSerializationSecretHandlingOperations {
   /** Serialize domains with complete secret handling; unknown domains fall back to a full write. */
   buildStateDomainsToSave(domains: ReadonlySet<string>):
     | {
-        payload: Buffer
+        replacements: ProfileStateDomainReplacement[]
         protectedSecretUpdates: ProtectedSecretRetentionUpdate[]
       }
     | undefined {
@@ -111,7 +115,7 @@ export class StateSerializationSecretHandlingOperations {
       }
     }
     return {
-      payload: Buffer.from(JSON.stringify(stateToSave), 'utf8'),
+      replacements: serializeSelectiveProfileStateDomains(stateToSave, domains),
       protectedSecretUpdates
     }
   }
@@ -257,10 +261,9 @@ export class StateSerializationSecretHandlingOperations {
         PROTECTED_SECRET_SLOT.opencodeSessionCookie,
         this.runtime.state.settings.opencodeSessionCookie
       ),
-      opencodeGoApiKey: encrypt(
-        PROTECTED_SECRET_SLOT.opencodeGoApiKey,
-        this.runtime.state.settings.opencodeGoApiKey ?? ''
-      ),
+      ...(this.runtime.protectedSecrets.sealedBlob(LEGACY_OPENCODE_GO_API_KEY_SLOT)
+        ? { opencodeGoApiKey: encrypt(LEGACY_OPENCODE_GO_API_KEY_SLOT, '') }
+        : {}),
       httpProxyUrl: encrypt(
         PROTECTED_SECRET_SLOT.httpProxyUrl,
         this.runtime.state.settings.httpProxyUrl ?? ''

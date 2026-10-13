@@ -49,6 +49,10 @@ vi.mock('react', async () => {
   }
 })
 
+vi.mock('./use-tab-strip-slot-props', () => ({
+  useTabStripSlotProps: () => ({ className: '', 'data-tab-strip-slot': '' })
+}))
+
 vi.mock('@dnd-kit/sortable', () => ({
   useSortable: () => ({
     attributes: {},
@@ -259,7 +263,7 @@ async function renderEditorFileTab(
     hasTabsToRight: false,
     hasTabsToLeft: false,
     tabCount: 1,
-    statusByRelativePath: new Map(),
+    gitStatus: null,
     onActivate,
     onClose: () => {},
     onCloseOthers: () => {},

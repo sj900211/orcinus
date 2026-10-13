@@ -26,16 +26,16 @@ it.each([undefined, 2000])('preserves cache writes and explicit totals (%s)', (t
     data: JSON.stringify({ tokens: { input: 100, output: 20, cache: { write: 1000 }, total } })
   }
   expect(parseOpenCodeUsageRow(row)).toMatchObject({
-    cacheWriteTokens: 1000,
+    cacheWriteInputTokens: 1000,
     totalTokens: total ?? 1120
   })
   row.data = JSON.stringify({
     tokens: { input: 100, output: 20, reasoning: 5, cache: { read: 2000, write: 1000 } }
   })
   expect(parseOpenCodeUsageRow(row)).toMatchObject({
-    inputTokens: 100,
-    cachedInputTokens: 2000,
-    cacheWriteTokens: 1000,
+    inputTokens: 3100,
+    cachedInputTokens: 3000,
+    cacheWriteInputTokens: 1000,
     totalTokens: 3125
   })
 })
@@ -58,12 +58,14 @@ it('preserves cache writes from session storage through all snapshot rollups', a
       path,
       await createUsageWorktreeResolver([])
     )
+    const parsed = { cacheWriteInputTokens: 1000, totalTokens: 1120 }
+    expect(sessions[0]).toMatchObject(parsed)
+    expect(sessions[0].modelBreakdown[0]).toMatchObject(parsed)
+    expect(sessions[0].locationBreakdown[0]).toMatchObject(parsed)
+    expect(sessions[0].locationModelBreakdown[0]).toMatchObject(parsed)
+    expect(dailyAggregates[0]).toMatchObject(parsed)
+    // Snapshot rows keep the shared `cacheWriteTokens` name.
     const expected = { cacheWriteTokens: 1000, totalTokens: 1120 }
-    expect(sessions[0]).toMatchObject(expected)
-    expect(sessions[0].modelBreakdown[0]).toMatchObject(expected)
-    expect(sessions[0].locationBreakdown[0]).toMatchObject(expected)
-    expect(sessions[0].locationModelBreakdown[0]).toMatchObject(expected)
-    expect(dailyAggregates[0]).toMatchObject(expected)
     expect(buildOpenCodeUsageSummary('all', 'all', dailyAggregates, sessions)).toMatchObject(
       expected
     )

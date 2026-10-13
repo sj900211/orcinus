@@ -1,9 +1,5 @@
 import type { UISlice, UISliceGet, UISliceSet } from './ui-slice-contract'
 import {
-  DEFAULT_USAGE_NUMBER_FORMAT,
-  normalizeUsageNumberFormat
-} from '../../../../../shared/usage-number-format'
-import {
   DEFAULT_AGENTS_GROUP_BY,
   DEFAULT_AGENTS_READ_FILTER
 } from '../../../../../shared/agents-view-thread-filters'
@@ -42,6 +38,7 @@ import {
   WORKSPACE_BOARD_COLUMN_WIDTH_DEFAULT
 } from '../../../../../shared/workspace-statuses'
 
+/** Builds preference defaults and setters for the UI slice, leaving durable writes to the persistence layer. */
 export function createUiPreferenceActions(set: UISliceSet, get: UISliceGet): Partial<UISlice> {
   return {
     sidebarBody: 'workspaces',
@@ -120,6 +117,19 @@ export function createUiPreferenceActions(set: UISliceSet, get: UISliceGet): Par
     alwaysShowDefaultBranchWorkspace: true,
     setAlwaysShowDefaultBranchWorkspace: (v) => set({ alwaysShowDefaultBranchWorkspace: v }),
 
+    explorerDisplayRootByWorktree: {},
+    /** Stores an explicit root choice while rejecting empty IDs and prototype-related record keys. */
+    setExplorerDisplayRootForWorktree: (worktreeId, value) => {
+      if (!worktreeId || ['__proto__', 'constructor', 'prototype'].includes(worktreeId)) {
+        return
+      }
+      set((s) => ({
+        explorerDisplayRootByWorktree: {
+          ...s.explorerDisplayRootByWorktree,
+          [worktreeId]: value
+        }
+      }))
+    },
     showDotfilesByWorktree: {},
     setShowDotfilesForWorktree: (worktreeId, showDotfiles) =>
       set((s) => {
@@ -298,12 +308,6 @@ export function createUiPreferenceActions(set: UISliceSet, get: UISliceGet): Par
         usagePercentageDisplay: normalized,
         usagePercentageDisplayChangeNoticeDismissed: true
       })
-    },
-    usageNumberFormat: DEFAULT_USAGE_NUMBER_FORMAT,
-    setUsageNumberFormat: (mode) => {
-      const normalized = normalizeUsageNumberFormat(mode)
-      window.api.ui.set({ usageNumberFormat: normalized }).catch(console.error)
-      set({ usageNumberFormat: normalized })
     },
     statusBarUsageMode: DEFAULT_STATUS_BAR_USAGE_MODE,
     setStatusBarUsageMode: (mode) => {

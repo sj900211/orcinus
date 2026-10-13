@@ -19,6 +19,7 @@ import type {
   ConflictReviewEntry,
   ConflictReviewState,
   EditorOpenTargetOptions,
+  EditorTabSelection,
   OpenFile
 } from './open-file'
 import type { OpenFilePathRekey, RekeyOpenFilesResult } from './open-file-path-rekey'
@@ -48,6 +49,7 @@ export type EditorFilesSlice = {
       /** Satellite apply paths: skip the open-interception gate (D5 dungeon,
        *  post-review C7 — the mirror still lists a returning file). */
       suppressSatelliteInterception?: boolean
+      selection?: EditorTabSelection
     }
   ) => string
   /** Satellite TRUE move (dungeon 5, D7): openFile plus an atomic
@@ -109,7 +111,7 @@ export type EditorFilesSlice = {
     relativePath: string,
     language: string,
     staged: boolean,
-    options?: EditorOpenTargetOptions
+    options?: EditorOpenTargetOptions & { selection?: EditorTabSelection }
   ) => void
   openBranchDiff: (
     worktreeId: string,

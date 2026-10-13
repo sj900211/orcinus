@@ -37,7 +37,7 @@ export function buildOpenCodeUsageSummary(
   for (const row of filteredDaily) {
     inputTokens += row.inputTokens
     cachedInputTokens += row.cachedInputTokens
-    cacheWriteTokens += row.cacheWriteTokens ?? 0
+    cacheWriteTokens += row.cacheWriteInputTokens ?? 0
     outputTokens += row.outputTokens
     reasoningOutputTokens += row.reasoningOutputTokens
     totalTokens += row.totalTokens
@@ -87,7 +87,7 @@ export function buildOpenCodeUsageDailyPoints(
     }
     existing.inputTokens += row.inputTokens
     existing.cachedInputTokens += row.cachedInputTokens
-    existing.cacheWriteTokens = (existing.cacheWriteTokens ?? 0) + (row.cacheWriteTokens ?? 0)
+    existing.cacheWriteTokens = (existing.cacheWriteTokens ?? 0) + (row.cacheWriteInputTokens ?? 0)
     existing.outputTokens += row.outputTokens
     existing.reasoningOutputTokens += row.reasoningOutputTokens
     existing.totalTokens += row.totalTokens
@@ -122,7 +122,8 @@ export function buildOpenCodeUsageBreakdownRows(
     existing.events += daily.eventCount
     existing.inputTokens += daily.inputTokens
     existing.cachedInputTokens += daily.cachedInputTokens
-    existing.cacheWriteTokens = (existing.cacheWriteTokens ?? 0) + (daily.cacheWriteTokens ?? 0)
+    existing.cacheWriteTokens =
+      (existing.cacheWriteTokens ?? 0) + (daily.cacheWriteInputTokens ?? 0)
     existing.outputTokens += daily.outputTokens
     existing.reasoningOutputTokens += daily.reasoningOutputTokens
     existing.totalTokens += daily.totalTokens
@@ -172,7 +173,7 @@ export function buildOpenCodeUsageRecentSessions(
     events: session.eventCount,
     inputTokens: session.totalInputTokens,
     cachedInputTokens: session.totalCachedInputTokens,
-    cacheWriteTokens: session.cacheWriteTokens ?? 0,
+    cacheWriteTokens: session.cacheWriteInputTokens ?? 0,
     outputTokens: session.totalOutputTokens,
     reasoningOutputTokens: session.totalReasoningOutputTokens,
     totalTokens: session.totalTokens

@@ -16,6 +16,7 @@ import { downloadRemotePathsToLocalDir } from './local-explorer-download-transfe
 
 type UseFileExplorerDragDropParams = {
   worktreePath: string | null
+  displayRootPath?: string | null
   activeWorktreeId: string | null
   /** SSH connection owning this explorer, or null for a truly-local worktree. A remote (SSH-backed)
    *  explorer's paths live on that host, not this machine, so SFTP download-to-dir is disabled. */
@@ -57,8 +58,10 @@ type UseFileExplorerDragDropResult = {
   clearNativeDragState: () => void
 }
 
+/** Routes background drops to the displayed directory while preserving the worktree context for move operations. */
 export function useFileExplorerDragDrop({
   worktreePath,
+  displayRootPath = worktreePath,
   activeWorktreeId,
   connectionId,
   expanded,
@@ -218,11 +221,11 @@ export function useFileExplorerDragDrop({
         // not the React drop handler. We only clear native drag visual state
         // here; the actual import is triggered from onFileDrop.
         clearNativeDragState()
-        if (worktreePath) {
-          // A remote-origin (SFTP) drag downloads into the worktree root; only if it doesn't claim
+        if (displayRootPath) {
+          // A remote-origin (SFTP) drag downloads into the displayed root; only if it doesn't claim
           // the drop does the internal move run. A remote drag must be checked BEFORE the move loop —
           // its paths are remote POSIX, not local worktree paths.
-          if (onExternalPathsDrop(worktreePath, e.dataTransfer)) {
+          if (onExternalPathsDrop(displayRootPath, e.dataTransfer)) {
             return
           }
           const dragPaths = readWorkspaceFileDragPaths(e.dataTransfer)
@@ -231,11 +234,17 @@ export function useFileExplorerDragDrop({
             return
           }
           for (const sourcePath of dragPaths.paths) {
-            handleMoveDrop(sourcePath, worktreePath)
+            handleMoveDrop(sourcePath, displayRootPath)
           }
         }
       },
-      [worktreePath, handleMoveDrop, stopDragEdgeScroll, clearNativeDragState, onExternalPathsDrop]
+      [
+        displayRootPath,
+        handleMoveDrop,
+        stopDragEdgeScroll,
+        clearNativeDragState,
+        onExternalPathsDrop
+      ]
     )
   }
 

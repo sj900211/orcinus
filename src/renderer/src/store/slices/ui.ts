@@ -10,6 +10,7 @@ import { createUiFeatureActions } from './ui/ui-slice-feature-actions'
 import { createUiTourActions } from './ui/ui-slice-tour-actions'
 import { createUiTrustActions } from './ui/ui-slice-trust-actions'
 import { createUiPreferenceActions } from './ui/ui-slice-preference-actions'
+import { createUiUsageNumberFormatActions } from './ui/ui-slice-usage-number-format-actions'
 import { createUiSurfaceActions } from './ui/ui-slice-surface-actions'
 import { createUiPersistenceActions } from './ui/ui-slice-persistence-actions'
 import { createUiHydrationActions } from './ui/ui-slice-hydration-actions'
@@ -36,6 +37,7 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
     ...createUiTourActions(set, get),
     ...createUiTrustActions(set, get),
     ...createUiPreferenceActions(set, get),
+    ...createUiUsageNumberFormatActions(set, get),
     ...createUiSurfaceActions(set, get),
     ...createUiPersistenceActions(set, get),
     ...createUiHydrationActions(set, get),

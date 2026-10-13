@@ -134,14 +134,14 @@ function createDeps(overrides: Record<string, unknown> = {}) {
 // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
 
 describe('connectPanePty', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules()
     vi.clearAllMocks()
     transportFactoryQueue = []
     createdTransportOptions = []
     storeSubscribers = []
     mockStoreState = createInitialStoreState(() => mockStoreState)
-    installTerminalTestGlobals()
+    await installTerminalTestGlobals()
   })
 
   afterEach(async () => {
@@ -225,7 +225,7 @@ describe('connectPanePty', () => {
         agentToolName: 'Edit',
         agentToolInput: 'src/main/ipc/notifications.ts',
         agentLastAssistantMessage: 'Implemented the formatter.',
-        agentInterrupted: false
+        agentTurnOutcome: undefined
       })
     )
   })

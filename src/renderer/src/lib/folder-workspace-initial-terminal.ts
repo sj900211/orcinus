@@ -8,7 +8,8 @@ import { ensureWorktreeHasInitialTerminal } from '@/lib/worktree-initial-termina
 export function ensureFolderWorkspaceInitialTerminal(
   folderWorkspace: FolderWorkspace,
   startup?: WorktreeStartupPayload,
-  providesInitialSurface?: boolean
+  providesInitialSurface?: boolean,
+  seedUserDefaultSurface?: boolean
 ): string | null {
   if (providesInitialSurface === true && startup === undefined) {
     return null
@@ -22,7 +23,10 @@ export function ensureFolderWorkspaceInitialTerminal(
     undefined,
     undefined,
     undefined,
-    { reseedEmptiedWorkspace: providesInitialSurface !== true }
+    {
+      reseedEmptiedWorkspace: providesInitialSurface !== true,
+      ...(seedUserDefaultSurface ? { seedUserDefaultSurface: true } : {})
+    }
   )
   return primaryTabId
 }

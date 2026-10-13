@@ -147,14 +147,14 @@ function notifyStoreSubscribers(): void {
 }
 
 describe('connectPanePty', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules()
     vi.clearAllMocks()
     transportFactoryQueue = []
     createdTransportOptions = []
     storeSubscribers = []
     mockStoreState = createInitialStoreState(() => mockStoreState)
-    installTerminalTestGlobals()
+    await installTerminalTestGlobals()
   })
 
   afterEach(async () => {
@@ -699,7 +699,7 @@ describe('connectPanePty', () => {
     expect('agentToolName' in dispatchArgs).toBe(false)
     expect('agentToolInput' in dispatchArgs).toBe(false)
     expect('agentLastAssistantMessage' in dispatchArgs).toBe(false)
-    expect('agentInterrupted' in dispatchArgs).toBe(false)
+    expect('agentTurnOutcome' in dispatchArgs).toBe(false)
   })
 
   // Why: agent-row removal belongs to process/PTY lifecycle, not title reversion, so interrupts can't disappear the activity row.

@@ -24,6 +24,7 @@ export type TreeNode = {
 
 /** Why no `loading` here: see file-explorer-loading-dirs.ts — identity changes re-walk the tree. */
 export type DirCache = {
+  error?: string
   children: TreeNode[]
   operationOwner?: FileExplorerOperationOwner
 }

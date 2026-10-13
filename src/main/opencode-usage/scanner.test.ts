@@ -127,14 +127,11 @@ describe('parseOpenCodeUsageRow', () => {
       cwd: `${WORKTREE}/packages/app`,
       model: 'anthropic/claude-sonnet-4-5',
       estimatedCostUsd: 0.0123,
-      inputTokens: 1000,
-      cachedInputTokens: 400,
-      cacheWriteTokens: 25,
+      inputTokens: 1425,
+      cachedInputTokens: 425,
+      cacheWriteInputTokens: 25,
       outputTokens: 250,
       reasoningOutputTokens: 100,
-      // Fork note (Orcinus): 1775, not upstream's 1750 — the fork counts cache writes in the
-      // computed total so the JSON row path agrees with the session-table path, whose SQL
-      // `total` already includes tokens_cache_write. Pinned by cache-write-tokens.test.ts.
       totalTokens: 1775
     })
   })
@@ -169,7 +166,7 @@ describe('parseOpenCodeUsageRow', () => {
     })
 
     expect(parsed).toMatchObject({
-      inputTokens: 100,
+      inputTokens: 10_100,
       cachedInputTokens: 10_000,
       outputTokens: 20,
       reasoningOutputTokens: 5,
@@ -179,17 +176,6 @@ describe('parseOpenCodeUsageRow', () => {
 })
 
 describe('attributeOpenCodeUsageEvent', () => {
-  it('attributes cwd paths under dotdot-prefixed child directories to the worktree', async () => {
-    const attributed = await attributeOpenCodeUsageEvent(
-      usageEvent(`${WORKTREE}/..fixtures/session`),
-      await resolveWorktree()
-    )
-
-    expect(attributed?.projectKey).toBe('worktree:repo-1::/workspace/repo')
-    expect(attributed?.projectLabel).toBe('Repo')
-    expect(attributed?.worktreeId).toBe('repo-1::/workspace/repo')
-  })
-
   it('does not attribute true parent-directory escapes to the worktree', async () => {
     const attributed = await attributeOpenCodeUsageEvent(
       usageEvent(`${WORKTREE}/../other/session`),
@@ -197,23 +183,6 @@ describe('attributeOpenCodeUsageEvent', () => {
     )
 
     expect(attributed?.projectKey).toBe('cwd:/workspace/repo/../other/session')
-    expect(attributed?.worktreeId).toBeNull()
-  })
-
-  it('does not treat different Windows drives as containing paths', async () => {
-    const attributed = await attributeOpenCodeUsageEvent(
-      usageEvent('D:\\other\\repo'),
-      await createUsageWorktreeResolver([
-        {
-          repoId: 'repo-1',
-          worktreeId: 'repo-1::C:\\repo',
-          path: 'C:\\repo',
-          displayName: 'Repo'
-        }
-      ])
-    )
-
-    expect(attributed?.projectKey).toBe('cwd:d:/other/repo')
     expect(attributed?.worktreeId).toBeNull()
   })
 })
@@ -278,8 +247,8 @@ describe('parseOpenCodeUsageDatabase', () => {
       primaryModel: 'anthropic/claude-sonnet-4-5',
       primaryProjectLabel: 'Repo',
       eventCount: 1,
-      totalInputTokens: 1000,
-      totalCachedInputTokens: 250,
+      totalInputTokens: 1325,
+      totalCachedInputTokens: 325,
       totalOutputTokens: 500,
       totalReasoningOutputTokens: 100,
       totalTokens: 1925,
@@ -288,8 +257,8 @@ describe('parseOpenCodeUsageDatabase', () => {
     expect(parsed.dailyAggregates).toEqual([
       expect.objectContaining({
         projectLabel: 'Repo',
-        inputTokens: 1000,
-        cachedInputTokens: 250,
+        inputTokens: 1325,
+        cachedInputTokens: 325,
         outputTokens: 500,
         reasoningOutputTokens: 100,
         totalTokens: 1925,

@@ -1,7 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
 import type { CommandHandler } from '../dispatch'
 import { printResult } from '../format'
 import { rejectRemoteSelectionFlags } from '../remote-selection-flag-rejection'
@@ -12,11 +9,8 @@ import {
   getDefaultUserDataPath
 } from '../runtime-client'
 import type { AgentHookInstallStatus } from '../../shared/agent-hook-types'
-import { getDefaultPersistedState } from '../../shared/constants'
-import { normalizeDisabledTuiAgents } from '../../shared/tui-agent-selection'
+import { DEFAULT_LOCAL_ORCA_PROFILE_ID } from '../../shared/orca-profiles'
 import type { GlobalSettings } from '../../shared/global-settings-types'
-import type { PersistedState } from '../../shared/persisted-state-types'
-import { prepareManagedCodexHomeBeforeShellLaunch } from '../../main/codex/managed-home-shell-preflight'
 import type { ProfileStateOfflineLocation } from '../../main/persistence/profile-state/profile-state-offline-settings'
 
 type AgentHookCommandResult = {
@@ -40,44 +34,12 @@ async function getProfileStateLocation(): Promise<ProfileStateOfflineLocation | 
   return getActiveProfileStateLocation()
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function readPersistedState(dataPath: string): PersistedState {
-  if (!existsSync(dataPath)) {
-    return getDefaultPersistedState(homedir())
-  }
-  try {
-    const parsed = JSON.parse(readFileSync(dataPath, 'utf-8'))
-    if (!isRecord(parsed)) {
-      throw new Error('file does not contain a JSON object')
-    }
-    return parsed as PersistedState
-  } catch (error) {
-    throw new RuntimeClientError(
-      'runtime_error',
-      `Could not read ${dataPath}: ${error instanceof Error ? error.message : String(error)}`
-    )
-  }
-}
-
-function writePersistedState(dataPath: string, state: PersistedState): void {
-  mkdirSync(dirname(dataPath), { recursive: true })
-  const tmpPath = join(dirname(dataPath), `.${Date.now()}-${randomUUID()}.tmp`)
-  let renamed = false
-  try {
-    writeFileSync(tmpPath, `${JSON.stringify(state, null, 2)}\n`, 'utf-8')
-    renameSync(tmpPath, dataPath)
-    renamed = true
-  } finally {
-    if (!renamed && existsSync(tmpPath)) {
-      try {
-        unlinkSync(tmpPath)
-      } catch {
-        // best effort
-      }
-    }
+function legacyProfileStateLocation(): ProfileStateOfflineLocation {
+  const userDataPath = getDefaultUserDataPath()
+  return {
+    dataFile: join(userDataPath, 'orca-data.json'),
+    databaseFile: join(userDataPath, 'profile-state.db'),
+    profileId: DEFAULT_LOCAL_ORCA_PROFILE_ID
   }
 }
 
@@ -97,46 +59,23 @@ async function readHookSettingsFromDisk(): Promise<
 async function readAdmittedHookSettingsFromDisk(): Promise<
   Pick<GlobalSettings, 'agentStatusHooksEnabled' | 'disabledTuiAgents'>
 > {
-  const profileStateLocation = await getProfileStateLocation()
-  if (profileStateLocation) {
-    const { readAgentHookSettingsFromProfileState } =
-      await import('../../main/persistence/profile-state/profile-state-offline-settings.js')
-    return readAgentHookSettingsFromProfileState(profileStateLocation)
-  }
-  const state = readPersistedState(await getDataPath())
-  return {
-    agentStatusHooksEnabled: state.settings?.agentStatusHooksEnabled !== false,
-    disabledTuiAgents: normalizeDisabledTuiAgents(state.settings?.disabledTuiAgents)
-  }
-}
-
-async function readHookSettings(
-  client: RuntimeClient
-): Promise<Pick<GlobalSettings, 'agentStatusHooksEnabled' | 'disabledTuiAgents'>> {
-  try {
-    const response = await client.call<{
-      settings?: Pick<GlobalSettings, 'agentStatusHooksEnabled' | 'disabledTuiAgents'>
-    }>('settings.get', undefined, { timeoutMs: 1_000 })
-    const settings = response.result.settings
-    if (settings && typeof settings.agentStatusHooksEnabled === 'boolean') {
-      return {
-        agentStatusHooksEnabled: settings.agentStatusHooksEnabled,
-        disabledTuiAgents: normalizeDisabledTuiAgents(settings.disabledTuiAgents)
-      }
-    }
-  } catch {
-    // The active profile on disk is the offline fallback.
-  }
-  return readHookSettingsFromDisk()
+  const { readAgentHookSettingsFromProfileState } =
+    await import('../../main/persistence/profile-state/profile-state-offline-settings.js')
+  return readAgentHookSettingsFromProfileState(
+    (await getProfileStateLocation()) ?? legacyProfileStateLocation()
+  )
 }
 
 async function updateEnabledOnDisk(enabled: boolean): Promise<{
   settingsPath: string
   settings: Pick<GlobalSettings, 'agentCmdOverrides' | 'disabledTuiAgents'>
 }> {
+  const { assertOfflineProfileStateMutationRuntime } =
+    await import('../../main/persistence/profile-state/profile-state-offline-settings.js')
+  assertOfflineProfileStateMutationRuntime()
   const { acquireProfileStateMaintenance } =
     await import('../../main/persistence/profile-state/profile-state-access.js')
-  // A stopped-status response cannot exclude first migration racing this JSON write.
+  // A stopped-status response cannot exclude startup racing the first import.
   const maintenance = acquireProfileStateMaintenance(getDefaultUserDataPath())
   try {
     return await updateAdmittedEnabledOnDisk(enabled)
@@ -149,27 +88,29 @@ async function updateAdmittedEnabledOnDisk(enabled: boolean): Promise<{
   settingsPath: string
   settings: Pick<GlobalSettings, 'agentCmdOverrides' | 'disabledTuiAgents'>
 }> {
-  const profileStateLocation = await getProfileStateLocation()
-  if (profileStateLocation) {
-    const { updateAgentHookSettingsFromProfileState } =
-      await import('../../main/persistence/profile-state/profile-state-offline-settings.js')
-    return updateAgentHookSettingsFromProfileState(profileStateLocation, enabled)
-  }
-  const dataPath = await getDataPath()
-  const state = readPersistedState(dataPath)
-  state.settings = {
-    ...getDefaultPersistedState(homedir()).settings,
-    ...state.settings,
-    agentStatusHooksEnabled: enabled
-  }
-  writePersistedState(dataPath, state)
-  return {
-    settingsPath: dataPath,
-    settings: {
-      agentCmdOverrides: state.settings.agentCmdOverrides ?? {},
-      disabledTuiAgents: state.settings.disabledTuiAgents ?? []
+  const { updateAgentHookSettingsFromProfileState, readAgentHookSettingsFromProfileState } =
+    await import('../../main/persistence/profile-state/profile-state-offline-settings.js')
+  let location = await getProfileStateLocation()
+  if (!location) {
+    const legacy = legacyProfileStateLocation()
+    const { classifyProfileStateStorage } =
+      await import('../../main/persistence/profile-state/profile-state-storage-classification.js')
+    const storage = classifyProfileStateStorage(legacy.dataFile, legacy.databaseFile)
+    if (storage !== 'json-only' && storage !== 'neither') {
+      throw new RuntimeClientError('runtime_error', 'Profile state has no active profile index.')
+    }
+    // Validate retained recovery evidence and source bytes before creating the index.
+    readAgentHookSettingsFromProfileState(legacy)
+    const { ensureActiveOrcaProfile } =
+      await import('../../main/orca-profiles/profile-index-store.js')
+    const profile = ensureActiveOrcaProfile(getDefaultUserDataPath())
+    location = {
+      dataFile: profile.dataFile,
+      databaseFile: profile.stateDatabaseFile,
+      profileId: profile.profile.id
     }
   }
+  return updateAgentHookSettingsFromProfileState(location, enabled)
 }
 
 async function updateRunningRuntime(client: RuntimeClient, enabled: boolean): Promise<boolean> {
@@ -235,28 +176,23 @@ async function setAgentHooksEnabled(
 export const AGENT_HOOK_HANDLERS: Record<string, CommandHandler> = {
   'agent hooks prepare-codex': async ({ client, flags }) => {
     rejectRemoteHookSelection(flags)
-    if (process.env.WSL_DISTRO_NAME?.trim()) {
-      try {
-        await client.call(
-          'agentHooks.prepareCodexForWslPane',
-          {
-            codexHome: process.env.CODEX_HOME ?? '',
-            orcaCodexHome: process.env.ORCA_CODEX_HOME ?? '',
-            wslDistro: process.env.WSL_DISTRO_NAME
-          },
-          { timeoutMs: WSL_CODEX_PREPARE_TIMEOUT_MS }
-        )
-      } catch {
-        // Best effort: old or unavailable runtimes must not block Codex launch.
-      }
+    if (!process.env.WSL_DISTRO_NAME?.trim()) {
+      // Why a no-op: native pane wrappers from builds up to v1.4.216 still call it; delete once no supported build's wrapper does.
       return
     }
-    const settings = await readHookSettings(client)
-    await prepareManagedCodexHomeBeforeShellLaunch({
-      userDataPath: getDefaultUserDataPath(),
-      hooksEnabled:
-        settings.agentStatusHooksEnabled && !settings.disabledTuiAgents.includes('codex')
-    })
+    try {
+      await client.call(
+        'agentHooks.prepareCodexForWslPane',
+        {
+          codexHome: process.env.CODEX_HOME ?? '',
+          orcaCodexHome: process.env.ORCA_CODEX_HOME ?? '',
+          wslDistro: process.env.WSL_DISTRO_NAME
+        },
+        { timeoutMs: WSL_CODEX_PREPARE_TIMEOUT_MS }
+      )
+    } catch {
+      // Best effort: old or unavailable runtimes must not block Codex launch.
+    }
   },
   'agent hooks status': async ({ json, flags }) => {
     rejectRemoteHookSelection(flags)

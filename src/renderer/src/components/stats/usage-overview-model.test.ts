@@ -89,8 +89,8 @@ describe('usage overview model', () => {
       range: '30d',
       sessions: 1,
       events: 2,
-      inputTokens: 1_000,
-      cachedInputTokens: 250,
+      inputTokens: 2_250,
+      cachedInputTokens: 1_250,
       cacheWriteTokens: 1_000,
       outputTokens: 500,
       reasoningOutputTokens: 100,
@@ -137,8 +137,8 @@ describe('usage overview model', () => {
     const openCodeDaily: OpenCodeUsageDailyPoint[] = [
       {
         day: '2026-05-15',
-        inputTokens: 1_000,
-        cachedInputTokens: 250,
+        inputTokens: 2_250,
+        cachedInputTokens: 1_250,
         cacheWriteTokens: 1_000,
         outputTokens: 500,
         reasoningOutputTokens: 100,

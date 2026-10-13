@@ -13,7 +13,7 @@ import {
   refreshTerminalProviderSnapshotCapabilities
 } from '../components/terminal/terminal-provider-snapshot-capability'
 import { isRuntimeOwnedSshTargetId } from '../../../shared/execution-host'
-import { restoreLocalStructuredSessionTabsOnce } from '../runtime/local-structured-session-tabs-sync'
+import { restoreLocalStructuredChatsAtStartup } from '../runtime/local-structured-chats'
 import { sweepRestoredCodexPanesForStaleAccounts } from '../lib/codex-stale-pane-sweep'
 import type { WindowBootContext } from '../startup/window-boot-context'
 import type { useStartupActions } from './use-app-startup-actions'
@@ -85,11 +85,9 @@ export async function runStartupReconnectForWindowRole(
     await timeRendererStartupStep('recover-legacy-worker-terminals-post-reconnect', () =>
       window.api.app.recoverLegacyWorkerTerminalsForRendererStartup()
     )
-    if (useAppStore.getState().settings?.experimentalStructuredNativeChat === true) {
-      await timeRendererStartupStep('project-structured-session-tabs', () =>
-        restoreLocalStructuredSessionTabsOnce()
-      )
-    }
+    await restoreLocalStructuredChatsAtStartup(useAppStore.getState().settings, (restore) =>
+      timeRendererStartupStep('project-structured-session-tabs', restore)
+    )
     if (args.isCancelled()) {
       return { status: 'cancelled', reconnectStarted }
     }

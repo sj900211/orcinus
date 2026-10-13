@@ -2,6 +2,7 @@ import { captureEditorFileOperationProvenance } from '@/lib/editor-file-operatio
 import { areLocalWindowsWslPathAliases } from '../../../shared/cross-platform-path'
 import { getRendererWindowSurface } from '@/lib/renderer-window-surface'
 import type { OpenFile } from '@/store/slices/editor'
+import type { EditorTabSelection } from '@/store/slices/editor/types/open-file'
 import type { AppState } from '@/store/types'
 
 // Open-interception gate (dungeon 5, spec 2 / decisions D8+D17): consulted as
@@ -17,7 +18,11 @@ export function interceptSatelliteResidentOpen(
   state: AppState,
   file: Omit<OpenFile, 'id' | 'isDirty'>,
   options:
-    | { suppressActiveRuntimeFallback?: boolean; suppressSatelliteInterception?: boolean }
+    | {
+        suppressActiveRuntimeFallback?: boolean
+        suppressSatelliteInterception?: boolean
+        selection?: EditorTabSelection
+      }
     | undefined,
   helpers: {
     /** Re-dispatch the original open with interception suppressed (stale-mirror fallback). */
@@ -95,6 +100,10 @@ export function interceptSatelliteResidentOpen(
     // the live registry (the renderer mirror is two async hops stale).
     // D17: hidden-by-subordination satellites are raised too (raise overrides
     // subordination by design — the user asked for the file).
+    // Why: a background/none open (CLI without --focus) must not raise a window; the file is already open there.
+    if (options?.selection === 'background' || options?.selection === 'none') {
+      return match.filePath
+    }
     const activation = window.api.satelliteWindow.activateFile?.(entry.satelliteId, {
       filePath: match.filePath,
       relativePath: match.relativePath,

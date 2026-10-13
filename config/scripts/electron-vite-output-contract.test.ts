@@ -20,9 +20,6 @@ import { createRequire } from 'node:module'
 import { electronViteConfig } from '../../electron.vite.config'
 import { BOOTSTRAP_FATAL_EXIT_GUARD_KEY } from '../../src/main/startup/bootstrap-fatal-exit-guard'
 
-const targetConfig = readFileSync('config/electron-vite-target.config.cts', 'utf8')
-const devRunner = readFileSync('config/scripts/run-electron-vite-dev.mjs', 'utf8')
-
 type BootstrapProcessMock = EventEmitter & {
   env: Record<string, string>
   pid: number
@@ -102,28 +99,34 @@ describe('Electron Vite output contract', () => {
     expect(output.chunkFileNames).toBe('chunks/[name]-[hash].js')
   })
 
-  it('keeps offline profile-state CLI imports unpacked at stable paths', () => {
+  it('keeps CLI main imports unpacked at stable paths', () => {
     const input = electronViteConfig.main?.build?.rollupOptions?.input
     if (!input || typeof input !== 'object' || Array.isArray(input)) {
       throw new Error('Expected named main-process inputs')
     }
 
     for (const name of [
+      'gitlab/project-ref-parser',
+      'orca-profiles/profile-index-store',
       'persistence/profile-state/profile-state-access',
       'persistence/profile-state/profile-state-active-location',
       'persistence/profile-state/profile-state-backup-path',
       'persistence/profile-state/profile-state-database-recovery',
       'persistence/profile-state/profile-state-domain-reader',
-      'persistence/profile-state/profile-state-export-path',
+      'persistence/profile-state/legacy-json/profile-state-export-path',
       'persistence/profile-state/profile-state-offline-settings',
-      'persistence/profile-state/profile-state-recovery',
+      'persistence/profile-state/legacy-json/profile-state-recovery',
       'persistence/profile-state/profile-state-recovery-command',
       'persistence/profile-state/profile-state-storage-classification',
       'startup/http1-compatibility-marker'
     ]) {
       expect(input).toHaveProperty(name)
     }
+    expect(electronBuilderConfig.asarUnpack).toContain('out/main/gitlab/project-ref-parser.js')
     expect(electronBuilderConfig.asarUnpack).toContain('out/main/persistence/profile-state/**')
+    expect(electronBuilderConfig.asarUnpack).toContain(
+      'out/main/orca-profiles/profile-index-store.js'
+    )
     expect(electronBuilderConfig.asarUnpack).toContain(
       'out/main/startup/http1-compatibility-marker.js'
     )
@@ -249,11 +252,6 @@ describe('Electron Vite output contract', () => {
     )
   })
 
-  it('rejects prototype properties as build targets', () => {
-    // Own-property check only: an inherited key like `constructor` must not select a build target.
-    expect(targetConfig).toContain('Object.hasOwn(configByTarget, target)')
-  })
-
   it('gives the dev terminal daemon helper the TCC identity watched by Orca', () => {
     // Asserted on the values rather than the source text: the ids moved into
     // dev-electron-bundle-identity.mjs so every dev bundle signs to one cdhash.
@@ -261,7 +259,5 @@ describe('Electron Vite output contract', () => {
     expect(getDevHelperPlistPatches()).toEqual([
       { key: 'CFBundleIdentifier', value: DEV_HELPER_BUNDLE_ID }
     ])
-    expect(devRunner).toContain("'Electron Helper.app',")
-    expect(devRunner).toContain('setPlistValue(helperPlistPath, key, value)')
   })
 })

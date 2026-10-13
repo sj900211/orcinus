@@ -37,7 +37,7 @@ import type { ServeOptions } from './main-process-serve'
 import type { HangDetectionMarker } from '../hang-watchdog/hang-detection-marker'
 import { ServeReadinessPublisher } from '../server/serve-readiness'
 import { SkillShareDeepLinkState } from './skill-share-deep-link-state'
-import { OsOpenedMarkdownFileState } from './os-opened-markdown-files'
+import { OsOpenedDocumentState } from './os-opened-documents'
 import {
   DEFAULT_GPU_CRASH_FALLBACK_THRESHOLD,
   DEFAULT_GPU_CRASH_FALLBACK_WINDOW_MS,
@@ -46,13 +46,11 @@ import {
 import type { GpuCrashDiagnosticsRecorder } from '../crash-reporting/gpu-crash-diagnostics'
 import { createWebContentsTimedFlag } from './web-contents-timed-flag'
 import type { ProfileStateStorageClassification } from '../persistence/profile-state/profile-state-storage-classification'
-import type { ProfileStateStoreAuthorityMode } from '../persistence/profile-state/profile-state-store-factory'
 import type { ProfileStateRuntimeAdmission } from '../persistence/profile-state/profile-state-access'
 
 export type ProfileStateStartupMetadata = {
-  backend: 'json' | 'sqlite'
+  backend: 'sqlite'
   classification: ProfileStateStorageClassification
-  authorityMode: ProfileStateStoreAuthorityMode
   runtime: 'desktop' | 'orcad'
   migrated: boolean
 }
@@ -117,11 +115,11 @@ export const mainProcessState = {
   pendingOpenSettings: createWebContentsTimedFlag(),
   skillShareDeepLinks: new SkillShareDeepLinkState(),
   // Why: a Finder/Explorer "Open With" can land before any window exists; the renderer pulls this buffer on mount.
-  osOpenedMarkdownFiles: new OsOpenedMarkdownFileState(),
+  osOpenedDocuments: new OsOpenedDocumentState(),
   // Why a latch and not just "a window exists": a window can be up while its renderer has not
   // attached the ui:openMarkdownFiles listener yet, and a push into that gap is dropped by
   // Electron with no error. Only the renderer's own pull proves the listener is live.
-  markdownFileOpenListenerReady: false,
+  osDocumentOpenListenerReady: false,
   firstWindowStartupServicesReady: Promise.resolve(),
   // Why published: the default-session proxy must be applied before the first app-owned fetcher,
   // but window creation has no reason to queue behind it (the request guard already fences it).

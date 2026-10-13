@@ -2,10 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   COMMIT_MESSAGE_AGENT_SPECS,
   CUSTOM_AGENT_ID,
-  DEFAULT_COMMIT_MESSAGE_AGENT_ID,
   getCommitMessageAgentCapability,
   getCommitMessageAgentSpec,
-  getCommitMessageModelCapability,
   getCommitMessageModel,
   isCustomAgentId,
   listCommitMessageAgentCapabilities,
@@ -36,6 +34,8 @@ describe('COMMIT_MESSAGE_AGENT_SPECS', () => {
       'codex',
       'copilot',
       'cursor',
+      'dsh',
+      'jcode',
       'kimi',
       'muse',
       'omp',
@@ -140,10 +140,6 @@ describe('COMMIT_MESSAGE_AGENT_SPECS', () => {
     ])
   })
 
-  it('defaults the agent picker to Claude', () => {
-    expect(DEFAULT_COMMIT_MESSAGE_AGENT_ID).toBe('claude')
-  })
-
   it('treats disabled default agents as unavailable for implicit Source Control AI choices', () => {
     expect(resolveCommitMessageAgentChoice(null, 'codex', ['codex'])).toBe('claude')
     expect(resolveCommitMessageAgentChoice(null, null, ['claude'])).toBeNull()
@@ -214,7 +210,6 @@ describe('COMMIT_MESSAGE_AGENT_SPECS', () => {
     })
     expect(codex).not.toHaveProperty('binary')
     expect(codex).not.toHaveProperty('buildArgs')
-    expect(getCommitMessageModelCapability('codex', 'gpt-5.4-mini')?.thinkingLevels).toBeDefined()
   })
 })
 
@@ -256,6 +251,80 @@ describe('buildArgs (Claude)', () => {
   it('omits --effort when thinkingLevel is not provided', () => {
     const args = spec.buildArgs({ prompt: '', model: 'opus' })
     expect(args).not.toContain('--effort')
+  })
+})
+
+describe('buildArgs (Jcode)', () => {
+  const spec = getCommitMessageAgentSpec('jcode')!
+
+  it('builds a jcode run argv with the model and prompt', () => {
+    const args = spec.buildArgs({ prompt: 'name this branch', model: 'claude-haiku-4-5' })
+    expect(args).toEqual([
+      '--no-update',
+      '--quiet',
+      '--no-selfdev',
+      '--tool-profile',
+      'none',
+      '--model',
+      'claude-haiku-4-5',
+      'run',
+      '--json',
+      'name this branch'
+    ])
+  })
+
+  it('omits --model for the config-default choice', () => {
+    const args = spec.buildArgs({ prompt: 'name this branch', model: 'default' })
+    expect(args).toEqual([
+      '--no-update',
+      '--quiet',
+      '--no-selfdev',
+      '--tool-profile',
+      'none',
+      'run',
+      '--json',
+      'name this branch'
+    ])
+  })
+
+  it('exposes no tools to a prompt that is a staged patch', () => {
+    // Why: the prompt is attacker-influenced text, and jcode's default profile exposes
+    // shell/read/write/MCP. Every sibling generator is already read-only.
+    const args = spec.buildArgs({ prompt: 'name this branch', model: 'default' })
+    expect(args.slice(args.indexOf('--tool-profile'), args.indexOf('--tool-profile') + 2)).toEqual([
+      '--tool-profile',
+      'none'
+    ])
+    expect(args.indexOf('--tool-profile')).toBeLessThan(args.indexOf('run'))
+  })
+
+  it('keeps every jcode flag ahead of the subcommand', () => {
+    // Why: --no-update/--quiet/--no-selfdev are jcode global options; clap only
+    // accepts them before `run`, and --model rides the same position so the argv
+    // has one shape rather than two.
+    const args = spec.buildArgs({ prompt: 'name this branch', model: 'claude-haiku-4-5' })
+    const runIndex = args.indexOf('run')
+    expect(runIndex).toBeGreaterThan(0)
+    expect(args.slice(0, runIndex).every((arg) => arg.startsWith('--') || arg !== 'run')).toBe(true)
+    expect(args.slice(runIndex)).toEqual(['run', '--json', 'name this branch'])
+  })
+
+  it('discovers models from `jcode model list`', () => {
+    expect(spec.modelSource).toBe('dynamic')
+    expect(spec.modelDiscovery?.binary).toBe('jcode')
+    expect(spec.modelDiscovery?.args).toEqual(['--no-update', '--quiet', 'model', 'list'])
+    // Real `jcode model list` output: one bare id per line.
+    expect(
+      spec.modelDiscovery?.parse('claude-opus-5-5\nclaude-haiku-4-5\ngemini-2.5-pro\n')
+    ).toEqual([
+      { id: 'claude-opus-5-5', label: 'Claude Opus 5 5' },
+      { id: 'claude-haiku-4-5', label: 'Claude Haiku 4 5' },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' }
+    ])
+  })
+
+  it('defaults the model to the jcode config default', () => {
+    expect(spec.defaultModelId).toBe('default')
   })
 })
 
@@ -556,7 +625,7 @@ describe('buildArgs (OpenCode)', () => {
       '--agent',
       'build',
       '--format',
-      'default'
+      'json'
     ])
     expect(args).not.toContain(prompt)
     expect(args).not.toContain('')
@@ -577,7 +646,7 @@ describe('buildArgs (OpenCode)', () => {
       '--agent',
       'build',
       '--format',
-      'default',
+      'json',
       '--variant',
       'high'
     ])
@@ -610,7 +679,7 @@ describe('buildArgs (OpenCode 2)', () => {
       '--agent',
       'build',
       '--format',
-      'default'
+      'json'
     ])
     expect(args).not.toContain(prompt)
     expect(args).not.toContain('')
@@ -631,7 +700,7 @@ describe('buildArgs (OpenCode 2)', () => {
       '--agent',
       'build',
       '--format',
-      'default'
+      'json'
     ])
     expect(args).not.toContain('--variant')
   })

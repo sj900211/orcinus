@@ -21,7 +21,9 @@ import { useRemoteRuntimeRecoveryTriggers } from '../runtime/use-remote-runtime-
 import { useWorktreeTakeoverNavigation } from './use-worktree-takeover-navigation'
 import { useProjectWindowActiveProjectSync } from './use-project-window-active-project-sync'
 import { useSatelliteWorktreeSync } from './use-satellite-worktree-sync'
+import { useTerminalViewerColorPublication } from './use-terminal-viewer-color-publication'
 import { useBrowserIdentityMigrationNotice } from '../components/browser-pane/browser-user-agent-migration-notice'
+import { useCodexTerminalServerIsolationNotice } from '../components/terminal-pane/codex-terminal-server-isolation-notice'
 
 /**
  * App-level subscriptions that must outlive any individual surface. Each one is here because
@@ -49,6 +51,7 @@ export function useAppShellServices(options: { floatingPanelVisible: boolean }):
   // subordinate satellite windows hide/show with the active workspace (spec 5).
   useSatelliteWorktreeSync()
   useRemoteRuntimeRecoveryTriggers()
+  useTerminalViewerColorPublication()
   useAutomationDispatchEvents()
   // Why: git polling lives at App level (RightSidebar unmounts when closed, stranding stale Rebasing/Merging badges); gate on workspaceSessionReady so it doesn't compete with first paint.
   useGitStatusPolling({ enabled: workspaceSessionReady })
@@ -62,4 +65,5 @@ export function useAppShellServices(options: { floatingPanelVisible: boolean }):
   usePrimarySelectionPaste(primarySelectionMiddleClickPaste)
   useOsc52ClipboardDefaultOnNotice(persistedUIReady)
   useBrowserIdentityMigrationNotice()
+  useCodexTerminalServerIsolationNotice()
 }
