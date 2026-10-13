@@ -1,8 +1,11 @@
 import { mkdir, rename, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { SFTPWrapper, Stats } from 'ssh2'
-import { fastGetViaSftp, readDirViaSftp } from '../providers/ssh-filesystem-provider-sftp'
+import type { FileEntryWithStats, SFTPWrapper, Stats } from 'ssh2'
+import {
+  fastGetViaSftp,
+  readDirectoryEntriesViaSftp
+} from '../providers/ssh-filesystem-provider-sftp'
 import { sanitizeLocalDownloadFilename } from '../local-download-filename'
 
 type DownloadOptions = {
@@ -73,7 +76,13 @@ export async function downloadDirectory(
 ): Promise<void> {
   options?.signal?.throwIfAborted()
   await mkdir(localDir, { recursive: true })
-  const entries = await readDirViaSftp(sftp, remoteDir, { signal: options?.signal })
+  // Why collect first: the directory handle closes before the recursive transfers reuse the channel.
+  const entries: FileEntryWithStats[] = []
+  for await (const entry of readDirectoryEntriesViaSftp(sftp, remoteDir, {
+    signal: options?.signal
+  })) {
+    entries.push(entry)
+  }
   const parent = remoteDir.endsWith('/') ? remoteDir.slice(0, -1) : remoteDir
   for (const entry of entries) {
     if (entry.filename === '.' || entry.filename === '..') {

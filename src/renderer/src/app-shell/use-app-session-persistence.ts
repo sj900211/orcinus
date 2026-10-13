@@ -27,6 +27,7 @@ import { registerSessionCheckpointRequestListener } from '../lib/session-checkpo
 import { stageProjectWindowSessionHandback } from '../lib/project-window-session-handback'
 import { registerProjectWindowSessionHandbackReceiver } from '../lib/project-window-session-handback-receiver'
 import { createShutdownCheckpointPersist } from './shutdown-checkpoint-persist'
+import { stageWorkspaceSessionCheckpoint } from './workspace-session-checkpoint-stage'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
 import {
   dispatchWindowCloseRequest,
@@ -47,55 +48,6 @@ import { applyRemoteWorkspacePushStatus } from '../hooks/remote-workspace-push-s
 
 // Why: bound the resume-record loss window on a hard kill to ~1 min; capture skips unchanged records so per-tick cost is negligible.
 const SLEEPING_AGENT_RESUME_CAPTURE_INTERVAL_MS = 60_000
-
-/**
- * Serialize the full renderer session (scrollback captures, sleeping-agent
- * records, host snapshots, active view) and stage it in main synchronously.
- * Runs main's on-demand checkpoint request before a workspace window opens
- * ('periodic'); the beforeunload 'quit' path runs the degradable persist below.
- */
-export function stageWorkspaceSessionCheckpoint(captureMode: 'periodic' | 'quit'): void {
-  const shouldCaptureSession = shouldPersistWorkspaceSession(useAppStore.getState())
-  if (shouldCaptureSession) {
-    for (const capture of shutdownBufferCaptures.values()) {
-      try {
-        capture({ includeLocalBuffers: false })
-      } catch {
-        // Don't let one pane's failure block the rest.
-      }
-    }
-    // Why: agent provider session ids live only in agentStatusByPaneKey,
-    // which is in-memory. Capture them into the persisted sleeping-session
-    // map so a daemon/session death while the app is closed can still
-    // cold-restore via the agent's resume command (#5232).
-    useAppStore.getState().captureAllSleepingAgentSessions(captureMode)
-  }
-  // Why: re-read state after capture() calls populated scrollback buffers
-  // into the store via Zustand setters. The earlier read is only for the
-  // gating flags and would miss those updates.
-  const freshState = useAppStore.getState()
-  let sessionSnapshots: ReturnType<typeof buildWorkspaceSessionHostSnapshots> = []
-  try {
-    sessionSnapshots = shouldCaptureSession
-      ? buildWorkspaceSessionHostSnapshots(buildWorkspaceSessionPayload(freshState), freshState)
-      : []
-  } catch (error) {
-    // Why: dirty drafts exist only in the full session snapshot.
-    if (!isIntentionalAppRestartInProgress() || freshState.openFiles.some((file) => file.isDirty)) {
-      throw error
-    }
-    console.error('[app] Full renderer session snapshot failed; using durable session', error)
-    window.api.app.stageBeforeUnloadSync({
-      sessions: [],
-      ui: buildActiveViewUnloadPatch(freshState)
-    })
-    return
-  }
-  window.api.app.stageBeforeUnloadSync({
-    sessions: sessionSnapshots,
-    ui: buildActiveViewUnloadPatch(freshState)
-  })
-}
 
 type RemoteWorkspaceUploadAuthority = {
   targetId: string
@@ -177,11 +129,15 @@ export function useAppSessionPersistence(): void {
       store: useAppStore,
       shouldSchedulePersist: () => !isDirectSshRemoteWorkspaceApplyInProgress(),
       subscribeToPersistGateOpen: onDirectSshRemoteWorkspaceApplyWindowClosed,
+      onPersistError: (error) => console.warn('[session] Session patch failed:', error),
       persist: ({ patch }) => {
         const state = useAppStore.getState()
-        // Why: route each host's worktree-scoped slice to its own partition; return the local write so the remote-workspace upload chain below keeps its ordering.
-        const localWrite = patchWorkspaceSessionByHost(window.api.session, patch, state)
-        void localWrite
+        // Why: route each host's worktree-scoped slice to its own partition; the upload chain below orders after the local write.
+        const { localWrite, written } = patchWorkspaceSessionByHost(
+          window.api.session,
+          patch,
+          state
+        )
         const uploadAuthorities = captureRemoteWorkspaceUploadAuthorities(state)
         const pendingLayoutEdits = state.pendingDirectSshLayoutEditsByTabId
         if (uploadAuthorities.length > 0) {
@@ -245,6 +201,7 @@ export function useAppSessionPersistence(): void {
             }
           })()
         }
+        return written
       }
     })
   }, [])

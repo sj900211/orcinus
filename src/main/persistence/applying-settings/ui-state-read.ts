@@ -60,6 +60,8 @@ export function getPersistedUI(
     usagePercentageDisplay: normalizeUsagePercentageDisplay(state.ui?.usagePercentageDisplay),
     statusBarUsageMode: normalizeStatusBarUsageMode(state.ui?.statusBarUsageMode),
     usageNumberFormat: normalizeUsageNumberFormat(state.ui?.usageNumberFormat),
+    statusBarCompactChangeNoticeDismissed:
+      state.ui?.statusBarCompactChangeNoticeDismissed !== false,
     // Why: strict boolean coercion so a missing/legacy value reads as false (first-run notice still fires).
     trayMinimizeNoticeShown: state.ui?.trayMinimizeNoticeShown === true,
     osc52ClipboardDefaultOnNoticePending: state.ui?.osc52ClipboardDefaultOnNoticePending === true,

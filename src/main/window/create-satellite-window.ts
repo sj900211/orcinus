@@ -8,7 +8,7 @@ import { addTrustedUIRendererWebContentsId, removeTrustedUIRendererWebContentsId
 import {
   addTrustedClipboardTextWebContentsId,
   removeTrustedClipboardTextWebContentsId
-} from './clipboard-ipc-handlers'
+} from './satellite-clipboard-text-trust'
 import {
   registerSatellite,
   shouldRevealSatelliteOnReady,

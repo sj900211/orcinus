@@ -1,10 +1,8 @@
+import { hasControllingTty } from '../../shared/posix-controlling-terminal'
 import { recordSelfInitiatedTreeKill } from '../crash-reporting/self-initiated-tree-kill-log'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
-import {
-  runProcess,
-  runProcessSync,
-  type ProcessResult
-} from '../../shared/child-process/run-process'
+import { runProcess, runProcessSync } from '@orca/process-host'
+import type { ProcessResult } from '@orca/process-host/process-spec'
 
 const PROCESS_TABLE_TIMEOUT_MS = 1_000
 const PROCESS_TABLE_MAX_BYTES = 1024 * 1024
@@ -66,10 +64,6 @@ function readSelectionResult(result: ProcessResult, option: 'p' | 't'): string {
     throw new UnsupportedPsSelectionError()
   }
   return output
-}
-
-function hasControllingTty(tty: string): boolean {
-  return tty !== '?' && tty !== '??' && tty !== '-' && tty !== '0' && !/^0,\d+$/.test(tty)
 }
 
 function* processTableQueries(rootPid: number): Generator<string[], string, ProcessResult> {
@@ -165,20 +159,6 @@ export function isPosixPtyRootStopped(output: string, rootPid: number): boolean 
     parseProcessRows(output)
       .find((row) => row.pid === rootPid)
       ?.state?.startsWith('T') === true
-  )
-}
-
-/** The root was stopped by flow control; preserve independently stopped jobs. */
-export function getPosixPtyStoppedJobGroups(output: string, rootPid: number): Set<number> {
-  const rows = parseProcessRows(output)
-  const root = rows.find((row) => row.pid === rootPid)
-  return new Set(
-    rows
-      .filter(
-        (row) =>
-          root && row.tty === root.tty && row.pgid !== root.pgid && /^[Tt]/.test(row.state ?? '')
-      )
-      .map((row) => row.pgid)
   )
 }
 

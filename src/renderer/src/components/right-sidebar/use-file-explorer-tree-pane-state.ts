@@ -57,6 +57,7 @@ type UseFileExplorerTreePaneStateResult = {
   rowScrolling: ReturnType<typeof useFileExplorerRowScrolling>
   handlers: ReturnType<typeof useFileExplorerHandlers>
   nodeCommands: ReturnType<typeof useFileExplorerNodeCommands>
+  fileDropOwnerRef: (root: HTMLElement | null) => void
 }
 
 /**
@@ -190,6 +191,7 @@ export function useFileExplorerTreePaneState({
       rootError ?? (displayRootPath ? tree.dirCache[displayRootPath]?.error : null) ?? null,
     isDirStale,
     loadDir,
+    refreshTree,
     resetAndLoad,
     resetSelection,
     setNameFilterQuery
@@ -220,10 +222,10 @@ export function useFileExplorerTreePaneState({
     operationOwner: rootCache?.operationOwner
   })
 
-  useFileExplorerImport({
+  const fileDropOwnerRef = useFileExplorerImport({
     displayRootPath,
     worktreePath: visibleFilesWorktreePath,
-    activeWorktreeId,
+    worktreeId: activeWorktreeId,
     refreshDir,
     clearNativeDragState: dragDrop.clearNativeDragState,
     setSelectedPath: setSingleSelectedPath,
@@ -257,7 +259,6 @@ export function useFileExplorerTreePaneState({
     toggleDir: hasNameFilter ? handleToggleNameFilterDir : toggleDir,
     loadDir,
     statPath,
-    authorizeExternalPath: window.api.fs.authorizeExternalPath,
     markPathAsDirectory,
     setSelectedPath: setSingleSelectedPath,
     scrollRef
@@ -296,6 +297,7 @@ export function useFileExplorerTreePaneState({
     inlineInputState,
     rowScrolling,
     handlers,
-    nodeCommands
+    nodeCommands,
+    fileDropOwnerRef
   }
 }

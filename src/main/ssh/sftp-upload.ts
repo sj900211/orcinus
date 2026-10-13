@@ -39,16 +39,7 @@ export type UploadFileOptions = {
   onProgress?: (bytesTransferred: number, totalBytes: number) => void
 }
 
-export function uploadFile(
-  sftp: SFTPWrapper,
-  localPath: string,
-  remotePath: string,
-  options?: UploadFileOptions
-): Promise<void> {
-  return uploadFileAndJoinTeardown(sftp, localPath, remotePath, options)
-}
-
-async function uploadFileAndJoinTeardown(
+export async function uploadFile(
   sftp: SFTPWrapper,
   localPath: string,
   remotePath: string,
@@ -99,6 +90,10 @@ async function uploadFileAndJoinTeardown(
         onProgress(bytesTransferred, totalBytes)
       })
     }
+    // Why: `finished` drops its listeners once the read ends; an abort (a quit's disconnect) that
+    // destroys the ended stream with the signal's reason would then emit an unhandled 'error' that
+    // takes main down mid-shutdown. The transfer's outcome is read from `finished`, not from here.
+    readStream.on('error', () => {})
     const abortTransfer = (): void => {
       const reason =
         options?.signal?.reason instanceof Error

@@ -25,6 +25,7 @@ import {
   RELAY_BUILD_PLATFORMS,
   RELAY_VERSION_FILENAME,
   RELAY_OPENCODE_SQLITE_READER_FILENAME,
+  WSL_CLAUDE_PROFILE_HELPER_FILENAME,
   relayOptionalArtifactFilenames,
   isWindowsRelayPlatform,
   relayArtifactFilenames
@@ -288,8 +289,8 @@ for (const platform of RELAY_BUILD_PLATFORMS) {
 // so a single platform-independent bundle suffices; it ships inside the
 // Windows app via the same out/relay extraResources mapping.
 {
-  const wslHookEntry = join(ROOT, 'src', 'relay', 'wsl-agent-hook-relay.ts')
-  const wslBrowserNetworkEntry = join(ROOT, 'src', 'relay', 'wsl-browser-network-relay.ts')
+  const wslHookEntry = join(ROOT, 'src', 'wsl-guest', 'wsl-agent-hook-relay.ts')
+  const wslBrowserNetworkEntry = join(ROOT, 'src', 'wsl-guest', 'wsl-browser-network-relay.ts')
   const outDir = join(OUT_ROOT, 'wsl')
   mkdirSync(outDir, { recursive: true })
   await build({
@@ -331,6 +332,18 @@ for (const platform of RELAY_BUILD_PLATFORMS) {
     .slice(0, 12)
   writeFileSync(join(outDir, '.browser-network-version'), `${RELAY_VERSION}+${browserNetworkHash}`)
   console.log(`Built WSL browser network relay → ${outDir}/wsl-browser-network-relay.js`)
+
+  // Why here, not the relay dirs: only the desktop runs it, inside WSL; SSH hosts never upload it.
+  await build({
+    entryPoints: [join(ROOT, 'src/main/claude-accounts/claude-profile-wsl-entry.ts')],
+    bundle: true,
+    platform: 'node',
+    target: 'node18',
+    format: 'cjs',
+    outfile: join(outDir, WSL_CLAUDE_PROFILE_HELPER_FILENAME),
+    minify: true,
+    define: { 'process.env.NODE_ENV': '"production"' }
+  })
 }
 
 console.log('Relay build complete.')

@@ -1,6 +1,10 @@
 import { ipcMain } from 'electron'
 import type { WebContents } from 'electron'
-import { readDirViaSftp, readFileCappedViaSftp } from '../providers/ssh-filesystem-provider-sftp'
+import type { FileEntryWithStats } from 'ssh2'
+import {
+  readDirectoryEntriesViaSftp,
+  readFileCappedViaSftp
+} from '../providers/ssh-filesystem-provider-sftp'
 import { isBinaryBuffer } from '../../shared/binary-buffer'
 import { mkdirSftp } from '../ssh/sftp-upload'
 import { registerSftpFsMutationHandlers } from './sftp-fs-mutations'
@@ -115,7 +119,10 @@ export function registerSftpTransferHandlers(
       try {
         return await withSftpChannel(resolved.conn, async (sftp) => {
           const resolvedPath = await realpathViaSftp(sftp, path)
-          const rawEntries = await readDirViaSftp(sftp, resolvedPath)
+          const rawEntries: FileEntryWithStats[] = []
+          for await (const entry of readDirectoryEntriesViaSftp(sftp, resolvedPath)) {
+            rawEntries.push(entry)
+          }
           return { entries: mapAndSortSftpEntries(rawEntries), resolvedPath }
         })
       } catch (error) {

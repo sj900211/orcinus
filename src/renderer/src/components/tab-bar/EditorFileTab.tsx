@@ -1,8 +1,9 @@
 import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
-import { GitCompareArrows, Eye, ShieldAlert, Pin, ListChecks, Server } from 'lucide-react'
+import { GitCompareArrows, Eye, ShieldAlert, Pin, ListChecks, ChartColumn } from 'lucide-react'
+import { Server } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { TabHoverCard } from './TabHoverCard'
 import { basename } from '@/lib/path'
 import { getEditorDisplayLabel } from '@/components/editor/editor-labels'
 import { renameFileOnDisk } from '@/lib/rename-file'
@@ -16,7 +17,7 @@ import type { GitFileStatus } from '../../../../shared/git-status-types'
 import type { OpenFile } from '../../store/slices/editor'
 import { getUntitledFileRoot } from '@/components/editor/untitled-file-rename-path'
 import { preventMiddleButtonDefault } from './middle-button-default-guard'
-import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from './SortableTab'
+import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
 import type { TabDragItemData } from '../tab-group/useTabDragSplit'
 import {
   ACTIVE_TAB_INDICATOR_CLASSES,
@@ -32,6 +33,7 @@ import { TAB_LABEL_WIDTH_CLASSES } from './tab-width-rules'
 import { useTabStripSlotProps } from './use-tab-strip-slot-props'
 import { EditorFileTabCloseButton } from './EditorFileTabCloseButton'
 import { useTabStripPointerActivation } from './tab-strip-pointer-activation'
+import { editorTabDocumentFolderAccess } from '@/lib/local-file-access'
 
 export default function EditorFileTab({
   file,
@@ -73,7 +75,8 @@ export default function EditorFileTab({
   includeTopTabBorder?: boolean
 }): React.JSX.Element {
   const worktree = useWorktreeById(file.worktreeId)
-  const FileIcon = getFileTypeIcon(file.filePath)
+  // Why: a remote SFTP preview tab swaps the file-type icon for a server glyph so it reads as remote.
+  const FileIcon = file.sftpTargetId ? Server : getFileTypeIcon(file.filePath)
   // Why: no transform/transition/isDragging styling — the drag design is
   // that tabs stay visually anchored; only the blue insertion bar moves.
   const { attributes, listeners, setNodeRef } = useSortable({
@@ -87,9 +90,19 @@ export default function EditorFileTab({
   const isDiff = file.mode === 'diff'
   const isConflictReview = file.mode === 'conflict-review'
   const isCheckDetails = file.mode === 'check-details'
+  const isChatVisual = file.mode === 'chat-visual'
   const isMarkdownPreviewTab = file.mode === 'markdown-preview'
-  // Why: a remote SFTP preview tab swaps the file-type icon for a server glyph so it reads as remote.
-  const isSftp = Boolean(file.sftpTargetId)
+  const HoverIcon = isConflictReview
+    ? ShieldAlert
+    : isCheckDetails
+      ? ListChecks
+      : isChatVisual
+        ? ChartColumn
+        : isDiff
+          ? GitCompareArrows
+          : isMarkdownPreviewTab
+            ? Eye
+            : FileIcon
   // Why: only deleted/renamed mean the file is gone from its path, which is
   // what strikethrough conveys. 'changed' keeps a normal label — its surface
   // is the changed-on-disk banner inside the editor.
@@ -151,11 +164,8 @@ export default function EditorFileTab({
     // so one user action cannot start a second rename against the old path.
     renameCancelledRef.current = true
     setIsRenaming(false)
-    if (!newName) {
-      return
-    }
     const oldName = basename(file.filePath)
-    if (newName === oldName) {
+    if (!newName || newName === oldName) {
       return
     }
     const worktreePath = getUntitledFileRoot(file, worktree?.path ?? null)
@@ -163,7 +173,9 @@ export default function EditorFileTab({
       oldPath: file.filePath,
       newName,
       worktreeId: file.worktreeId,
-      worktreePath
+      worktreePath,
+      // Why: a file opened outside every project may be renamed to any path, wherever it lives.
+      documentScoped: editorTabDocumentFolderAccess(useAppStore.getState(), file) !== undefined
     })
   }
 
@@ -271,24 +283,12 @@ export default function EditorFileTab({
         <ShieldAlert
           className={`w-3 h-3 mr-1 shrink-0 ${isActive ? 'text-orange-400' : 'text-orange-400/70'}`}
         />
-      ) : isCheckDetails ? (
-        <ListChecks
-          className={`w-3 h-3 mr-1 shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
-        />
-      ) : isDiff ? (
-        <GitCompareArrows
-          className={`w-3 h-3 mr-1 shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
-        />
       ) : isMarkdownPreviewTab ? (
         <Eye
           className={`w-3.5 h-3.5 mr-1.5 shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
         />
-      ) : isSftp ? (
-        <Server
-          className={`w-3 h-3 mr-1 shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
-        />
       ) : (
-        createElement(FileIcon, {
+        createElement(HoverIcon, {
           className: `w-3 h-3 mr-1 shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`
         })
       )}
@@ -400,16 +400,14 @@ export default function EditorFileTab({
         {isRenaming || menuOpen ? (
           tabRoot
         ) : (
-          <Tooltip>
-            <TooltipTrigger asChild>{tabRoot}</TooltipTrigger>
-            <TooltipContent
-              side="bottom"
-              sideOffset={6}
-              className="max-w-80 whitespace-normal break-words text-left"
-            >
-              {tabLabel}
-            </TooltipContent>
-          </Tooltip>
+          <TabHoverCard
+            title={tabLabel}
+            programName={translate('tabHoverCard.editor', 'Editor')}
+            icon={createElement(HoverIcon, { className: 'size-4' })}
+            description={file.relativePath}
+          >
+            {tabRoot}
+          </TabHoverCard>
         )}
       </div>
 

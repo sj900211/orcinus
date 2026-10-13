@@ -11,7 +11,10 @@ type AttachmentDropStateInput = Pick<
   | 'selectedRepoSettings'
   | 'setAgentPrompt'
   | 'setAttachmentPaths'
->
+> & {
+  /** The selected repo's main worktree id; null for a folder project with no worktree yet. */
+  selectedWorktreeId: string | null
+}
 
 import { useCallback } from 'react'
 import { toast } from 'sonner'
@@ -29,7 +32,7 @@ import {
 } from '../composer-drop-result'
 import { applyComposerNativeFileDrop } from '../composer-native-file-drop'
 import { useMountedRef } from '../useMountedRef'
-import { useComposerDropListener } from './composer-drop-listener'
+import { userNamedFileAccess } from '@/lib/local-file-access'
 
 // Local drops bypass the runtime importer's skip classification.
 function localDropFailure(detail: string | undefined): ComposerDropFailure {
@@ -51,6 +54,7 @@ export function useAttachmentDropState(input: AttachmentDropStateInput) {
     promptTextareaRef,
     selectedRepoPath,
     selectedRepoSettings,
+    selectedWorktreeId,
     setAgentPrompt,
     setAttachmentPaths
   } = input
@@ -124,6 +128,7 @@ export function useAttachmentDropState(input: AttachmentDropStateInput) {
       targetSettings = selectedRepoSettings,
       targetConnectionId: string | null | undefined = connectionId,
       targetRepoPath: string | null | undefined = selectedRepoPath,
+      targetWorktreeId: string | null | undefined = selectedWorktreeId,
       canReportFailure: () => boolean = () => true
     ): Promise<{ filePaths: string[]; folderPaths: string[] } | null> => {
       if (!targetSettings?.activeRuntimeEnvironmentId?.trim() && !targetConnectionId) {
@@ -171,7 +176,7 @@ export function useAttachmentDropState(input: AttachmentDropStateInput) {
       const { results } = await importExternalPathsToRuntime(
         {
           settings: targetSettings,
-          worktreeId: targetRepoPath,
+          worktreeId: targetWorktreeId ?? targetRepoPath,
           worktreePath: targetRepoPath,
           connectionId: targetConnectionId ?? undefined,
           ...sshExpectation
@@ -190,7 +195,7 @@ export function useAttachmentDropState(input: AttachmentDropStateInput) {
       }
       return { filePaths: uploadResult.filePaths, folderPaths: uploadResult.folderPaths }
     },
-    [connectionId, selectedRepoPath, selectedRepoSettings]
+    [connectionId, selectedRepoPath, selectedRepoSettings, selectedWorktreeId]
   )
 
   const handleAddAttachment = useCallback(async (): Promise<void> => {
@@ -220,11 +225,7 @@ export function useAttachmentDropState(input: AttachmentDropStateInput) {
           return
         }
         try {
-          await window.api.fs.authorizeExternalPath({ targetPath: filePath })
-          if (!mountedRef.current) {
-            return
-          }
-          const stat = await window.api.fs.stat({ filePath })
+          const stat = await window.api.fs.stat({ filePath, access: userNamedFileAccess() })
           results.push({
             status: 'imported',
             destPath: filePath,
@@ -253,8 +254,8 @@ export function useAttachmentDropState(input: AttachmentDropStateInput) {
   )
 
   const applyNativeDrop = useCallback(
-    (paths: string[], isCurrentOwner: () => boolean): void => {
-      void applyComposerNativeFileDrop({
+    (paths: string[], isCurrentOwner: () => boolean): Promise<void> => {
+      return applyComposerNativeFileDrop({
         paths,
         isCurrentOwner,
         uploadPaths: (sourcePaths) =>
@@ -263,6 +264,7 @@ export function useAttachmentDropState(input: AttachmentDropStateInput) {
             selectedRepoSettings,
             connectionId,
             selectedRepoPath,
+            selectedWorktreeId,
             isCurrentOwner
           ),
         applyLocalPaths: applyLocalComposerDrop,
@@ -279,17 +281,17 @@ export function useAttachmentDropState(input: AttachmentDropStateInput) {
       insertComposerFolderPaths,
       selectedRepoPath,
       selectedRepoSettings,
+      selectedWorktreeId,
       uploadComposerPaths
     ]
   )
-  // Why: native OS file drops relay via the preload bridge; only the most recently mounted composer applies them.
-  useComposerDropListener(applyNativeDrop)
 
   return {
     addComposerAttachments,
     insertComposerFolderPaths,
     uploadComposerPaths,
     handleAddAttachment,
-    applyLocalComposerDrop
+    applyLocalComposerDrop,
+    applyNativeDrop
   }
 }

@@ -136,6 +136,9 @@ describe('electron-builder document file associations', () => {
     // not reach another logged-on user's session.
     expect(script).toMatch(/\/FI\s+"USERNAME eq /)
     expect(script).toContain('$LOCALAPPDATA\\Orcinus\\daemon-host')
+    // Why: the identity verifier reads only the first RMDir; a sync must not slip upstream's Orca root into another.
+    expect(script).toContain('$LOCALAPPDATA\\Orcinus\\daemon-host-profiles')
+    expect(script).not.toMatch(/\$LOCALAPPDATA\\Orca\\/)
     // Without this guard, uninstallOldVersion would kill the daemon on every update —
     // defeating the relocation that keeps terminals alive across updates.
     expect(script).toMatch(/\$\{ifNot\}\s+\$\{isUpdated\}/)

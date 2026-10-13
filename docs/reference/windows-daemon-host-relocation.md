@@ -1,10 +1,14 @@
 # Windows daemon-host relocation
 
+> Fork-maintained: upstream removed this doc in #26328; the Orcinus root and orphan rules below are fork decisions.
+
 On Windows the terminal daemon does not run from the install directory. Before it forks the
 daemon, Orca materializes a trimmed copy of its own runtime under
-`%LOCALAPPDATA%\Orcinus\daemon-host\<app version>\` and forks the daemon from there
-(`src/main/daemon/daemon-host-relocation.ts`). This is what keeps live terminals alive across an
-auto-update and across a crash of the main process.
+`%LOCALAPPDATA%\Orcinus\daemon-host-profiles\<profile key>\<app version>\build-<fingerprint>-<nonce>\`
+and forks the daemon from there (`src/main/daemon/daemon-host-relocation.ts`). Builds before
+#26963 used the shared `%LOCALAPPDATA%\Orcinus\daemon-host\<app version>\`; that legacy tree is
+never reclaimed at runtime and is removed only by a genuine uninstall. This is what keeps live
+terminals alive across an auto-update and across a crash of the main process.
 
 Read this before changing the copy plan, the host exe name, the LOCALAPPDATA layout, or
 `config/nsis/orca-installer-hooks.nsh`.
@@ -104,12 +108,14 @@ stop being scored.
   `${isUpdated}` guard must stay: electron-builder runs the uninstaller during every update's
   `uninstallOldVersion`, and killing the daemon there defeats the whole feature. The legacy
   `orca-terminal-daemon.exe` name stays in the macro to reap hosts left by older builds.
-- `LOCAL_HOST_ROOT_NAME` in `daemon-host-relocation.ts` and the path in the uninstall macro are the
-  same directory. Change both together — `config/scripts/verify-orcinus-identity.mjs` (orcinus-ci +
-  the upstream auto-sync gate) fails the build if they drift apart or revert to the upstream `Orca`
-  root. The root is the fork's `Orcinus`, not upstream `Orca`: sharing `%LOCALAPPDATA%\Orca\daemon-host`
-  with a co-installed upstream Orca means an Orcinus update or uninstall could kill or delete Orca's
-  live daemon tree (and vice-versa).
+- `LOCAL_HOST_ROOT_NAME` in `daemon-host-relocation.ts` and **both** paths in the uninstall macro
+  (`…\daemon-host` and `…\daemon-host-profiles`) are the same root. Change them together —
+  `config/scripts/verify-orcinus-identity.mjs` fails the build if the first `RMDir` drifts from the
+  constant or reverts to the upstream `Orca` root, and
+  `electron-builder-markdown-associations.test.mjs` fails if any `RMDir` targets `Orca`. The root is
+  the fork's `Orcinus`, not upstream `Orca`: sharing `%LOCALAPPDATA%\Orca\…` with a co-installed
+  upstream Orca means an Orcinus update or uninstall could kill or delete Orca's live daemon tree
+  (and vice-versa).
 - One-time orphan: a machine that ran an older Orcinus build (which used the `Orca` root) keeps its
   `%LOCALAPPDATA%\Orca\daemon-host` tree (~250 MB) after upgrading to an `Orcinus`-root build. It is
   deliberately left untouched — Orcinus must never remove `%LOCALAPPDATA%\Orca\...`, because that path
@@ -124,8 +130,8 @@ stop being scored.
 
 ## Verifying a change
 
-Unit coverage lives in `src/main/daemon/daemon-host-relocation.test.ts` (copy plan, native-addon mirror, verbatim
-naming, marker/atomic publish, fail-open, prune veto). Nothing in unit tests can prove survival, so
+Unit coverage lives in `src/main/daemon/daemon-host-*.test.ts` (copy plan, native-addon mirror, verbatim
+naming, marker/atomic publish, fail-open, prune veto, per-profile isolation). Nothing in unit tests can prove survival, so
 any change to this file or to the NSIS macro needs the packaged harnesses:
 
 - `.github/workflows/win-update-survival-e2e.yml` — builds an installer from the branch and updates

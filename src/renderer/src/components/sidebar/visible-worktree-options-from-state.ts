@@ -48,6 +48,9 @@ export function buildVisibleWorktreeOptionsFromState(
     workspaceHostScope: state.workspaceHostScope,
     visibleWorkspaceHostIds: state.visibleWorkspaceHostIds,
     defaultHostId: getSettingsFocusedExecutionHostId(state.settings),
-    worktreeLineageById: state.worktreeLineageById
+    worktreeLineageById: state.worktreeLineageById,
+    // Why: fallback visibility (child-workspace toggles, Cmd+J) must hide projects windowed elsewhere too.
+    projectKeysInOtherWindows: state.projectKeysInOtherWindows,
+    preserveLineageParentOrder: state.sortBy === 'manual'
   }
 }

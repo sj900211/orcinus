@@ -234,7 +234,7 @@ describe('handleOscLink', () => {
     })
     await flushAsyncWork()
 
-    expect(openFilePathMock).toHaveBeenCalledWith('/tmp/src/main.ts')
+    expect(openFilePathMock).toHaveBeenCalledWith('/tmp/src/main.ts', 'local')
     expect(openFileMock).not.toHaveBeenCalled()
     expect(setPendingEditorRevealMock).not.toHaveBeenCalled()
   })
@@ -250,7 +250,7 @@ describe('handleOscLink', () => {
     await flushAsyncWork()
     await flushDoubleRaf()
 
-    expect(openFilePathMock).toHaveBeenCalledWith('/tmp/src/main.ts')
+    expect(openFilePathMock).toHaveBeenCalledWith('/tmp/src/main.ts', 'local')
     expect(openFileMock).toHaveBeenCalledWith(
       expect.objectContaining({ filePath: '/tmp/src/main.ts' }),
       { forceContentReload: true }

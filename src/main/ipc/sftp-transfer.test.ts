@@ -91,14 +91,23 @@ function createSftp(overrides: Record<string, unknown> = {}): Record<string, unk
     realpath: vi.fn((p: string, cb: (err: Error | null, resolved: string) => void) =>
       cb(null, p === '.' || p === '~' ? '/home/user' : p)
     ),
-    readdir: vi.fn((_p: string, cb: (err: Error | null, entries: unknown[]) => void) =>
-      cb(null, [
-        { filename: 'zeta.txt', attrs: stats('file', 12, 100, 0o644) },
-        { filename: 'alpha', attrs: stats('directory', 0, 200, 0o755) },
-        { filename: 'link', attrs: stats('symlink', 0, 300) },
-        { filename: 'beta', attrs: stats('directory', 0, 400) }
-      ])
+    opendir: vi.fn((_p: string, cb: (err: Error | null, handle: Buffer) => void) =>
+      cb(null, Buffer.from('dir'))
     ),
+    readdir: vi
+      .fn()
+      .mockImplementationOnce((_h: Buffer, cb: (err: Error | null, entries: unknown[]) => void) =>
+        cb(null, [
+          { filename: 'zeta.txt', attrs: stats('file', 12, 100, 0o644) },
+          { filename: 'alpha', attrs: stats('directory', 0, 200, 0o755) },
+          { filename: 'link', attrs: stats('symlink', 0, 300) },
+          { filename: 'beta', attrs: stats('directory', 0, 400) }
+        ])
+      )
+      .mockImplementation((_h: Buffer, cb: (err: Error | null, entries: false) => void) =>
+        cb(null, false)
+      ),
+    close: vi.fn((_h: Buffer, cb: (err: Error | null) => void) => cb(null)),
     // Default: destination does not exist (move sees no conflict). Override for conflict tests.
     lstat: vi.fn((_p: string, cb: (err: Error | null, stats: unknown) => void) =>
       cb(new Error('ENOENT'), null)

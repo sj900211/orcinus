@@ -4,7 +4,7 @@ import * as path from 'node:path'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { RelayContext } from './context'
-import type { RelayDispatcher } from './dispatcher'
+import type { RelayDispatcher } from '../wsl-guest/dispatcher'
 import { FsHandler } from './fs-handler'
 import { subscribeWithInProcessWatcher } from '../main/ipc/parcel-watcher-in-process-fallback'
 import { createMockDispatcher } from './relay-fs-test-dispatcher'
@@ -31,6 +31,8 @@ describe('relay watch-root capacity', () => {
     handler = new FsHandler(dispatcher as unknown as RelayDispatcher, new RelayContext(), {
       dispose: vi.fn(),
       forgetRoot: vi.fn(),
+      disposeAndWait: vi.fn(async () => {}),
+      reopen: vi.fn(),
       subscribe: subscribeWithInProcessWatcher
     })
   })

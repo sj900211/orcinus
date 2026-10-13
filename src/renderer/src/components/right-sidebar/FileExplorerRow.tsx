@@ -1,5 +1,13 @@
 import React from 'react'
-import { ChevronRight, CircleSlash, Folder, FolderOpen, Link, Loader2 } from 'lucide-react'
+import {
+  ChevronRight,
+  CircleAlert,
+  CircleSlash,
+  Folder,
+  FolderOpen,
+  Link,
+  Loader2
+} from 'lucide-react'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { cn } from '@/lib/utils'
 import { getFileTypeIcon } from '@/lib/file-type-icons'
@@ -7,17 +15,17 @@ import {
   encodeWorkspaceFilePaths,
   WORKSPACE_FILE_PATH_MIME,
   WORKSPACE_FILE_PATHS_MIME,
-  writeWorkspaceFileDragSourceIfResolved
+  writeWorkspaceFileDragSourceIfResolved,
+  type WorkspaceFileDragSource
 } from '@/lib/workspace-file-drag'
 import { encodeSftpFileDrag, SFTP_FILE_DRAG_MIME } from '@/lib/sftp-file-drag'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { GitFileStatus } from '../../../../shared/git-status-types'
 import { STATUS_LABELS } from './status-display'
 import { RENAME_HOTSPOT_ATTR } from './file-explorer-dir-toggle-timing'
 import type { TreeNode } from './file-explorer-types'
 import { useFileExplorerRowDrag } from './useFileExplorerRowDrag'
 import { translate } from '@/i18n/i18n'
-import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/components/tab-bar/SortableTab'
+import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
 import { createMultiSelectDragGhost } from './file-explorer-multi-drag-image'
 import { FileExplorerRowContextMenu } from './file-explorer-row-context-menu'
@@ -29,6 +37,8 @@ export type FileExplorerRowProps = {
   displayDepthOffset?: number
   isExpanded: boolean
   isLoading: boolean
+  /** Why: a failed read leaves no children, which otherwise reads as an empty folder. */
+  loadError?: string | null
   isSelected: boolean
   isFlashing: boolean
   selectedPaths: Set<string>
@@ -39,7 +49,9 @@ export type FileExplorerRowProps = {
   connectionId?: string | null
   sourceWorkspaceId?: string | null
   /** Resolved at dragstart so the virtualized list pays nothing per render. */
-  resolveDragSourceHostId?: (paths: readonly string[]) => ExecutionHostId | null
+  resolveDragSourceOwner?: (
+    paths: readonly string[]
+  ) => Omit<WorkspaceFileDragSource, 'workspaceId'> | null
   runtimeDownloadContext?: RuntimeFileOperationArgs | null
   supportsFolderDownload?: boolean
   canOpenInOrcaBrowser: boolean
@@ -87,6 +99,7 @@ export function FileExplorerRow({
   displayDepthOffset = 0,
   isExpanded,
   isLoading,
+  loadError = null,
   isSelected,
   isFlashing,
   selectedPaths,
@@ -96,7 +109,7 @@ export function FileExplorerRow({
   deleteShortcutLabel,
   connectionId,
   sourceWorkspaceId,
-  resolveDragSourceHostId,
+  resolveDragSourceOwner,
   runtimeDownloadContext,
   supportsFolderDownload = false,
   canOpenInOrcaBrowser,
@@ -130,6 +143,7 @@ export function FileExplorerRow({
   renderRowMeta
 }: FileExplorerRowProps): React.JSX.Element {
   const FileIcon = getFileTypeIcon(node.relativePath || node.name)
+  const showLoadError = node.isDirectory && isExpanded && !isLoading && loadError !== null
   const rowDropDir = node.isDirectory ? node.path : targetDir
   const { setRowDragNode, handleDragOver, handleDragEnter, handleDragLeave, handleDrop } =
     useFileExplorerRowDrag({
@@ -167,7 +181,8 @@ export function FileExplorerRow({
           )}
           style={{ paddingLeft: `${(node.depth - displayDepthOffset) * 16 + 8}px` }}
           ref={setRowDragNode}
-          data-native-file-drop-dir={rowDropDir}
+          // Why: the explorer's OS-drop owner reads the target folder from this at drop time.
+          data-file-explorer-drop-dir={rowDropDir}
           // Why: marks this draggable row so the wheel-capture handler can rescue
           // scroll Chromium swallows over draggable nodes (file-explorer-drag-scroll-marker).
           data-explorer-draggable="true"
@@ -189,10 +204,12 @@ export function FileExplorerRow({
                 encodeSftpFileDrag({ hostId: sftpDragHostId, paths })
               )
             }
+            const sourceOwner = resolveDragSourceOwner?.(paths)
             writeWorkspaceFileDragSourceIfResolved(
               event.dataTransfer,
               sourceWorkspaceId,
-              resolveDragSourceHostId?.(paths)
+              sourceOwner?.executionHostId,
+              sourceOwner?.runtimeEnvironmentId
             )
             event.dataTransfer.effectAllowed = 'copyMove'
             onDragSourceChange(node.path)
@@ -225,6 +242,8 @@ export function FileExplorerRow({
               />
               {isLoading ? (
                 <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+              ) : showLoadError ? (
+                <CircleAlert className="size-3 shrink-0 text-destructive" />
               ) : isExpanded ? (
                 <FolderOpen className="size-3 shrink-0 text-muted-foreground" />
               ) : (
@@ -271,6 +290,11 @@ export function FileExplorerRow({
           >
             {node.name}
           </span>
+          {showLoadError ? (
+            <span className="w-0 flex-1 truncate text-destructive" title={loadError}>
+              {loadError}
+            </span>
+          ) : null}
           {renderRowMeta ? renderRowMeta(node) : null}
           {nodeStatus ? (
             <span

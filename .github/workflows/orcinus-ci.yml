@@ -75,3 +75,4 @@ jobs:
           config/scripts/verify-dev-channel-packaging.test.mjs
           config/scripts/verify-orcinus-release-assets.test.mjs
           config/scripts/verify-release-required-assets.test.mjs
+          config/scripts/electron-builder-markdown-associations.test.mjs

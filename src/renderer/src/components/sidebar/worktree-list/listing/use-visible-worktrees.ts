@@ -108,6 +108,7 @@ export function useVisibleSidebarWorktrees(args: {
       defaultHostId,
       worktreeLineageById,
       projectKeysInOtherWindows,
+      preserveLineageParentOrder: sortBy === 'manual',
       forcedVisibleWorktreeIds: args.agentSendTargetWorktreeId
         ? [args.agentSendTargetWorktreeId]
         : undefined
@@ -133,6 +134,7 @@ export function useVisibleSidebarWorktrees(args: {
     ptyIdsByTabId,
     browserTabsByWorktree,
     sortedIds,
+    sortBy,
     worktreeLineageById,
     worktreesByRepo,
     pairedDeviceIdsByEnvironment,

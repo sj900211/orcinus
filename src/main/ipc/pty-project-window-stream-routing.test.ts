@@ -82,6 +82,8 @@ describe('registerPtyHandlers (project-window stream routing)', () => {
       onPtyData: vi.fn(() => 0),
       getPtyOutputSequence: vi.fn(() => 0),
       getDriver: vi.fn(() => ({ kind: 'desktop' })),
+      // Why: renderer writes report input to the runtime (upstream #26847); a missing member makes the write throw and drop.
+      noteRemoteDesktopHostInput: vi.fn(),
       getPtyWorktreeId: vi.fn((ptyId: string) => worktreeIdByPty.get(ptyId)),
       // Project routing: worktree ids are `repoId::path`; the injected resolver mirrors the runtime accessor.
       getWorktreeRepoId: vi.fn((worktreeId: string) => worktreeId.split('::')[0]),

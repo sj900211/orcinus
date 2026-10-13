@@ -47,6 +47,7 @@ import { createFeedbackDraftSlice } from './slices/feedback-draft'
 import { createTaskCreationDraftsSlice } from './slices/task-creation-drafts'
 import { createRemoteServerUpdatesSlice } from './slices/remote-server-updates'
 import { createTerminalQuickCommandHostsSlice } from './slices/terminal-quick-command-hosts'
+import { createStructuredSessionLaunchDirectorySlice } from './slices/structured-session-launch-directories'
 import { createProjectWindowsSlice } from './slices/project-windows'
 import { createSatelliteMirrorSlice } from './slices/satellite-mirror'
 import { e2eConfig } from '@/lib/e2e-config'
@@ -56,6 +57,7 @@ import {
   registerWorkspaceHttpLinkBrowserOpener
 } from '@/lib/http-link-routing'
 import { installStoreListenerCensus } from './store-listener-census'
+import { installSettledSortEpoch } from './settled-sort-epoch'
 import { withReactCommitCascadeWriteProbe } from './react-commit-cascade-write-probe'
 import { withStoreIdentityChurnProbe } from './store-identity-churn-probe'
 import {
@@ -75,6 +77,8 @@ const withDevelopmentStoreProbes = (createState: StateCreator<AppState, [], []>)
 export const useAppStore = create<AppState>()(
   withDevelopmentStoreProbes(
     withReactCommitCascadeWriteProbe((...a) => {
+      // Why first: settling inside the bump's own notify means hook subscribers never see it unsettled.
+      installSettledSortEpoch(a[2])
       // Why: the inner api is only reachable here, before create() copies subscribe onto the hook.
       installStoreListenerCensus(a[2])
       return {
@@ -123,6 +127,7 @@ export const useAppStore = create<AppState>()(
         ...createTaskCreationDraftsSlice(...a),
         ...createRemoteServerUpdatesSlice(...a),
         ...createTerminalQuickCommandHostsSlice(...a),
+        ...createStructuredSessionLaunchDirectorySlice(...a),
         // Fork slices (project windows + satellite mirror) — kept past upstream's list.
         ...createProjectWindowsSlice(...a),
         ...createSatelliteMirrorSlice(...a)
