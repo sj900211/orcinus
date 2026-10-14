@@ -3,9 +3,10 @@
 # human to merge (the judgment gate). On a conflict it upserts a tracking issue
 # instead of failing silently, so the fork never drifts unnoticed.
 #
-# Note on checks: branch pushes made with GITHUB_TOKEN do NOT trigger workflows,
-# so the sync PR carries no separate CI run — that is why the gates run INLINE
-# here, before the PR is opened.
+# Note on checks: the gates run INLINE here, before the branch is pushed, so a
+# broken merge never becomes a PR. Since 2026-10-14 the push uses a PAT
+# (ORCINUS_SYNC_TOKEN), so it DOES trigger the fork's own CI on the PR as well;
+# the inline gates are the pre-push guard, not a substitute for it.
 name: Orcinus upstream sync
 
 on:
@@ -38,6 +39,11 @@ jobs:
           fetch-depth: 0
           # Why keep credentials: this job pushes the sync branch and opens the PR/issue.
           persist-credentials: true
+          # Why a PAT and not GITHUB_TOKEN: upstream merges routinely touch
+          # .github/workflows/*, and GITHUB_TOKEN can never be granted
+          # `workflows: write` — GitHub refuses the push outright. That is what
+          # broke this radar from 2026-09-15 until 2026-10-14.
+          token: ${{ secrets.ORCINUS_SYNC_TOKEN }}
 
       - name: Configure git identity
         run: |
@@ -164,7 +170,7 @@ jobs:
       - name: Push sync branch and open PR
         if: steps.merge.outputs.clean == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.ORCINUS_SYNC_TOKEN }}
           BEHIND: ${{ steps.gap.outputs.behind }}
         run: |
           syncdate=$(date -u +%Y%m%d)
@@ -173,7 +179,7 @@ jobs:
           {
             echo "Automated merge of \`stablyai/orca@main\` into \`main\` ($BEHIND upstream commits)."
             echo ""
-            echo "Inline gates (lint, typecheck, Orcinus identity, fork-contract tests) passed in the sync run. This PR carries no separate CI checks because branch pushes made with \`GITHUB_TOKEN\` do not trigger workflows — that is expected."
+            echo "Inline gates (lint, typecheck, Orcinus identity, fork-contract tests) passed in the sync run before this branch was pushed. The push uses a PAT, so this PR also carries the fork's own CI checks — wait for them."
             echo ""
             echo "**Merge with a merge commit — never squash.** Squashing collapses the upstream history and re-conflicts the next sync."
           } > "$RUNNER_TEMP/pr-body.md"
