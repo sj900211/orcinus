@@ -13,7 +13,13 @@ const runtimeFiles = vi.hoisted(() => ({
   readRuntimeFileContent: vi.fn(),
   writeRuntimeFile: vi.fn()
 }))
-vi.mock('@/runtime/runtime-file-client', () => runtimeFiles)
+vi.mock('@/runtime/runtime-file-mutation-client', () => ({
+  readRuntimeDirectory: runtimeFiles.readRuntimeDirectory,
+  writeRuntimeFile: runtimeFiles.writeRuntimeFile
+}))
+vi.mock('@/runtime/runtime-file-read-client', () => ({
+  readRuntimeFileContent: runtimeFiles.readRuntimeFileContent
+}))
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
@@ -75,7 +81,7 @@ it('inspects and creates a managed-host repo config on that host, never the desk
   await waitFor(() => expect(runtimeFiles.readRuntimeDirectory).toHaveBeenCalled())
   expect(runtimeFiles.readRuntimeDirectory).toHaveBeenCalledWith(
     expect.objectContaining({
-      settings: { activeRuntimeEnvironmentId: 'host-a' },
+      target: { kind: 'environment', environmentId: 'host-a' },
       worktreeId,
       worktreePath: root
     }),
@@ -89,7 +95,7 @@ it('inspects and creates a managed-host repo config on that host, never the desk
 
   await waitFor(() => expect(runtimeFiles.writeRuntimeFile).toHaveBeenCalled())
   expect(runtimeFiles.writeRuntimeFile).toHaveBeenCalledWith(
-    expect.objectContaining({ settings: { activeRuntimeEnvironmentId: 'host-a' } }),
+    expect.objectContaining({ target: { kind: 'environment', environmentId: 'host-a' } }),
     `${root}/.mcp.json`,
     expect.any(String)
   )
@@ -109,7 +115,7 @@ it('keeps a desktop repo on the desktop while a managed host is focused', async 
 
   await waitFor(() => expect(runtimeFiles.readRuntimeDirectory).toHaveBeenCalled())
   expect(runtimeFiles.readRuntimeDirectory).toHaveBeenCalledWith(
-    expect.objectContaining({ settings: { activeRuntimeEnvironmentId: null } }),
+    expect.objectContaining({ target: { kind: 'local' } }),
     root
   )
 })

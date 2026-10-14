@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { spawnMock, onMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
-import { getPtyRendererDeliveryDebugSnapshot, registerPtyHandlers, deletePtyOwnership } from './pty'
+import { getPtyRendererDeliveryDebugSnapshot } from './pty/delivery/debug'
+import { deletePtyOwnership } from './pty/provider/ownership-state'
+import { registerPtyHandlers } from './pty/register-handlers'
 import { registerProjectWindow, unregisterProjectWindow } from '../window/project-window-registry'
 import { addTrustedUIRendererWebContentsId, removeTrustedUIRendererWebContentsId } from './ui'
 

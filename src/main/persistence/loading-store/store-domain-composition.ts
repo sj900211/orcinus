@@ -17,6 +17,7 @@ import { ProjectCollectionOperations } from './project-collection-operations'
 import { AutomationPersistence } from './automation-persistence'
 import { MobileTabSelectionPersistence } from './mobile-tab-selection-persistence'
 import { SatelliteWindowSessionPersistence } from './satellite-window-session-persistence'
+import { RemoteLayoutSnapshotPersistence } from '../../remote-layout-snapshot'
 import { SparsePresetPersistence } from './sparse-preset-persistence'
 import { PtyBindingPersistenceOperations } from './pty-binding-persistence'
 import { SshProfileOperations } from './ssh-profile-operations'
@@ -31,6 +32,7 @@ export type StoreDomainOperations = WriteSchedulingOperations &
   RepoLifecycleOperations &
   MobileTabSelectionPersistence &
   SatelliteWindowSessionPersistence &
+  RemoteLayoutSnapshotPersistence &
   SparsePresetPersistence &
   AutomationPersistence &
   MetadataLineageOperations &
@@ -63,6 +65,7 @@ export type StoreDomains = {
   automations: AutomationPersistence
   mobileTabSelections: MobileTabSelectionPersistence
   satelliteWindowSessions: SatelliteWindowSessionPersistence
+  remoteLayoutSnapshots: RemoteLayoutSnapshotPersistence
   sparsePresets: SparsePresetPersistence
   ptyBindings: PtyBindingPersistenceOperations
   sshProfiles: SshProfileOperations
@@ -79,6 +82,7 @@ export const STORE_DOMAIN_OPERATION_CLASSES = [
   RepoLifecycleOperations,
   MobileTabSelectionPersistence,
   SatelliteWindowSessionPersistence,
+  RemoteLayoutSnapshotPersistence,
   SparsePresetPersistence,
   AutomationPersistence,
   MetadataLineageOperations,
@@ -127,6 +131,7 @@ export function createStoreDomains(runtime: StoreRuntimeState): StoreDomains {
   const automations = new AutomationPersistence(runtime, flushBarriers, preferences)
   const mobileTabSelections = new MobileTabSelectionPersistence(runtime, scheduling)
   const satelliteWindowSessions = new SatelliteWindowSessionPersistence(runtime, scheduling)
+  const remoteLayoutSnapshots = new RemoteLayoutSnapshotPersistence(runtime, scheduling)
   const sparsePresets = new SparsePresetPersistence(runtime, scheduling)
   const ptyBindings = new PtyBindingPersistenceOperations(runtime, sessions)
   const sshProfiles = new SshProfileOperations(runtime, scheduling, repos)
@@ -156,6 +161,7 @@ export function createStoreDomains(runtime: StoreRuntimeState): StoreDomains {
     automations,
     mobileTabSelections,
     satelliteWindowSessions,
+    remoteLayoutSnapshots,
     sparsePresets,
     ptyBindings,
     sshProfiles,

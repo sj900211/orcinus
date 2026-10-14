@@ -1,9 +1,11 @@
+import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
 import type { ComposerRuntimeTargetSelectionInput } from './composer-target-input-contracts'
 
 import { useEffect, useMemo, useRef } from 'react'
 import { getFolderSourceRepos } from '@/components/sidebar/folder-workspace-composer-helpers'
 import { parseExecutionHostId, getRepoExecutionHostId } from '../../../../shared/execution-host'
 import { getSelectedRepoSshGate } from '@/lib/new-workspace-ssh-gate'
+import { selectRepoSshGateInput } from '@/lib/repo-ssh-connection'
 import { useFolderWorkspaceComposerPathStatus } from '@/components/sidebar/folder-workspace-composer-path-status'
 import { useDetectedAgents } from '@/hooks/useDetectedAgents'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -20,7 +22,7 @@ import { useAppStore } from '@/store'
 import { repoIsRemote } from '../../../../shared/agent-launch-remote'
 import { buildProjectHostSetupOptions } from '@/lib/project-host-setup-options'
 import { buildNewWorkspaceCreateTargetOptions } from '@/lib/new-workspace-project-options'
-import { getSettingsForRepoRuntimeOwner } from '@/lib/repo-runtime-owner'
+import { getRuntimeEnvironmentIdForRepo } from '@/lib/repo-runtime-owner'
 import { useEphemeralVmRecipeOptions } from '@/hooks/useEphemeralVmRecipeOptions'
 
 export function useComposerRuntimeTargetSelection(input: ComposerRuntimeTargetSelectionInput) {
@@ -210,16 +212,18 @@ export function useComposerRuntimeTargetSelection(input: ComposerRuntimeTargetSe
     [eligibleRepos, hostOptions, projectGroups, projectHostSetups, projects]
   )
 
-  const selectedRepoSettings = useMemo(() => {
-    if (!settings) {
-      return settings
-    }
-    // Why: probes and attachment uploads inspect the selected repo, even though creation defaults still follow host scope.
-    return getSettingsForRepoRuntimeOwner(
-      { repos: selectedRepo ? [selectedRepo] : [], settings },
-      selectedRepo?.id ?? null
-    )
-  }, [selectedRepo, settings])
+  // Why: probes and attachment uploads inspect the selected repo, even though creation defaults still follow host scope.
+  const selectedRepoRuntimeEnvironmentId = settings
+    ? getRuntimeEnvironmentIdForRepo(
+        { repos: selectedRepo ? [selectedRepo] : [], settings },
+        selectedRepo?.id ?? null
+      )
+    : null
+
+  const selectedRepoTarget = useMemo(
+    () => (selectedRepo ? ipcOrRuntimeTargetForHostId(getRepoExecutionHostId(selectedRepo)) : null),
+    [selectedRepo]
+  )
 
   // Why: key on repo id, not the repo object — updateRepo replaces it by reference and would re-run this effect, wiping the user's chosen recipe.
   const selectedRecipeRepoId = selectedRepo?.id ?? null
@@ -244,8 +248,14 @@ export function useComposerRuntimeTargetSelection(input: ComposerRuntimeTargetSe
     initialRecipeId: initialEphemeralVmRecipeId
   })
 
-  const selectedRepoConnectionId = selectedRepo?.connectionId ?? null
-
+  // Why the shared gate: a paired server's own SSH target is read from that server (#25887).
+  const selectedRepoSshGateInput = selectedRepo
+    ? selectRepoSshGateInput(
+        { sshConnectionStates, sshStateByEnvironment, runtimeStatusByEnvironmentId },
+        selectedRepo
+      )
+    : null
+  const selectedRepoConnectionId = selectedRepoSshGateInput?.connectionId ?? null
   const selectedRepoSshState = selectedRepoConnectionId
     ? (sshConnectionStates.get(selectedRepoConnectionId) ?? null)
     : null
@@ -253,7 +263,7 @@ export function useComposerRuntimeTargetSelection(input: ComposerRuntimeTargetSe
   const { selectedRepoSshStatus, selectedRepoRequiresConnection, selectedRepoConnectInProgress } =
     getSelectedRepoSshGate({
       connectionId: selectedRepoConnectionId,
-      status: selectedRepoSshState?.status ?? null
+      status: selectedRepoSshGateInput?.status ?? null
     })
 
   const repoIdRef = useRef(repoId)
@@ -291,7 +301,8 @@ export function useComposerRuntimeTargetSelection(input: ComposerRuntimeTargetSe
     selectedProjectHostSetupId,
     projectHostSetupOptions,
     projectOptions,
-    selectedRepoSettings,
+    selectedRepoRuntimeEnvironmentId,
+    selectedRepoTarget,
     selectedRecipeRepoId,
     selectedRecipeRepoConnectionId,
     ephemeralVmsEnabled,

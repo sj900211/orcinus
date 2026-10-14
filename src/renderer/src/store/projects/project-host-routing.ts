@@ -1,4 +1,3 @@
-import type { AppState } from '../types'
 import type {
   Project,
   ProjectHostSetup,
@@ -20,11 +19,9 @@ import {
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import {
   assertRuntimeEnvironmentCapability,
-  callRuntimeRpc,
-  getActiveRuntimeTarget,
-  type RuntimeClientTarget
+  callRuntimeRpc
 } from '../../runtime/runtime-rpc-client'
-import { getRuntimeTargetHostId } from '../runtime-target-host'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { adoptFromEndpoint } from '../adopt-from-endpoint'
 
 export function getProjectSetupRuntimeTarget(
@@ -33,22 +30,6 @@ export function getProjectSetupRuntimeTarget(
   const parsedHost = parseExecutionHostId(hostId)
   return parsedHost?.kind === 'runtime'
     ? { kind: 'environment', environmentId: parsedHost.environmentId }
-    : { kind: 'local' }
-}
-
-export function getProjectUpdateRuntimeTarget(
-  state: AppState,
-  projectId: string
-): RuntimeClientTarget {
-  const target = getActiveRuntimeTarget(state.settings)
-  if (target.kind !== 'environment') {
-    return target
-  }
-  const runtimeHostId = getRuntimeTargetHostId(target)
-  return state.projectHostSetups.some(
-    (setup) => setup.projectId === projectId && setup.hostId === runtimeHostId
-  )
-    ? target
     : { kind: 'local' }
 }
 

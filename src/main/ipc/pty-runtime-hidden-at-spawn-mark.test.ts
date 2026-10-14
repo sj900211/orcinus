@@ -6,7 +6,7 @@ import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 // union-across-windows query is the right one here.
 import { isHiddenRendererPtyInAnyWindow } from './pty-hidden-delivery-gate'
 import { OrcaRuntimeService } from '../runtime/orca-runtime'
-import { registerPtyHandlers } from './pty'
+import { registerPtyHandlers } from './pty/register-handlers'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))

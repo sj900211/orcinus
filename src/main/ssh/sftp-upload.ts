@@ -6,11 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { finished } from 'node:stream/promises'
 import type { SFTPWrapper } from 'ssh2'
 import { publishTempUpload, unlinkQuietSftp } from './sftp-rename'
-import {
-  latchLateSftpSessionErrors,
-  latchLateSftpStreamErrors,
-  type SftpStreamErrorLatch
-} from './sftp-stream-late-error'
+import { latchLateSftpStreamErrors, type SftpStreamErrorLatch } from './sftp-stream-late-error'
 
 export function mkdirSftp(
   sftp: SFTPWrapper,
@@ -213,29 +209,6 @@ export function writeStringViaSftp(
     ws.once('error', onError)
     ws.end(contents)
   })
-}
-
-/**
- * Write several files over one SFTP session, ending it when they are all done.
- *
- * Owns the session's late-error latch, which is why a caller must not hand-roll this
- * loop: `writeStringViaSftp` drops its own session listener at each settle, so between
- * files and after the last one the emitter would carry none, and a late STATUS reply
- * throws synchronously out of ssh2's parser into main (#15479).
- */
-export async function writeStringsViaSftp(
-  conn: { sftp(): Promise<SFTPWrapper> },
-  files: readonly { path: string; contents: string }[]
-): Promise<void> {
-  const sftp = await conn.sftp()
-  latchLateSftpSessionErrors(sftp)
-  try {
-    for (const file of files) {
-      await writeStringViaSftp(sftp, file.path, file.contents)
-    }
-  } finally {
-    sftp.end()
-  }
 }
 
 export async function uploadDirectory(

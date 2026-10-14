@@ -5,6 +5,7 @@ import { vi } from 'vitest'
 import type * as ReactModule from 'react'
 import type { HarnessStoreState } from './ipc-events-harness-store-state'
 import type { ClientHostedBrowserRowsEvent } from '../../../shared/client-hosted-browser-rows'
+import { createProjectWindowApiStubs } from './ipc-events-project-window-test-stubs'
 
 // Re-exported so a suite needs one import for the harness and the store surface it seeds.
 export {
@@ -98,7 +99,7 @@ export async function loadIpcEventsHarness(
   let navigationUpdateListener:
     | ((event: { browserPageId: string; url: string; title: string }) => void)
     | null = null
-  let openProjectsChangedListener: ((projectKeys: string[]) => void) | null = null
+  const projectWindowStubs = createProjectWindowApiStubs()
   let certificateFailureListener:
     | ((event: { browserPageId: string; failure: unknown }) => void)
     | null = null
@@ -134,15 +135,21 @@ export async function loadIpcEventsHarness(
     createFloatingWorkspaceTerminalTab: vi.fn(),
     isFloatingWorkspacePanelFocused: () => false
   }))
-  vi.doMock('@/runtime/web-runtime-session', () => ({
+  vi.doMock('@/runtime/web-runtime-session-tab-lifecycle', () => ({
     activateWebRuntimeSessionTab: vi.fn(),
-    closeWebRuntimeSessionTab: vi.fn(),
-    createWebRuntimeSessionBrowserTab: vi.fn().mockResolvedValue(false),
-    createWebRuntimeSessionTerminal: vi.fn().mockResolvedValue({ status: 'failed', message: '' }),
+    closeWebRuntimeSessionTab: vi.fn()
+  }))
+  vi.doMock('@/runtime/web-runtime-browser-creation', () => ({
+    createWebRuntimeSessionBrowserTab: vi.fn().mockResolvedValue(false)
+  }))
+  vi.doMock('@/runtime/web-runtime-terminal-creation', () => ({
+    createWebRuntimeSessionTerminal: vi.fn().mockResolvedValue({ status: 'failed', message: '' })
+  }))
+  vi.doMock('@/runtime/web-runtime-session-environment', () => ({
     isWebRuntimeSessionActive: vi.fn(() => false)
   }))
   vi.doMock('@/lib/focus-terminal-tab-surface', () => ({ focusTerminalTabSurface: vi.fn() }))
-  vi.doMock('@/runtime/sync-runtime-graph', () => ({
+  vi.doMock('@/runtime/mounted-terminal-tab-registry', () => ({
     focusRuntimeTerminalSurface: vi.fn(() => false)
   }))
   vi.doMock('@/lib/activate-tab-and-focus-pane', () => ({ activateTabAndFocusPane: vi.fn() }))
@@ -245,15 +252,8 @@ export async function loadIpcEventsHarness(
         mobile: createApiNamespaceStub({
           consumePendingUnpairedDeviceAuthFailure: () => Promise.resolve(false)
         }),
-        projectWindow: createApiNamespaceStub({
-          onOpenProjectsChanged: (listener: (projectKeys: string[]) => void) => {
-            openProjectsChangedListener = listener
-            return () => {}
-          }
-        }),
-        // Why: the mirror hydration awaits getMirror, so the default function stub would throw.
-        satelliteWindow: createApiNamespaceStub({ getMirror: () => Promise.resolve(null) }),
-        remoteWorkspace: createApiNamespaceStub({ clientId: () => Promise.resolve(null) })
+        projectWindow: createApiNamespaceStub(projectWindowStubs.projectWindow),
+        satelliteWindow: createApiNamespaceStub(projectWindowStubs.satelliteWindow)
       } as Record<string, unknown>,
       { get: (target, prop: string) => target[prop] ?? createApiNamespaceStub() }
     )
@@ -289,12 +289,7 @@ export async function loadIpcEventsHarness(
       }
       navigationUpdateListener(event)
     },
-    openProjectsChanged: (projectKeys) => {
-      if (typeof openProjectsChangedListener !== 'function') {
-        throw new Error('Expected the open-projects-changed listener to be registered')
-      }
-      openProjectsChangedListener(projectKeys)
-    },
+    openProjectsChanged: projectWindowStubs.openProjectsChanged,
     certificateFailureChanged: (event) => {
       if (typeof certificateFailureListener !== 'function') {
         throw new Error('Expected the browser certificate-failure listener to be registered')

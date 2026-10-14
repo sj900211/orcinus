@@ -31,7 +31,8 @@ vi.mock('../ipc/repos', () => ({
 }))
 vi.mock('../ipc/worktrees', () => ({ registerWorktreeHandlers: vi.fn() }))
 vi.mock('../ipc/worktree-change-invalidators', () => ({ runWorktreeChangeInvalidators: vi.fn() }))
-vi.mock('../ipc/pty', () => ({ getLocalPtyProvider: vi.fn(), registerPtyHandlers: vi.fn() }))
+vi.mock('../ipc/pty/provider/registry', () => ({ getLocalPtyProvider: vi.fn() }))
+vi.mock('../ipc/pty/register-handlers', () => ({ registerPtyHandlers: vi.fn() }))
 vi.mock('../memory/hydrate-local-pty-registry', () => ({ hydrateLocalPtyRegistryAtBoot: vi.fn() }))
 vi.mock('../browser/browser-manager', () => ({ browserManager: { unregisterAll: vi.fn() } }))
 vi.mock('../updater', () => ({

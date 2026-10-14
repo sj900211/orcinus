@@ -1,9 +1,7 @@
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
-import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { buildByIdIndex, buildWorktreeByIdIndex } from '../slices/worktree-by-id-index'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
-import { isCurrentDirectSshAuthority } from './terminal-pty-identities'
 
 export function createWorkspaceTerminalReconnectActions(
   set: TerminalStoreSet,
@@ -11,11 +9,7 @@ export function createWorkspaceTerminalReconnectActions(
 ): Pick<TerminalSlice, 'reconnectPersistedTerminals'> {
   return {
     reconnectPersistedTerminals: async (signal, options) => {
-      if (
-        signal?.aborted ||
-        (options?.directSshAuthority &&
-          !isCurrentDirectSshAuthority(get(), options.directSshAuthority))
-      ) {
+      if (signal?.aborted) {
         return
       }
       const {
@@ -66,13 +60,7 @@ export function createWorkspaceTerminalReconnectActions(
           const tabId = tab.id
           const layout = terminalLayoutsByTabId[tabId]
           const leafPtyMap = layout?.ptyIdsByLeafId ?? {}
-          const pendingPtyId = pendingReconnectPtyIdByTabId[tabId]
-          const tabLevelPtyId =
-            options?.directSshAuthority &&
-            parseAppSshPtyId(pendingPtyId ?? '')?.connectionId !==
-              options.directSshAuthority.targetId
-              ? undefined
-              : pendingPtyId
+          const tabLevelPtyId = pendingReconnectPtyIdByTabId[tabId]
           const hasLeafMappings = Object.keys(leafPtyMap).length > 0
           // Why: publish live PTY hints before mount (pty-connection reattaches later) so the
           // sessions status segment maps daemon IDs to tabs; otherwise all sessions look like orphans until the pane mounts.
@@ -117,7 +105,7 @@ export function createWorkspaceTerminalReconnectActions(
         // Why: SSH worktrees aren't in worktreesByRepo at cold start; fall back to the repo id in the composite worktree id so sessions still reach the deferred map.
         const repoId = worktree?.repoId ?? getRepoIdFromWorktreeId(worktreeId)
         const repo = repoId ? (repoById.get(repoId) ?? null) : null
-        const connectionId = options?.directSshAuthority?.targetId ?? repo?.connectionId
+        const connectionId = repo?.connectionId
         if (!connectionId) {
           continue
         }
@@ -137,20 +125,12 @@ export function createWorkspaceTerminalReconnectActions(
         const tabs = tabsByWorktree[worktreeId] ?? []
         for (const tab of tabs) {
           const sessionId = pendingReconnectPtyIdByTabId[tab.id]
-          if (
-            sessionId &&
-            (!options?.directSshAuthority ||
-              parseAppSshPtyId(sessionId)?.connectionId === connectionId)
-          ) {
+          if (sessionId) {
             deferredSshSessionIdsByTabId[tab.id] = sessionId
           }
         }
       }
-      if (
-        signal?.aborted ||
-        (options?.directSshAuthority &&
-          !isCurrentDirectSshAuthority(get(), options.directSshAuthority))
-      ) {
+      if (signal?.aborted) {
         return
       }
       const remainingReconnectWorktreeIds = options

@@ -14,6 +14,7 @@ import { registerTerminalSideEffectFactConsumer } from '../terminal-side-effect-
 import { isAgentTaskCompleteTrackingEnabled } from './agent-task-complete-settings'
 import { isAgentProcessInspectionCostly } from '../agent-process-inspection-cost'
 import { isRemoteExecutionHostPtyId } from '../remote-execution-host-pty'
+import { retireLiveAgentRowOnConfirmedProcessExit } from './confirmed-process-exit-row-retire'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
@@ -184,7 +185,6 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
     isRemotePtyId: (ptyId) =>
       Boolean(isRemoteExecutionHostPtyId(ptyId) || isRemoteRuntimePtyId(ptyId)),
     getExpectedIncarnationId: () => session.remotePtyIncarnationId ?? null,
-    getSettings: () => useAppStore.getState().settings,
     inspectProcess: inspectRuntimeTerminalProcess,
     dispatchHookLifecycle: (payload) =>
       dispatchAgentHookTerminalLifecycle(session.cacheKey, payload),
@@ -214,8 +214,11 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
       )
     },
     // Why: the pane's only re-derivation of a process read where the shell emits no command marks.
-    onForegroundAgentExited: (exited) =>
-      session.paneForegroundAgentTracker?.onProcessExitConfirmed(exited),
+    onForegroundAgentExited: (exited) => {
+      session.paneForegroundAgentTracker?.onProcessExitConfirmed(exited)
+      // Why: not behind the tracker's process-read guard, so hook-identified panes retire too.
+      retireLiveAgentRowOnConfirmedProcessExit(session, exited)
+    },
     dispatchCompletion: (title, meta) => {
       if (meta?.source === 'process-exit') {
         session.clearSuppressedTitleSideEffects()

@@ -107,6 +107,17 @@ describe('editorTabFileAccess', () => {
       'user-file'
     ],
     [
+      'a read-only server file outside every workspace, restored without its grant',
+      {
+        filePath: '/tmp/out.png',
+        relativePath: '/tmp/out.png',
+        worktreeId: localWorktreeId,
+        runtimeEnvironmentId: 'env-1',
+        readOnly: true
+      },
+      undefined
+    ],
+    [
       'a project tab, which stays inside its root',
       { filePath: '/Users/me/project/a.ts', relativePath: 'a.ts', worktreeId: localWorktreeId },
       undefined
@@ -224,6 +235,7 @@ describe('editorTabDocumentFolderAccess', () => {
   })
 })
 
+// Fork-owned since upstream deleted its copy (#27308): on failure, check each new entry against the SFTP guard; never delete the fork's entries.
 // Why a ratchet: a content-driven reader that adopted user-file would bring back the round-1 leak.
 // These scans only see the two ways a renderer file can produce user-file today, by name and by
 // pattern: building user-file access directly, and opening a tab the tab rule reads as user-named. They

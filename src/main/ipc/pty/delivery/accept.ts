@@ -1,4 +1,3 @@
-import type { LegacySshProjectionSemantics } from '../../ssh-pty-legacy-projection'
 import { recordHiddenRendererPtyDataDrop } from '../../pty-hidden-delivery-gate'
 import { shouldDropHiddenRendererPtyDataForOwner } from '../pty-owner-gate'
 import {
@@ -33,17 +32,12 @@ export function acceptPtyDataForRenderer(
     sequenceChars?: number
     transformed?: boolean
   },
-  outputSeq: number | undefined,
-  projection?: LegacySshProjectionSemantics
+  outputSeq: number | undefined
 ): void {
   const rawLength = payload.sequenceChars ?? payload.data.length
   const preservesSeq = !payload.transformed && rawLength === payload.data.length
   const startSeq = typeof outputSeq === 'number' ? Math.max(0, outputSeq - rawLength) : undefined
-  const projectionId = projection?.identity.projectionSemanticsId
   if (!resolvePtyOwnerWindow(payload.id)) {
-    if (projectionId) {
-      session.sshOutputIntake?.transferProjections([projectionId], 'renderer-destroyed')
-    }
     // Why: only a fully windowless app wipes global bookkeeping; a single missing owner must not clobber other windows' delivery.
     if (listAppWindows().length === 0) {
       if (session.flushTimer) {
@@ -55,16 +49,10 @@ export function acceptPtyDataForRenderer(
     return
   }
   if (session.rendererExitingPtyIds.has(payload.id)) {
-    if (projectionId) {
-      session.sshOutputIntake?.transferProjections([projectionId], 'pty-exiting')
-    }
     return
   }
   if (shouldDropHiddenRendererPtyDataForOwner(payload.id, session.getSettings?.())) {
-    if (projectionId) {
-      session.sshOutputIntake?.transferProjections([projectionId], 'hidden-drop')
-    }
-    const droppedChars = projection ? rawLength : payload.data.length
+    const droppedChars = payload.data.length
     const drop = recordHiddenRendererPtyDataDrop(payload.id, droppedChars)
     warnIfDroppingHiddenBytesForVisiblePty(session, payload.id, droppedChars)
     if (drop.shouldEmitRestoreMarker) {
@@ -73,16 +61,10 @@ export function acceptPtyDataForRenderer(
     return
   }
   if (payload.data.length === 0 && !payload.transformed) {
-    if (projectionId) {
-      session.sshOutputIntake?.transferProjections([projectionId], 'empty-projection')
-    }
     return
   }
   const containsBackgroundOutput = rendererPtyIsKnownHidden(payload.id)
   const overflowMarkedBeforeAppend = session.pendingOverflowMarkedPtys.has(payload.id)
-  if (projection?.desktopSpan) {
-    session.sourceCreditPendingPtys.add(payload.id)
-  }
   const pending = appendPendingPtyData(
     session,
     payload.id,
@@ -92,8 +74,7 @@ export function acceptPtyDataForRenderer(
     preservesSeq,
     containsBackgroundOutput,
     rawLength,
-    payload.transformed === true,
-    projectionId
+    payload.transformed === true
   )
   const shouldEmitPendingCapRestoreMarker =
     pending.droppedOutput === true &&
@@ -128,24 +109,19 @@ export function acceptPtyDataForRenderer(
     }
     session.pendingOverflowMarkedPtys.delete(payload.id)
     try {
-      sendPtyDataToRenderer(
-        session,
-        payload.id,
-        {
-          id: payload.id,
-          data: nextData,
-          ...(typeof pending.startSeq === 'number'
-            ? {
-                seq: pending.startSeq + (pending.rawLength ?? nextData.length),
-                rawLength: pending.rawLength ?? nextData.length
-              }
-            : {}),
-          ...(pending.transformed ? { transformed: true } : {}),
-          ...(pending.containsBackgroundOutput === true ? { background: true } : {}),
-          ...(pending.droppedOutput === true ? { droppedOutput: true } : {})
-        },
-        pending.projectionAdmissionIds
-      )
+      sendPtyDataToRenderer(session, payload.id, {
+        id: payload.id,
+        data: nextData,
+        ...(typeof pending.startSeq === 'number'
+          ? {
+              seq: pending.startSeq + (pending.rawLength ?? nextData.length),
+              rawLength: pending.rawLength ?? nextData.length
+            }
+          : {}),
+        ...(pending.transformed ? { transformed: true } : {}),
+        ...(pending.containsBackgroundOutput === true ? { background: true } : {}),
+        ...(pending.droppedOutput === true ? { droppedOutput: true } : {})
+      })
     } finally {
       session.updateProducerFlowControl(payload.id)
     }

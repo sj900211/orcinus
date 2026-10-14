@@ -196,11 +196,6 @@ jobs:
           node config/scripts/runtime-file-watcher-fault-harness.mjs
           ELECTRON_RUN_AS_NODE=1 pnpm exec electron config/scripts/runtime-file-watcher-fault-harness.mjs
 
-      # Why: the remote native watcher shares a daemon with live PTYs. Kill
-      # only its child and require both PTY and watch recovery before packaging.
-      - name: Gate SSH relay watcher process isolation
-        run: node config/scripts/relay-watcher-fault-harness.mjs
-
       # Why (adapted from dev-channel-win-build's release-still-exists guard):
       # `--publish always` mints a fresh NON-draft release when it can't find
       # the tag's release, and re-runs of an already-published tag would upload

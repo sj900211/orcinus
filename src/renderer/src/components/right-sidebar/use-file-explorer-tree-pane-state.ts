@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useAppStore } from '@/store'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { useWorkspaceFileBrowserActionPredicate } from '@/lib/file-preview'
-import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
+import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
 import type { OpenFile } from '@/store/slices/editor'
 import type { Repo } from '../../../../shared/repo-types'
 import type { FileExplorerRowProjection } from './file-explorer-row-projection'
@@ -21,6 +21,7 @@ import { useFileExplorerTreeLoadEffects } from './use-file-explorer-tree-load-ef
 import { useFileExplorerWatch } from './useFileExplorerWatch'
 import type { useFileExplorerSelection } from './useFileExplorerSelection'
 import type { useFileExplorerTree } from './useFileExplorerTree'
+import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 
 type UseFileExplorerTreePaneStateParams = {
   onRevealOutsideRoot?: () => void
@@ -128,7 +129,7 @@ export function useFileExplorerTreePaneState({
       ? s.sshConnectionStates.get(connectionId)?.supportsFolderDownload === true
       : false
   })
-  const activeRuntimeEnvironmentId = useAppStore((s) =>
+  const ownerRuntimeEnvironmentId = useAppStore((s) =>
     getRuntimeEnvironmentIdForWorktree(s, activeWorktreeId)
   )
   const toggleDir = useAppStore((s) => s.toggleDir)
@@ -139,15 +140,15 @@ export function useFileExplorerTreePaneState({
 
   const runtimeDownloadContext = useMemo(
     () =>
-      activeRuntimeEnvironmentId && activeWorktreeId && worktreePath
+      ownerRuntimeEnvironmentId && activeWorktreeId && worktreePath
         ? {
-            settings: { activeRuntimeEnvironmentId },
+            target: runtimeTargetForOwnerEnvironment(ownerRuntimeEnvironmentId),
             worktreeId: activeWorktreeId,
             worktreePath,
             connectionId: activeRepo?.connectionId ?? undefined
           }
         : null,
-    [activeRepo?.connectionId, activeRuntimeEnvironmentId, activeWorktreeId, worktreePath]
+    [activeRepo?.connectionId, ownerRuntimeEnvironmentId, activeWorktreeId, worktreePath]
   )
   const isWindows = useMemo(() => navigator.userAgent.includes('Windows'), [])
 
@@ -253,7 +254,7 @@ export function useFileExplorerTreePaneState({
 
   const handlers = useFileExplorerHandlers({
     activeWorktreeId,
-    runtimeEnvironmentId: activeRuntimeEnvironmentId,
+    runtimeEnvironmentId: ownerRuntimeEnvironmentId,
     openFile,
     makePreviewFilePermanent,
     toggleDir: hasNameFilter ? handleToggleNameFilterDir : toggleDir,

@@ -18,6 +18,7 @@ export const SQLITE_DATABASE_RUNTIME_INCLUDE = [
   'src/main/native-chat/transcript-opencode-semantic-fidelity.test.ts',
   'src/main/native-chat/transcript-opencode-sqlite-query.test.ts',
   'src/main/native-chat/transcript-opencode-subscribe.test.ts',
+  'src/main/native-chat/transcript-zcode.test.ts',
   'src/main/native-chat/transcript-opencode2-sqlite.test.ts',
   'src/main/opencode-usage/cache-read-reproduction.test.ts',
   // Fork: cache-write accounting test opens a real SQLite fixture.
@@ -149,7 +150,6 @@ export const SQLITE_DATABASE_RUNTIME_INCLUDE = [
   'src/main/runtime/rpc/methods/orchestration/worker/agent-status-producer-census.test.ts',
   'src/main/runtime/rpc/methods/orchestration/worker/manual-dispatch-observation.test.ts',
   'src/main/runtime/rpc/methods/orchestration/worker/manual-dispatch-release.test.ts',
-  'src/main/runtime/rpc/methods/orchestration/worker/worker-abandon-caller.test.ts',
   'src/main/runtime/rpc/methods/orchestration/worker/worker-interactive-wait.test.ts',
   'src/main/runtime/rpc/methods/orchestration/worker/worker-list-pagination.test.ts',
   'src/main/runtime/rpc/methods/orchestration/worker/worker-release-recovery.test.ts',
@@ -196,8 +196,6 @@ export const SQLITE_DATABASE_RUNTIME_INCLUDE = [
   'src/main/runtime/structured-claude-auth-policy-wiring.test.ts',
   'src/main/runtime/structured-codex-child-work-runtime.test.ts',
   'src/main/runtime/structured-worker-at-rest.test.ts',
-  'src/main/ssh/ssh-remote-orca-cli.test.ts',
-  'src/main/ssh/ssh-remote-orchestration-compatibility.test.ts',
   'tests/e2e/completed-worker-retirement-resume.unit.test.ts',
   'tests/e2e/cross-version-wire/agent-session-clear-old-client.unit.test.ts',
   'tests/e2e/cross-version-wire/agent-session-clear-old-tab-mirror.unit.test.ts'

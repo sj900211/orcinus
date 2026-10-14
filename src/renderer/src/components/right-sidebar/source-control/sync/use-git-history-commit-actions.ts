@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { requireGitOwnerTarget } from '../../worktree-git-owner-target'
+import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
-import {
-  getRuntimeGitCommitCompare,
-  getRuntimeGitRemoteCommitUrl,
-  type RuntimeGitContext
-} from '@/runtime/runtime-git-client'
+import { getRuntimeGitCommitCompare } from '@/runtime/runtime-git-diff-client'
+import { getRuntimeGitRemoteCommitUrl } from '@/runtime/runtime-git-working-tree-client'
 import { getConnectionId } from '@/lib/connection-context'
 import { detectLanguage } from '@/lib/language-detect'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -43,12 +42,12 @@ type GitHistoryCommitActions = {
 export function useGitHistoryCommitActions({
   activeWorktreeId,
   worktreePath,
-  activeRepoSettings,
+  activeRepoTarget,
   resolveSplitTargetGroupId
 }: {
   activeWorktreeId: string | null | undefined
   worktreePath: string | null
-  activeRepoSettings: RuntimeGitContext['settings']
+  activeRepoTarget: RuntimeClientTarget | null
   resolveSplitTargetGroupId: (event?: SourceControlRowOpenEvent) => string | undefined
 }): GitHistoryCommitActions {
   const openCommitAllDiffs = useAppStore((s) => s.openCommitAllDiffs)
@@ -78,7 +77,7 @@ export function useGitHistoryCommitActions({
       const result = await getRuntimeGitCommitCompare(
         {
           // Why: route the commit compare by the repo OWNER host, not the focused runtime.
-          settings: activeRepoSettings,
+          target: requireGitOwnerTarget(activeRepoTarget),
           worktreeId: activeWorktreeId,
           worktreePath,
           connectionId
@@ -97,7 +96,7 @@ export function useGitHistoryCommitActions({
       commitCompareCacheRef.current.set(item.id, result)
       return result.entries
     },
-    [activeRepoSettings, activeWorktreeId, worktreePath]
+    [activeRepoTarget, activeWorktreeId, worktreePath]
   )
 
   const openHistoryCommitDiff = useCallback(
@@ -199,7 +198,7 @@ export function useGitHistoryCommitActions({
         // real origin remote (the renderer has no reliable origin identity).
         void getRuntimeGitRemoteCommitUrl(
           {
-            settings: activeRepoSettings,
+            target: requireGitOwnerTarget(activeRepoTarget),
             worktreeId: activeWorktreeId,
             worktreePath,
             connectionId: getConnectionId(activeWorktreeId) ?? undefined
@@ -285,7 +284,7 @@ export function useGitHistoryCommitActions({
         promptDelivery: 'submit-after-ready'
       })
     },
-    [activeRepoSettings, activeWorktreeId, copyCommitText, worktreePath]
+    [activeRepoTarget, activeWorktreeId, copyCommitText, worktreePath]
   )
 
   return { loadCommitFiles, openHistoryCommitDiff, openCommitFile, handleCommitAction }

@@ -32,7 +32,9 @@ import { McpMissingConfigList } from './McpMissingConfigList'
 import { loadMcpConfigInspections } from './mcp-config-inspection'
 import { translate } from '@/i18n/i18n'
 import { captureDirectSshMutationExpectation } from '@/lib/ssh-mutation-expectation'
-import { writeRuntimeFile, type RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
+import { writeRuntimeFile } from '@/runtime/runtime-file-mutation-client'
+import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
+import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 
 type McpConfigSectionProps = {
   repo: Repo
@@ -100,7 +102,7 @@ export function McpConfigSection({ repo }: McpConfigSectionProps): React.JSX.Ele
   const targetHostId = getWorktreeExecutionHostId(targetWorktree, repo)
   const fileContext = useMemo(
     (): RuntimeFileOperationArgs => ({
-      settings: { activeRuntimeEnvironmentId: runtimeEnvironmentId },
+      target: runtimeTargetForOwnerEnvironment(runtimeEnvironmentId),
       worktreeId: targetWorktreeId,
       worktreePath: targetRootPath,
       connectionId

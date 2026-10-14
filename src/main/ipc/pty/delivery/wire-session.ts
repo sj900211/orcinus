@@ -42,8 +42,6 @@ import {
 import { acceptPtyDataForRenderer, rendererPtyIsKnownHidden } from './accept'
 import {
   consumeSyntheticKillExit,
-  finalizePtyExitForRenderer,
-  preparePtyExitForRenderer,
   rememberRetiredRejectedPty,
   rememberSyntheticKillExit,
   sendPtyExitToRenderer,
@@ -61,8 +59,7 @@ export function wirePtyIpcSession(session: PtyIpcSession): void {
   session.canSendPtyDataToRenderer = (id, options) => canSendPtyDataToRenderer(session, id, options)
   session.schedulePendingDataFlush = (delayMs) => schedulePendingDataFlush(session, delayMs)
   session.flushPendingData = () => flushPendingData(session)
-  session.sendPtyDataToRenderer = (id, payload, projectionAdmissionIds) =>
-    sendPtyDataToRenderer(session, id, payload, projectionAdmissionIds)
+  session.sendPtyDataToRenderer = (id, payload) => sendPtyDataToRenderer(session, id, payload)
   session.sendModelRestoreNeededMarker = (id, reason, markerSeq) =>
     sendModelRestoreNeededMarker(id, reason, markerSeq)
   session.updateProducerFlowControl = (id) => updateProducerFlowControl(session, id)
@@ -71,10 +68,8 @@ export function wirePtyIpcSession(session: PtyIpcSession): void {
   session.clearPendingPtyData = () => clearPendingPtyData(session)
   session.deletePendingPtyData = (id) => deletePendingPtyData(session, id)
   session.setPendingPtyData = (id, pending) => setPendingPtyData(session, id, pending)
-  session.acceptPtyDataForRenderer = (payload, outputSeq, projection) =>
-    acceptPtyDataForRenderer(session, payload, outputSeq, projection)
-  session.preparePtyExitForRenderer = (payload) => preparePtyExitForRenderer(session, payload)
-  session.finalizePtyExitForRenderer = (payload) => finalizePtyExitForRenderer(session, payload)
+  session.acceptPtyDataForRenderer = (payload, outputSeq) =>
+    acceptPtyDataForRenderer(session, payload, outputSeq)
   session.sendPtyExitToRenderer = (payload) => sendPtyExitToRenderer(session, payload)
   session.sendPtySpawnedToRenderer = (id) => sendPtySpawnedToRenderer(session, id)
   session.requestSerializedBuffer = (ptyId, opts) => requestSerializedBuffer(session, ptyId, opts)

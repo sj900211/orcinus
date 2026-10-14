@@ -1,6 +1,5 @@
-import { closeSftpDirectoryHandle } from './ssh-sftp-directory-close'
 import type { FileEntryWithStats, SFTPWrapper, Stats } from 'ssh2'
-import type { FileStat } from './types'
+import type { FileStat } from './filesystem-provider-contract'
 
 const ABORTED_SFTP_OPERATION_GRACE_MS = 5_000
 
@@ -72,18 +71,6 @@ export function fileStatFromSftpStats(stats: Stats): FileStat {
   }
 }
 
-export function lstatViaSftp(sftp: SFTPWrapper, filePath: string): Promise<FileStat> {
-  return new Promise((resolve, reject) => {
-    sftp.lstat(filePath, (err, stats) => {
-      if (err) {
-        reject(err)
-        return
-      }
-      resolve(fileStatFromSftpStats(stats))
-    })
-  })
-}
-
 // Raw lstat (link not followed) returning the ssh2 Stats. Callers that must distinguish a symlink or
 // a mode-less (untrusted) entry from a real file/dir need the raw mode, which FileStat discards.
 export function lstatRawViaSftp(
@@ -109,6 +96,42 @@ export function fastGetViaSftp(
     (callback) => sftp.fastGet(sourcePath, destinationPath, step ? { step } : {}, callback),
     options
   )
+}
+
+// Why here: upstream deleted ssh-sftp-directory-close.ts with its SSH filesystem provider; only the
+// fork's SFTP listing still closes directory handles.
+const SFTP_DIRECTORY_CLOSE_TIMEOUT_MS = 5_000
+const retiredChannels = new WeakSet<SFTPWrapper>()
+
+function closeSftpDirectoryHandle(sftp: SFTPWrapper, handle: Buffer): Promise<Error | undefined> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (error?: Error): void => {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearTimeout(timer)
+      if (error && !retiredChannels.has(sftp)) {
+        retiredChannels.add(sftp)
+        try {
+          sftp.end()
+        } catch {
+          // Preserve the CLOSE failure if channel teardown also fails.
+        }
+      }
+      resolve(error)
+    }
+    const timer = setTimeout(
+      () => finish(new Error('SFTP directory CLOSE timed out')),
+      SFTP_DIRECTORY_CLOSE_TIMEOUT_MS
+    )
+    try {
+      sftp.close(handle, (error) => finish(error ?? undefined))
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)))
+    }
+  })
 }
 
 export async function* readDirectoryEntriesViaSftp(
@@ -170,14 +193,6 @@ export async function* readDirectoryEntriesViaSftp(
       throw closeError
     }
   }
-}
-
-export function statViaSftp(
-  sftp: SFTPWrapper,
-  filePath: string,
-  options?: { signal?: AbortSignal }
-): Promise<Stats> {
-  return waitForSftpCallback<Stats>((callback) => sftp.stat(filePath, callback), options)
 }
 
 // Read up to `cap` bytes of a remote file into memory (for the read-only viewer). Uses a capped

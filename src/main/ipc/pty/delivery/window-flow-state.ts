@@ -236,7 +236,6 @@ export function releasePtyAccountingForOwnerChange(
       previousOwnerState.inFlightTotalChars - inFlight
     )
   }
-  session.sshOutputIntake?.transferPtyProjections(id, 'pty-owner-window-changed')
   session.rendererDeliveryAccountingByPty.delete(id)
   session.rendererDeliveryRestoreNeededPtys.add(id)
 }
@@ -264,7 +263,6 @@ export function resetWindowScopedDeliveryStateForLifecycle(
     }
     // Why release before clearing: pending bytes and credits belonged to the dead page; releasing producer pauses first keeps no shell wedged.
     session.producerFlowControl.release(id)
-    session.sshOutputIntake?.transferPtyProjections(id, 'renderer-lifecycle-reset')
     if (isOwnerWindowGone) {
       // Latches a restore marker for the new (main) owner instead of dropping the PTY silently.
       releasePtyAccountingForOwnerChange(session, id, accounting)
@@ -277,16 +275,8 @@ export function resetWindowScopedDeliveryStateForLifecycle(
     if (!ptyBelongsToWindow(session, id, webContentsId)) {
       continue
     }
-    const pending = session.pendingData.get(id)
-    if (pending?.projectionAdmissionIds) {
-      session.sshOutputIntake?.transferProjections(
-        pending.projectionAdmissionIds,
-        'renderer-lifecycle-reset'
-      )
-    }
     session.pendingData.delete(id)
     session.producerFlowControl.release(id)
-    session.sourceCreditPendingPtys.delete(id)
   }
   for (const id of session.pendingOverflowMarkedPtys) {
     if (ptyBelongsToWindow(session, id, webContentsId)) {

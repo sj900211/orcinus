@@ -1,11 +1,9 @@
-import { readdirSync, readFileSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
-import { getActiveRuntimeTarget } from '../runtime/runtime-rpc-client'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import {
   canUseGitHubRepoContext,
-  getGitHubRepoRoutingSettings,
+  getGitHubRepoRoutingTarget,
   getGitHubRuntimeRepoId,
   getGitHubSourceRuntimeHost,
   getGitHubSourceRuntimeTarget
@@ -58,7 +56,7 @@ describe('GitHub source runtime context', () => {
   })
 })
 
-describe('getGitHubRepoRoutingSettings', () => {
+describe('getGitHubRepoRoutingTarget', () => {
   const runtimeOwnedRepo: RepoRuntimeOwnerState = {
     settings: { activeRuntimeEnvironmentId: null },
     repos: [{ id: 'repo-1', connectionId: null, executionHostId: 'runtime:owner-runtime' }]
@@ -68,8 +66,8 @@ describe('getGitHubRepoRoutingSettings', () => {
     state: RepoRuntimeOwnerState,
     repoId: string | null,
     sourceContext: TaskSourceContext | null
-  ): ReturnType<typeof getActiveRuntimeTarget> {
-    return getActiveRuntimeTarget(getGitHubRepoRoutingSettings(state, repoId, sourceContext))
+  ): RuntimeClientTarget {
+    return getGitHubRepoRoutingTarget(state, repoId, sourceContext)
   }
 
   it('routes a runtime-owned repo to its owner runtime when the source view is local (#6957)', () => {
@@ -160,26 +158,5 @@ describe('getGitHubRepoRoutingSettings', () => {
         repoId: 'repo-1'
       })
     ).toEqual({ kind: 'environment', environmentId: 'source-runtime' })
-  })
-})
-
-function rendererSourceFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      return rendererSourceFiles(path)
-    }
-    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : []
-  })
-}
-
-describe('GitHub repo routing call sites', () => {
-  it('never spreads a task source over repo-owner settings (#7623)', () => {
-    const rendererRoot = resolve(__dirname, '..')
-    // Why: a local source spreads `activeRuntimeEnvironmentId: null` over a runtime owner.
-    const offenders = rendererSourceFiles(rendererRoot)
-      .filter((file) => /\.\.\.getTaskSourceRuntimeSettings\(/.test(readFileSync(file, 'utf8')))
-      .map((file) => relative(rendererRoot, file).split('\\').join('/'))
-    expect(offenders).toEqual([])
   })
 })

@@ -1,6 +1,5 @@
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { AgentProviderSessionMetadata } from '../../../../shared/agent-session-resume'
-import type { DirectSshAuthority } from '../../../../shared/ssh-types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { WorkspaceSessionHydrationOptions } from '@/lib/workspace-session-hydration-keys'
 import type { HostSessionSlices } from '@/lib/workspace-session-host-split'
@@ -24,9 +23,7 @@ export type CodexRestartNotice = {
   dismissed?: true
 }
 
-/** Scoped direct-SSH hydration replaces only named workspace keys and authority. */
 export type HydrateWorkspaceSessionOptions = {
-  directSshAuthority?: DirectSshAuthority
   runtimeHostIdByWorkspaceSessionKey?: Record<string, ExecutionHostId>
   /** Rows parked for hosts that lost a contested workspace id; omitted leaves the store's copy. */
   contestedHostWorkspaceSessions?: HostSessionSlices
@@ -34,10 +31,9 @@ export type HydrateWorkspaceSessionOptions = {
   contestedPrimaryHostBySessionKey?: Record<string, ExecutionHostId>
 } & WorkspaceSessionHydrationOptions
 
-/** Scoped reconnect must still match this exact provider epoch and connection generation. */
-// Why optional authority: workspace windows run a worktree-scoped reconnect with no direct-SSH
-// authority in play; only the authority-specific guards key on it.
+/** Scoped reconnect: only these workspace keys reconnect; every other key stays pending. */
+// Why fork-kept: project windows and the main-window handback reconnect only their own
+// project's keys; upstream dropped the option when direct SSH stopped using it.
 export type ReconnectPersistedTerminalsOptions = {
-  directSshAuthority?: DirectSshAuthority
   workspaceKeys: readonly string[]
 }

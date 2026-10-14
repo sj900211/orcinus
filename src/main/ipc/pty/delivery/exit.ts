@@ -53,12 +53,11 @@ export function consumeSyntheticKillExit(
   return true
 }
 
-export function preparePtyExitForRenderer(
+function preparePtyExitForRenderer(
   session: PtyIpcSession,
   payload: { id: string; code: number; incarnationId?: string }
 ): (() => void) | null {
   if (!resolvePtyOwnerWindow(payload.id)) {
-    session.sshOutputIntake?.transferPtyProjections(payload.id, 'renderer-destroyed')
     return () => {}
   }
   if (session.rendererExitingPtyIds.has(payload.id)) {
@@ -86,16 +85,11 @@ export function preparePtyExitForRenderer(
     if (remaining) {
       if (remaining.droppedOutput === true) {
         // Sentinel entry: only salvaged query bytes remain; keep the flag so the renderer knows the span was dropped.
-        sendPtyDataToRenderer(
-          session,
-          payload.id,
-          {
-            id: payload.id,
-            data: remaining.data,
-            droppedOutput: true
-          },
-          remaining.projectionAdmissionIds
-        )
+        sendPtyDataToRenderer(session, payload.id, {
+          id: payload.id,
+          data: remaining.data,
+          droppedOutput: true
+        })
       } else {
         sendPtyDataToRenderer(
           session,
@@ -107,8 +101,7 @@ export function preparePtyExitForRenderer(
             remaining.containsBackgroundOutput,
             remaining.rawLength,
             remaining.transformed
-          ),
-          remaining.projectionAdmissionIds
+          )
         )
       }
     }
@@ -119,7 +112,7 @@ export function preparePtyExitForRenderer(
   }
 }
 
-export function finalizePtyExitForRenderer(
+function finalizePtyExitForRenderer(
   session: PtyIpcSession,
   payload: { id: string; code: number; incarnationId?: string }
 ): void {
@@ -133,7 +126,6 @@ export function finalizePtyExitForRenderer(
   session.rendererCreditBeforeExitByPty.delete(payload.id)
   // Why resume a dead PTY (no-op): avoid leaving a stale paused mark behind for a reused id.
   session.producerFlowControl.release(payload.id)
-  session.sourceCreditPendingPtys.delete(payload.id)
   session.pendingOverflowMarkedPtys.delete(payload.id)
   session.rendererDeliveryRestoreNeededPtys.delete(payload.id)
   lastInputAtByPty.delete(payload.id)
@@ -186,7 +178,6 @@ export function sendPtyExitToRenderer(
     return
   }
   try {
-    session.sshOutputIntake?.transferPtyProjections(payload.id, 'legacy-pty-exit')
     finalizePtyExitForRenderer(session, payload)
   } finally {
     release()
