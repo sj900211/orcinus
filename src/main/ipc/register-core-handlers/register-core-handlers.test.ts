@@ -317,7 +317,12 @@ vi.mock('../runtime', () => ({
 }))
 
 vi.mock('../runtime-environments', () => ({
+  invalidateRuntimeEnvironmentTransport: vi.fn(),
   registerRuntimeEnvironmentHandlers: registerRuntimeEnvironmentHandlersMock
+}))
+
+vi.mock('../wsl-host-handlers', () => ({
+  registerWslHostHandlers: vi.fn()
 }))
 
 vi.mock('../ephemeral-vm', () => ({

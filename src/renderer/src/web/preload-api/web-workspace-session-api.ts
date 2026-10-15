@@ -86,9 +86,6 @@ export function createWebWorkspaceSessionApi(): Partial<PreloadApi> {
       // localStorage writes synchronously, so there is no deferred web flush.
       flush: async () => {},
       readTerminalScrollback: () => null,
-      setSync: (session, hostId) => {
-        writeJson(sessionStorageKeyForHost(hostId), sanitizeWebRuntimeWorkspaceSession(session))
-      },
       // Web has no second app window, so main never requests an on-demand checkpoint or a handback.
       onCheckpointRequest: () => noopUnsubscribe,
       sendCheckpointReply: () => {},

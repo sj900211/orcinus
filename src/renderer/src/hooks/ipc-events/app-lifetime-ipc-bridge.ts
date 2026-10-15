@@ -32,6 +32,8 @@ import { registerUpdaterStatusIpcBridge } from './updater-status-ipc-bridge'
 import { createWorktreeEventRuntime } from './worktree-event-runtime'
 import { registerWorkspaceShortcutIpcBridge } from './workspace-shortcut-ipc-bridge'
 import { registerZoomIpcBridge } from './zoom-ipc-bridge'
+import { registerWslAccountNoticeIpcBridge } from './wsl-account-notice-ipc-bridge'
+import { registerWslHostIpcBridge } from './wsl-host-ipc-bridge'
 
 function isRuntimeEnvironmentActive(): boolean {
   return Boolean(useAppStore.getState().settings?.activeRuntimeEnvironmentId?.trim())
@@ -86,6 +88,7 @@ export function installAppLifetimeIpcEvents(
   }
   const unsubscribeRuntimeEnvironmentStore = registerRuntimeClientIpcBridge(unsubs, worktreeRuntime)
   registerBackgroundWorktreeRemovalBridge(unsubs)
+  registerWslHostIpcBridge(unsubs)
   registerProjectCatalogIpcBridge(
     unsubs,
     worktreeRuntime.worktreeChangeRefreshQueue,
@@ -96,6 +99,7 @@ export function installAppLifetimeIpcEvents(
   registerOrcaProfileAuthIpcBridge(unsubs)
   registerWorkspaceShortcutIpcBridge(unsubs)
   registerOsMarkdownFileOpenBridge(unsubs)
+  registerWslAccountNoticeIpcBridge(unsubs)
 
   // Why ?.: additive API — older preloads/web fallback and partial test harnesses may lack it.
   const unsubscribeOpenProjectsChanged = window.api.projectWindow?.onOpenProjectsChanged?.(

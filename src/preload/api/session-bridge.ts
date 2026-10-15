@@ -11,10 +11,6 @@ export const sessionApi = {
   flush: () => ipcRenderer.invoke('session:flush'),
   readTerminalScrollback: (args) =>
     ipcRenderer.sendSync('session:read-terminal-scrollback-sync', args),
-  /** Synchronous session save for beforeunload — blocks until flushed to disk. */
-  setSync: (args, hostId) => {
-    ipcRenderer.sendSync('session:set-sync', args, hostId)
-  },
   onCheckpointRequest: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, args: { requestId: string }): void =>
       callback(args)

@@ -23,7 +23,6 @@ export type WorkspaceSessionApi = {
     }) => Promise<void>
     flush: () => Promise<void>
     readTerminalScrollback: (args: { ref: string }) => string | null
-    setSync: (args: WorkspaceSessionState, hostId?: ExecutionHostId) => void
     /** Main asks this window to checkpoint its live session now (e.g. before a workspace window opens). */
     onCheckpointRequest: (callback: (args: { requestId: string }) => void) => () => void
     sendCheckpointReply: (args: { requestId: string; ok: boolean }) => void

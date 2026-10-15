@@ -3,7 +3,8 @@ import {
   invalidateConnectAttempt,
   testConnectionProbes
 } from './ssh-connect-attempt-registry'
-import { connectionManager } from './ssh-ipc-context'
+import { connectionManager, portForwardManager } from './ssh-ipc-context'
+import { shutdownOrcadManagedTunnels } from '../ssh/orcad-managed-tunnel'
 
 // Why one budget for the whole sequence rather than one per phase: an invalidated connect only
 // observes its cancellation at the next checkpoint, and one blocked in the transport handshake can
@@ -72,6 +73,12 @@ async function settleTasksWithinMs(
 function sshShutdownTasks(): SshShutdownTask[] {
   return [
     { targetId: '*transports', promise: connectionManager?.disconnectAll() ?? Promise.resolve() },
+    {
+      // Why: a system-ssh forward is a separate `ssh -L` child that survives Orca's exit and keeps
+      // its local port, so the next launch cannot bind a managed tunnel's fixed port.
+      targetId: '*forwards',
+      promise: Promise.all([portForwardManager?.closeAll(), shutdownOrcadManagedTunnels()])
+    },
     ...[...auxiliaryDrains].map(([targetId, drain]) => ({ targetId, promise: drain() }))
   ]
 }
