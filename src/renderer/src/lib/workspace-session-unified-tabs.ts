@@ -80,11 +80,8 @@ export function buildPersistedUnifiedTabSessionData(
   for (const worktreeId of worktreeIds) {
     // Why: an SFTP preview tab's backing OpenFile is excluded from persistence (Phase 1), so persist
     // its unified tab too or hydration keeps an orphan editor tab pointing at a non-existent entity.
-    // Why: chat-visual tabs are in memory only; the saved-session schema has no such kind.
     const tabs = (sourceTabs[worktreeId] ?? []).filter(
-      (tab) =>
-        tab.contentType !== 'chat-visual' &&
-        !(tab.contentType === 'editor' && isSftpEditorFileId(tab.entityId ?? ''))
+      (tab) => !(tab.contentType === 'editor' && isSftpEditorFileId(tab.entityId ?? ''))
     )
     if (tabs.length === 0) {
       continue

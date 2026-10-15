@@ -13,6 +13,7 @@ import {
   removeTrustedUIRendererWebContentsId,
   setTrustedUIRendererWebContentsId
 } from '../ipc/ui'
+import { flushUnsavedCloudSessions } from '../orca-profiles/profile-cloud-session-owner'
 import type { Store } from '../persistence'
 import { closeDashboardPopout } from './dashboard-popout-window'
 import {
@@ -53,7 +54,10 @@ export function loadMainWindow(
             ? `${process.env.ELECTRON_RENDERER_URL}?${search}`
             : process.env.ELECTRON_RENDERER_URL
         )
-      : mainWindow.loadFile(join(__dirname, '../renderer/index.html'), search ? { search } : undefined)
+      : mainWindow.loadFile(
+          join(__dirname, '../renderer/index.html'),
+          search ? { search } : undefined
+        )
   // Observe each load promise so failures cannot leave recovery waiting silently.
   load.then(
     () => observer?.onLoaded?.(),
@@ -182,6 +186,7 @@ export function createMainWindow(
           ? event.reasons.filter((reason) => typeof reason === 'string').join(',')
           : ''
       })
+      flushUnsavedCloudSessions()
       // Windows emits no will-quit for an OS shutdown or logoff, so its teardown never records it.
       recordAgentSessionRuntimeEnd('quit')
     })

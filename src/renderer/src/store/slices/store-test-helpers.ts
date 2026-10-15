@@ -52,6 +52,7 @@ import { createTerminalQuickCommandHostsSlice } from './terminal-quick-command-h
 import { createStructuredSessionLaunchDirectorySlice } from './structured-session-launch-directories'
 import { createProjectWindowsSlice } from './project-windows'
 import { createSatelliteMirrorSlice } from './satellite-mirror'
+import { createWorkspaceAttentionSlice } from './workspace-attention/workspace-attention-slice'
 import '@/i18n/i18n'
 import { makeWorktree, TEST_REPO } from './worktrees-slice-test-fixtures'
 export { makeWorktree, TEST_REPO } from './worktrees-slice-test-fixtures'
@@ -112,6 +113,7 @@ export function createTestStore() {
     ...createRemoteServerUpdatesSlice(...a),
     ...createTerminalQuickCommandHostsSlice(...a),
     ...createStructuredSessionLaunchDirectorySlice(...a),
+    ...createWorkspaceAttentionSlice(...a),
     ...createProjectWindowsSlice(...a),
     ...createSatelliteMirrorSlice(...a)
   }))

@@ -49,6 +49,7 @@ import type { TerminalQuickCommandHostsSlice } from './slices/terminal-quick-com
 import type { StructuredSessionLaunchDirectorySlice } from './slices/structured-session-launch-directories'
 import type { ProjectWindowsSlice } from './slices/project-windows'
 import type { SatelliteMirrorSlice } from './slices/satellite-mirror'
+import type { WorkspaceAttentionSlice } from './slices/workspace-attention/workspace-attention-contract'
 
 export type AppState = RepoSlice &
   SparsePresetsSlice &
@@ -97,5 +98,6 @@ export type AppState = RepoSlice &
   RemoteServerUpdatesSlice &
   TerminalQuickCommandHostsSlice &
   StructuredSessionLaunchDirectorySlice &
+  WorkspaceAttentionSlice &
   ProjectWindowsSlice &
   SatelliteMirrorSlice

@@ -106,7 +106,6 @@ async function startOrcadRuntime(
   const { OrcaRuntimeRpcServer } = await import('../runtime/runtime-rpc')
   const { registerHeadlessPtyRuntime } = await import('../ipc/pty/register-headless-runtime')
   const { getLocalPtyProvider } = await import('../ipc/pty/provider/registry')
-  const { getAppEnvironment } = await import('../../shared/app-environment')
   const { installOrcadObservability } = await import('./orcad-observability')
   closeOrcadObservability = installOrcadObservability()
   const { ServeReadinessPublisher } = await import('../server/serve-readiness')
@@ -282,6 +281,10 @@ async function startOrcadRuntime(
   // Why before the RPC server binds: like `--serve`, the first client must find a ready graph.
   const { publishHeadlessRuntimeGraph } = await import('../runtime/headless-runtime-graph')
   publishHeadlessRuntimeGraph(runtime)
+  // Store load skipped moved shell history: only the runtime can tell which worktrees run a shell.
+  void runtime.installPendingOrcadMigrationShellHistory().catch((error: unknown) => {
+    console.error('[orcad-migration] installing pending shell history failed:', error)
+  })
 
   const bindHost = resolveOrcadBindHost(options.bind)
   const rpc = new OrcaRuntimeRpcServer({

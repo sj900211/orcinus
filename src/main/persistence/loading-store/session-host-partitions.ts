@@ -17,6 +17,7 @@ import { preserveRuntimeAuthoredWorkspaceSessionFields } from '../runtime-author
 import { dropClosedTerminalTabs } from '../closed-terminal-tab-write-fence'
 import { findWorktreeIdForTab } from '../restoring-sessions/pane-identity-migration'
 import { invalidateLocalWorktreeMetadataPruneInputs } from '../../local-worktree-metadata-prune-gate'
+import { isWslMoveWorkspaceSessionFrozen } from '../moving-wsl-projects/wsl-move-scope-guard'
 import {
   removeWorkspaceSessionOwner,
   workspaceSessionPartitionIdsForHost
@@ -93,9 +94,11 @@ export class SessionHostPartitionOperations {
     const { [hostId]: _removed, ...remaining } = partitions
     runtime.state.workspaceSessionsByHostId = remaining
     invalidateLocalWorktreeMetadataPruneInputs()
-    scheduleSave(this[sessionHostPartitionOperationsContext].scheduling, [
-      'workspaceSessionsByHostId'
-    ])
+    scheduleSave(
+      this[sessionHostPartitionOperationsContext].scheduling,
+      ['workspaceSessionsByHostId'],
+      hostId
+    )
   }
 
   readTerminalScrollbackSnapshot(ref: string): string | null {
@@ -142,6 +145,10 @@ export function removeWorkspaceSessionOwnerInPartition(
   resolved: ExecutionHostId,
   options: { advanceTerminalTopologyRevision?: boolean }
 ): void {
+  // A paused WSL move keeps its local rows for a downgrade.
+  if (resolved === LOCAL_EXECUTION_HOST_ID && isWslMoveWorkspaceSessionFrozen(worktreeId)) {
+    return
+  }
   // A removed worktree must not resurrect as a restored satellite (5-7).
   removeSatelliteWindowSessionsForWorktreeFromState(
     owner[sessionHostPartitionOperationsContext].runtime,
@@ -172,7 +179,8 @@ export function removeWorkspaceSessionOwnerInPartition(
   }
   scheduleSave(
     owner[sessionHostPartitionOperationsContext].scheduling,
-    resolved === LOCAL_EXECUTION_HOST_ID ? ['workspaceSession'] : ['workspaceSessionsByHostId']
+    resolved === LOCAL_EXECUTION_HOST_ID ? ['workspaceSession'] : ['workspaceSessionsByHostId'],
+    resolved
   )
 }
 
@@ -236,9 +244,11 @@ export function setHostWorkspaceSession(
     ...owner[sessionHostPartitionOperationsContext].runtime.state.workspaceSessionsByHostId,
     [hostId]: withRequiredWorkspaceSessionMaps(orderTerminalRowsByTabGroups(pruned))
   }
-  scheduleSave(owner[sessionHostPartitionOperationsContext].scheduling, [
-    'workspaceSessionsByHostId'
-  ])
+  scheduleSave(
+    owner[sessionHostPartitionOperationsContext].scheduling,
+    ['workspaceSessionsByHostId'],
+    hostId
+  )
 }
 
 /**
