@@ -127,7 +127,8 @@ describe('Windows CLI launcher', () => {
         const info = JSON.parse(inspect.stdout)
         const { version } = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'))
         expect(info.CompanyName).toBe('Stably AI')
-        expect(info.ProductName).toBe('Orca')
+        // Why: the fork rebrands the product but not the publisher; a sync must not revert either.
+        expect(info.ProductName).toBe('Orcinus')
         expect(info.FileDescription).toBe('Orca CLI Launcher')
         expect(info.FileVersion).toBe(`${version.split(/[+-]/)[0]}.0`)
         expect(info.ProductVersion).toBe(version)

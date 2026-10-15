@@ -24,7 +24,10 @@ fn main() {
     let (major, minor, patch) = numeric_version_parts(&version);
 
     let mut resource = winresource::WindowsResource::new();
-    resource.set("ProductName", "Orca");
+    // Why: the product shipping this launcher is Orcinus, and a sync must not revert it.
+    // CompanyName and LegalCopyright stay upstream's — the fork preserves the MIT notice.
+    // FileDescription keeps "Orca CLI" because the CLI command is still named `orca`.
+    resource.set("ProductName", "Orcinus");
     resource.set("FileDescription", "Orca CLI Launcher");
     resource.set("CompanyName", "Stably AI");
     resource.set(

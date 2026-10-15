@@ -92,7 +92,10 @@ expect(
 // (not upstream 'Orca'), and the TS constant and the NSIS uninstall path must name the SAME root —
 // a drift or an 'Orca' revert makes Orcinus share/delete a co-installed upstream Orca's live daemon
 // tree. See docs/reference/windows-daemon-host-relocation.md.
-const relocationSrc = readFileSync(join(ROOT, 'src', 'main', 'daemon', 'daemon-host-relocation.ts'), 'utf8')
+const relocationSrc = readFileSync(
+  join(ROOT, 'src', 'main', 'daemon', 'daemon-host-relocation.ts'),
+  'utf8'
+)
 const nshSrc = readFileSync(join(ROOT, 'config', 'nsis', 'orca-installer-hooks.nsh'), 'utf8')
 const tsRoot = relocationSrc.match(/LOCAL_HOST_ROOT_NAME\s*=\s*'([^']+)'/)?.[1]
 const nshRoot = nshSrc.match(/RMDir\s+\/r\s+"\$LOCALAPPDATA\\([^\\"]+)\\daemon-host"/)?.[1]
@@ -120,7 +123,10 @@ const contractSrc = readFileSync(
 )
 const contractNames = [...contractSrc.matchAll(/'([A-Za-z0-9._-]+\.AppImage)'/g)].map((m) => m[1])
 const appImagePrefix = `${builder.productName.toLowerCase()}-`
-expect(appImageArtifact.length > 0, 'could not read appImage.artifactName from electron-builder config')
+expect(
+  appImageArtifact.length > 0,
+  'could not read appImage.artifactName from electron-builder config'
+)
 expect(
   contractNames.length > 0,
   'could not find accepted *.AppImage names in static-appimage-package-contract.cjs'
@@ -135,6 +141,27 @@ expect(
   `electron-builder emits "${appImageName}" but static-appimage-package-contract.cjs does not accept it (accepts: ${contractNames.join(', ')}) — producer/validator drift`
 )
 
+// 6. Windows CLI launcher PE version block: the ProductName compiled into orca.exe must be the
+// fork's product, not upstream's. Nothing else guards it — the launcher test that asserts the value
+// runs only in upstream's pr.yml, which a direct merge to main never triggers, and the fork shipped
+// 'Orca' here for four upstream syncs before anyone looked. CompanyName and LegalCopyright are
+// deliberately NOT checked: the fork preserves upstream's MIT attribution.
+const launcherBuildSrc = readFileSync(
+  join(ROOT, 'native', 'windows-cli-launcher', 'build.rs'),
+  'utf8'
+)
+const launcherProductName = launcherBuildSrc.match(
+  /resource\.set\(\s*"ProductName"\s*,\s*"([^"]+)"\s*\)/
+)?.[1]
+expect(
+  launcherProductName !== undefined,
+  'could not read the ProductName resource from native/windows-cli-launcher/build.rs'
+)
+expect(
+  launcherProductName === builder.productName,
+  `windows-cli-launcher build.rs sets ProductName="${launcherProductName}" but electron-builder productName is "${builder.productName}" — the packaged orca.exe would report upstream's product`
+)
+
 if (failures.length > 0) {
   console.error('[verify-orcinus-identity] FAILED — fork identity has drifted:')
   for (const f of failures) {
@@ -144,5 +171,6 @@ if (failures.length > 0) {
 }
 console.log(
   `[verify-orcinus-identity] OK — name=${pkg.name} appId=${builder.appId} productName=${builder.productName} ` +
-    `publish=${publish.owner}/${publish.repo} feedRefs=${positiveHits} upstreamRefs=0 hostRoot=${tsRoot} appImage=${appImageName}`
+    `publish=${publish.owner}/${publish.repo} feedRefs=${positiveHits} upstreamRefs=0 hostRoot=${tsRoot} appImage=${appImageName} ` +
+    `launcherProduct=${launcherProductName}`
 )
