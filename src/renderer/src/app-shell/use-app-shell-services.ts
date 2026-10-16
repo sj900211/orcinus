@@ -24,6 +24,7 @@ import { useProjectWindowActiveProjectSync } from './use-project-window-active-p
 import { useSatelliteWorktreeSync } from './use-satellite-worktree-sync'
 import { useTerminalViewerColorPublication } from './use-terminal-viewer-color-publication'
 import { useBrowserIdentityMigrationNotice } from '../components/browser-pane/browser-user-agent-migration-notice'
+import { useBrowserClientHostedDownloadNotices } from '../components/browser-pane/browser-client-hosted-download-notices'
 import { useCodexTerminalServerIsolationNotice } from '../components/terminal-pane/codex-terminal-server-isolation-notice'
 import { useCodexSharedSettingsNotice } from '../components/terminal-pane/codex-shared-settings-notice'
 import { useVisibleReviewRefreshReporting } from './use-visible-review-refresh-reporting'
@@ -74,6 +75,7 @@ export function useAppShellServices(): void {
   usePrimarySelectionPaste(primarySelectionMiddleClickPaste)
   useOsc52ClipboardDefaultOnNotice(persistedUIReady)
   useBrowserIdentityMigrationNotice()
+  useBrowserClientHostedDownloadNotices()
   useCodexTerminalServerIsolationNotice()
   useCodexSharedSettingsNotice()
 }

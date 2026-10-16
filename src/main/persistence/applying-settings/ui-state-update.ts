@@ -16,9 +16,11 @@ import { normalizeUsageNumberFormat } from '../../../shared/usage-number-format'
 import { clampMarkdownTocPanelWidth } from '../../../shared/markdown-toc-panel-width'
 import { clampCombinedDiffFileTreeWidth } from '../../../shared/combined-diff-file-tree-width'
 import {
+  normalizeExecutionHostScope,
   normalizeVisibleExecutionHostIds,
   normalizeExecutionHostOrder
 } from '../../../shared/execution-host'
+import { workspaceHostScopeForVisibleHosts } from '../../../shared/workspace-view/workspace-host-visibility'
 import { normalizeManualRepoOrder } from '../../../shared/manual-repo-order'
 import { normalizeBrowserPageZoomLevel } from '../../../shared/browser-page-zoom'
 import { normalizeFeatureTipIds } from '../../../shared/feature-tips'
@@ -101,6 +103,11 @@ export function updatePersistedUI(
             operations.state.ui?.rightSidebarExplorerView,
             nextRightSidebarTab
           )
+  const nextVisibleWorkspaceHostIds = normalizeVisibleExecutionHostIds(
+    sanitizedUpdates.visibleWorkspaceHostIds !== undefined
+      ? sanitizedUpdates.visibleWorkspaceHostIds
+      : operations.state.ui?.visibleWorkspaceHostIds
+  )
   const nextUI = {
     ...currentUI,
     ...durableUpdates,
@@ -157,10 +164,17 @@ export function updatePersistedUI(
     combinedDiffFileTreeWidth: clampCombinedDiffFileTreeWidth(
       sanitizedUpdates.combinedDiffFileTreeWidth ?? operations.state.ui?.combinedDiffFileTreeWidth
     ),
-    visibleWorkspaceHostIds:
-      sanitizedUpdates.visibleWorkspaceHostIds !== undefined
-        ? normalizeVisibleExecutionHostIds(sanitizedUpdates.visibleWorkspaceHostIds)
-        : normalizeVisibleExecutionHostIds(operations.state.ui?.visibleWorkspaceHostIds),
+    visibleWorkspaceHostIds: nextVisibleWorkspaceHostIds,
+    // A paired client writes only the list; the scope must follow, or "all hosts" revives it.
+    ...(sanitizedUpdates.visibleWorkspaceHostIds !== undefined &&
+    sanitizedUpdates.workspaceHostScope === undefined
+      ? {
+          workspaceHostScope: workspaceHostScopeForVisibleHosts(
+            nextVisibleWorkspaceHostIds,
+            normalizeExecutionHostScope(currentUI.workspaceHostScope)
+          )
+        }
+      : {}),
     agentsVisibleHostIds:
       sanitizedUpdates.agentsVisibleHostIds !== undefined
         ? normalizeVisibleExecutionHostIds(sanitizedUpdates.agentsVisibleHostIds)

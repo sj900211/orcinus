@@ -140,21 +140,24 @@ export function installAppLifetimeIpcEvents(
     unsubs.push(unsubscribeFilesMovedBack)
   }
   unsubs.push(
-    window.api.ui.onActivateWorktree(({ repoId, worktreeId, setup, startup, defaultTabs }) => {
-      void worktreeRuntime
-        .activateNotifiedWorktree(
-          {
-            type: 'activateWorktree',
-            repoId,
-            worktreeId,
-            ...(setup ? { setup } : {}),
-            ...(startup ? { startup } : {}),
-            ...(defaultTabs ? { defaultTabs } : {})
-          },
-          { allowRuntimeEnvironment: false }
-        )
-        .catch((error) => console.error('Failed to activate CLI-created worktree:', error))
-    })
+    window.api.ui.onActivateWorktree(
+      ({ repoId, worktreeId, setup, startup, defaultTabs, providesInitialSurface }) => {
+        void worktreeRuntime
+          .activateNotifiedWorktree(
+            {
+              type: 'activateWorktree',
+              repoId,
+              worktreeId,
+              ...(setup ? { setup } : {}),
+              ...(startup ? { startup } : {}),
+              ...(defaultTabs ? { defaultTabs } : {}),
+              ...(providesInitialSurface ? { providesInitialSurface } : {})
+            },
+            { allowRuntimeEnvironment: false }
+          )
+          .catch((error) => console.error('Failed to activate CLI-created worktree:', error))
+      }
+    )
   )
 
   registerTerminalPresentationIpcBridge(unsubs)
