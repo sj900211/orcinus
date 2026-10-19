@@ -12,7 +12,7 @@ import {
   collectTerminalProviderSnapshotPtyIds,
   refreshTerminalProviderSnapshotCapabilities
 } from '../components/terminal/terminal-provider-snapshot-capability'
-import { isRuntimeOwnedSshTargetId } from '../../../shared/execution-host'
+import { isOwnedSshTargetId } from '../../../shared/execution-host'
 import { restoreLocalStructuredChatsAtStartup } from '../runtime/local-structured-chats'
 import { sweepRestoredCodexPanesForStaleAccounts } from '../lib/codex-stale-pane-sweep'
 import type { WindowBootContext } from '../startup/window-boot-context'
@@ -44,9 +44,10 @@ export async function runStartupReconnectForWindowRole(
   // below so the main window keeps owning every other worktree's restore.
   if (bootContext.role === 'main') {
     // Why: re-establish SSH before terminal reconnect so SSH-backed tabs route through pty.attach; passphrase targets defer to tab focus to avoid stacked credential dialogs.
-    // Why: never dial runtime-owned (ephemeral-VM) targets from the renderer — ssh.connect would dispose the runtime layer's live relay session; filter them out here too.
+    // Why: never dial an Orca-owned target from the renderer — ssh.connect would dispose its owner's
+    // live relay session. Covers recipe VMs and persistent machine-provider targets alike.
     const connectionIds = (args.activeConnectionIdsAtShutdown ?? []).filter(
-      (targetId) => !isRuntimeOwnedSshTargetId(targetId)
+      (targetId) => !isOwnedSshTargetId(targetId)
     )
     if (connectionIds.length > 0) {
       try {

@@ -23,8 +23,9 @@ import { registerSessionCheckpointRequestListener } from '../lib/session-checkpo
 import { stageProjectWindowSessionHandback } from '../lib/project-window-session-handback'
 import { registerProjectWindowSessionHandbackReceiver } from '../lib/project-window-session-handback-receiver'
 import { createShutdownCheckpointPersist } from './shutdown-checkpoint-persist'
+// Why: upstream removed `quit-sleep-record-capture` and now captures main's panes inline; the fork's
+// checkpoint stage is unrelated and stays.
 import { stageWorkspaceSessionCheckpoint } from './workspace-session-checkpoint-stage'
-import { createQuitSleepRecordCapture } from './quit-sleep-record-capture'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
 import {
   dispatchWindowCloseRequest,
@@ -72,9 +73,6 @@ export function useAppSessionPersistence(): void {
     // two firings, PTY exit events can arrive and unmount TerminalPanes,
     // emptying shutdownBufferCaptures. The guard prevents the second call
     // from overwriting the good session data with an empty snapshot.
-    const quitSleepRecords = ORCA_LAYOUT_OWNER_IS_MAIN
-      ? createQuitSleepRecordCapture(useAppStore)
-      : null
     const shutdownCheckpointPersist = createShutdownCheckpointPersist({
       shouldCaptureSession: () => shouldPersistWorkspaceSession(useAppStore.getState()),
       captureTerminalBuffers: () => {
@@ -90,11 +88,10 @@ export function useAppSessionPersistence(): void {
       // which is in-memory. Capture them into the persisted sleeping-session
       // map so a daemon/session death while the app is closed can still
       // cold-restore via the agent's resume command (#5232).
-      // Switch point: the stage writes only the capture's changes into main's records.
-      captureSleepingAgentSessions: quitSleepRecords
-        ? quitSleepRecords.capture
+      // Switch point: main captures its panes' agents itself as it stages the quit.
+      captureSleepingAgentSessions: ORCA_LAYOUT_OWNER_IS_MAIN
+        ? () => {}
         : () => useAppStore.getState().captureAllSleepingAgentSessions('quit'),
-      onSleepRecordsStaged: quitSleepRecords?.staged,
       // Why: re-read state after capture() calls populated scrollback buffers
       // into the store via Zustand setters. The shouldCaptureSession read is
       // only for the gating flags and would miss those updates.

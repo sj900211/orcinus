@@ -585,6 +585,7 @@ describe('registerCoreHandlers', () => {
       museUsage
     })
     expect(registerAppHandlersMock).toHaveBeenCalledWith(store, {
+      quitResumeRecordsFor: expect.any(Function),
       onBeforeRelaunch,
       onBeforeRelaunchExit: expect.any(Function)
     })

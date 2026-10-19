@@ -1,8 +1,8 @@
 import type { SFTPWrapper } from 'ssh2'
 import type { SshTarget } from '../../shared/ssh-types'
 import type { SftpHostAuthType } from '../../shared/sftp-host-types'
-import { SshConnection } from './ssh-connection'
-import type { SshConnectionCallbacks } from './ssh-connection-utils'
+import { SshConnection } from './connection/ssh-connection'
+import type { SshConnectionCallbacks } from './connection/ssh-connection-callbacks'
 
 // Relay-free probe connections for the SFTP host FORM: they validate a base-path and feed `ls`-style
 // autocomplete BEFORE the host is saved, using the draft credentials the user is typing. Kept apart

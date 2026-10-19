@@ -4,8 +4,8 @@ import { posix as pathPosix } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { WebContents } from 'electron'
-import type { SshConnection } from '../ssh/ssh-connection'
-import { shellEscape } from '../ssh/ssh-connection-utils'
+import type { SshConnection } from '../ssh/connection/ssh-connection'
+import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import { sanitizeLocalDownloadFilename } from '../local-download-filename'
 import {
   emitProgress,
@@ -51,6 +51,13 @@ function dropNestedPaths(paths: string[]): string[] {
   return paths.filter(
     (path) => !paths.some((other) => other !== path && path.startsWith(`${other}/`))
   )
+}
+
+// Why local: upstream made its own `shellEscape` private to `ssh-remote-directory-browse.ts`
+// (#30255 reshaped the ssh modules), so the fork's archive path keeps the same single-quote rule here.
+// `~` is never a tar member or ancestor in this path, so the tilde cases upstream handles do not apply.
+function shellEscape(s: string): string {
+  return quotePosixShell(s)
 }
 
 // Pipe `tar -czf -` of the selected remote paths into tempDest. shellEscape guards each argument (a

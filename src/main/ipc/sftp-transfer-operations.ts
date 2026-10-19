@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron'
 import type { FileEntryWithStats, SFTPWrapper } from 'ssh2'
-import type { SshConnection } from '../ssh/ssh-connection'
+import type { SshConnection } from '../ssh/connection/ssh-connection'
 import { SftpConnectionAccessFailure } from '../ssh/sftp-connection'
 import { fileStatFromSftpStats } from '../providers/ssh-filesystem-provider-sftp'
 import { compareFileNames } from '../../shared/file-name-sort'

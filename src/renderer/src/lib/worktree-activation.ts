@@ -1,13 +1,12 @@
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import type { PendingSidebarWorktreeReveal } from '@/store/slices/ui'
 import { activateWebRuntimeSessionWorktree } from '@/runtime/web-runtime-worktree-activation'
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
 import { registerWorktreeActivation } from '@/lib/worktree-activation-nav-registration'
 import { workspaceHasSleepingAgentSessions } from '@/lib/worktree-agent-activation-gate'
 import { resumeSleepingAgentSessionsForWorktree } from '@/lib/resume-sleeping-agent-session'
 import { shouldAutoCreateInitialTerminal } from '@/components/terminal/initial-terminal'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../shared/workspace-scope'
 import {
   folderWorkspaceActivationBlocked,
@@ -15,13 +14,11 @@ import {
   getFolderWorkspacePathStatusTitle
 } from './folder-workspace-path-status'
 import { toast } from 'sonner'
-import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   findFolderWorkspaceOwner,
   getRuntimeEnvironmentIdForFolderWorkspace
 } from './folder-workspace-runtime-owner'
 import { getFolderWorkspaceHostId } from '../../../shared/folder-workspace-execution-host'
-import type { WorktreeStartupPayload } from '@/lib/worktree-startup-payload'
 import {
   ensureFolderWorkspaceInitialTerminal,
   ensureWorktreeHasInitialTerminal
@@ -31,13 +28,16 @@ import { applyWorktreeNavViewEntry } from '@/lib/worktree-nav-view-history-repla
 import {
   activationProvidesInitialSurface,
   activationSeedsUserDefaultSurface,
-  type WorktreeActivationOptions,
-  type WorktreeActivationSurfaceSelection
+  type WorktreeActivationOptions
 } from './worktree-activation-surface-selection'
 import {
   raiseOtherWindowForWorkspaceKey,
   type ActivateOtherWindowGuardOpts
 } from '@/lib/other-window-activation-guard'
+import type {
+  ActivateFolderWorkspaceOptions,
+  ActivateWorkspaceOptions
+} from './worktree-activation-options'
 import { gateAndReseedEmptyWorkspace } from './worktree-activation-gated-empty-reseed'
 import { liftSidebarFiltersHidingWorktree } from './worktree-activation-sidebar-filters'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
@@ -65,15 +65,7 @@ function canInspectAgentActivationInventory(): boolean {
 
 export function activateAndRevealFolderWorkspace(
   folderWorkspaceId: string,
-  opts?: ActivateOtherWindowGuardOpts &
-    WorktreeActivationSurfaceSelection & {
-      sidebarRevealBehavior?: PendingSidebarWorktreeReveal['behavior']
-      revealInSidebar?: boolean
-      showWorkspaceList?: boolean
-      startup?: WorktreeStartupPayload
-      runtimeEnvironmentId?: string | null
-      executionHostId?: ExecutionHostId
-    }
+  opts?: ActivateFolderWorkspaceOptions
 ): ActivateAndRevealResult | false {
   // Why keyed by folder key: a folder workspace is its own single-member project (`folder:<id>`).
   if (
@@ -227,7 +219,10 @@ export function activateAndRevealWorktree(
   // 3. Core activation: setActiveWorktree also restores per-worktree state, clears unread, bumps dead PTY generations, refreshes GitHub
   state.setActiveWorktree(worktreeId, opts?.executionHostId)
   const postActivationState = useAppStore.getState()
-  const ownerRuntimeEnvironmentId = getRuntimeEnvironmentIdForWorktree(postActivationState, wt.id)
+  const ownerRuntimeEnvironmentId = runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(
+    postActivationState,
+    wt.id
+  )
   if (opts?.notifyHostRuntime !== false && isWebRuntimeSessionActive(ownerRuntimeEnvironmentId)) {
     // Why: paired web clients own only local selection, so the desktop host publishes session surfaces without treating it as a nav command.
     void activateWebRuntimeSessionWorktree({
@@ -337,14 +332,7 @@ export function activateAndRevealWorktree(
  */
 export function activateAndRevealWorkspace(
   workspaceId: string,
-  opts?: ActivateOtherWindowGuardOpts &
-    WorktreeActivationSurfaceSelection & {
-      executionHostId?: ExecutionHostId
-      revealInSidebar?: boolean
-      showWorkspaceList?: boolean
-      /** Worktree-only: folder workspaces are never filter-hidden. */
-      clearSidebarFilters?: boolean
-    }
+  opts?: ActivateWorkspaceOptions
 ): ActivateAndRevealResult | false {
   const workspaceScope = parseWorkspaceKey(workspaceId)
   if (workspaceScope?.type !== 'folder') {

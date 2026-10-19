@@ -21,7 +21,7 @@ const { SshConnectionMock, connectMock } = vi.hoisted(() => {
   return { SshConnectionMock, connectMock }
 })
 
-vi.mock('./ssh-connection', () => ({ SshConnection: SshConnectionMock }))
+vi.mock('./connection/ssh-connection', () => ({ SshConnection: SshConnectionMock }))
 
 import { SftpConnectionPool, SftpConnectionAccessFailure } from './sftp-connection'
 
