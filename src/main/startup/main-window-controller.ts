@@ -105,13 +105,13 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
       }
       clearExpectedRendererReload()
     },
-    onRendererProcessGone: (details, webContentsId) => {
+    onRendererProcessGone: (details, webContentsId, liveness) => {
       recordProcessGoneCrash(
         'renderer',
         'renderer',
         details.reason,
         details.exitCode ?? null,
-        { processType: 'renderer' },
+        { processType: 'renderer', ...liveness },
         webContentsId
       )
       // Why: launch-failed only says a spawn failed; the probe's errno (EAGAIN = process limit) names the cause.
