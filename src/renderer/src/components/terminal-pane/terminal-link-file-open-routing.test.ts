@@ -100,17 +100,21 @@ describe('handleOscLink', () => {
       { forceContentReload: true }
     )
     expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(1, null)
-    expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(2, {
-      filePath: '/tmp/src/main.ts',
-      fileId: '/tmp/src/main.ts',
-      line: 42,
-      column: 1,
-      matchLength: 0
-    })
+    expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        filePath: '/tmp/src/main.ts',
+        fileId: '/tmp/src/main.ts',
+        line: 42,
+        column: 1,
+        matchLength: 0
+      })
+    )
     expect(openFilePathMock).not.toHaveBeenCalled()
     // Why: the editor file is the surface — the cross-worktree jump must not add a shell.
     expect(activateAndRevealWorkspace).toHaveBeenCalledWith('wt-1', {
-      providesInitialSurface: true
+      providesInitialSurface: true,
+      executionHostId: 'local'
     })
   })
 
@@ -169,13 +173,16 @@ describe('handleOscLink', () => {
     await flushDoubleRaf()
 
     expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(1, null)
-    expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(2, {
-      filePath: '/tmp/src/main.ts',
-      fileId: '/tmp/src/main.ts',
-      line: 42,
-      column: 7,
-      matchLength: 0
-    })
+    expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        filePath: '/tmp/src/main.ts',
+        fileId: '/tmp/src/main.ts',
+        line: 42,
+        column: 7,
+        matchLength: 0
+      })
+    )
     expect(openFilePathMock).not.toHaveBeenCalled()
   })
 
@@ -193,13 +200,15 @@ describe('handleOscLink', () => {
     await flushDoubleRaf()
 
     expect(setMarkdownViewModeMock).toHaveBeenCalledWith(fileId, 'source')
-    expect(setPendingEditorRevealMock).toHaveBeenLastCalledWith({
-      filePath,
-      fileId,
-      line: 230,
-      column: 1,
-      matchLength: 0
-    })
+    expect(setPendingEditorRevealMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filePath,
+        fileId,
+        line: 230,
+        column: 1,
+        matchLength: 0
+      })
+    )
   })
 
   it('scopes non-Markdown line reveals to the owner-qualified editor tab', async () => {
@@ -216,13 +225,15 @@ describe('handleOscLink', () => {
     await flushDoubleRaf()
 
     expect(setMarkdownViewModeMock).not.toHaveBeenCalled()
-    expect(setPendingEditorRevealMock).toHaveBeenLastCalledWith({
-      filePath,
-      fileId,
-      line: 42,
-      column: 7,
-      matchLength: 0
-    })
+    expect(setPendingEditorRevealMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filePath,
+        fileId,
+        line: 42,
+        column: 7,
+        matchLength: 0
+      })
+    )
   })
 
   it('uses the system default app for shift+cmd/ctrl-click file paths', async () => {
@@ -256,13 +267,16 @@ describe('handleOscLink', () => {
       { forceContentReload: true }
     )
     expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(1, null)
-    expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(2, {
-      filePath: '/tmp/src/main.ts',
-      fileId: '/tmp/src/main.ts',
-      line: 42,
-      column: 7,
-      matchLength: 0
-    })
+    expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        filePath: '/tmp/src/main.ts',
+        fileId: '/tmp/src/main.ts',
+        line: 42,
+        column: 7,
+        matchLength: 0
+      })
+    )
   })
 
   it('cancels a pending Monaco reveal frame when another file open starts', async () => {
@@ -309,12 +323,15 @@ describe('handleOscLink', () => {
       { forceContentReload: true }
     )
     expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(1, null)
-    expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(2, {
-      filePath: '/tmp/src/second.ts',
-      fileId: '/tmp/src/second.ts',
-      line: 20,
-      column: 3,
-      matchLength: 0
-    })
+    expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        filePath: '/tmp/src/second.ts',
+        fileId: '/tmp/src/second.ts',
+        line: 20,
+        column: 3,
+        matchLength: 0
+      })
+    )
   })
 })

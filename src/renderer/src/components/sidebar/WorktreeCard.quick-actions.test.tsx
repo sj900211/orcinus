@@ -24,29 +24,34 @@ let workspaceDeleteModifierPressed = false
 let gitConflictOperationByWorktree: Record<string, GitConflictOperation> = {}
 let WorktreeCard: typeof WorktreeCardComponent
 
-vi.mock('@/store', () => ({
-  useAppStore: (selector: (state: unknown) => unknown) =>
-    selector({
-      deleteStateByWorktreeId: {},
-      fetchHostedReviewForBranch,
-      fetchIssue,
-      gitConflictOperationByWorktree,
-      hostedReviewCache: {},
-      issueCache: {},
-      openModal,
-      projectGroups,
-      remoteBranchConflictByWorktreeId: {},
-      settings,
-      sshConnectionStates: new Map(),
-      sshTargetLabels: new Map(),
-      browserTabsByWorktree,
-      ptyIdsByTabId,
-      tabsByWorktree,
-      updateWorktreeMeta,
-      worktreeCardProperties,
-      projectKeysInOtherWindows: new Set()
+vi.mock('@/store', () => {
+  const getState = () => ({
+    deleteStateByWorktreeId: {},
+    fetchHostedReviewForBranch,
+    fetchIssue,
+    gitConflictOperationByWorktree,
+    hostedReviewCache: {},
+    issueCache: {},
+    openModal,
+    projectGroups,
+    remoteBranchConflictByWorktreeId: {},
+    settings,
+    sshConnectionStates: new Map(),
+    sshTargetLabels: new Map(),
+    browserTabsByWorktree,
+    ptyIdsByTabId,
+    tabsByWorktree,
+    updateWorktreeMeta,
+    worktreeCardProperties,
+    projectKeysInOtherWindows: new Set()
+  })
+  return {
+    useAppStore: Object.assign((selector: (state: unknown) => unknown) => selector(getState()), {
+      getState,
+      subscribe: () => () => {}
     })
-}))
+  }
+})
 
 vi.mock('@/lib/worktree-activation', () => ({
   activateAndRevealWorktree: vi.fn()

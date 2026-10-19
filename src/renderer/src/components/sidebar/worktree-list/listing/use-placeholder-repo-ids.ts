@@ -2,8 +2,8 @@ import { useMemo } from 'react'
 import { useAppStore } from '@/store'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
-import type { WorktreeGroupBy } from '../grouping/row-types'
-import { getEmptyProjectPlaceholderRepoIds } from '../../empty-project-placeholder-repos'
+import type { WorktreeGroupBy } from '../../../../../../shared/sidebar-list/row-types'
+import { getEmptyProjectPlaceholderRepoIds } from '../../../../../../shared/sidebar-list/empty-project-placeholder-repos'
 
 // Why its own module: the fork reads `projectKeysInOtherWindows` here so a project windowed
 // elsewhere keeps its header without its rows. Adding that one input to the memo's dependency

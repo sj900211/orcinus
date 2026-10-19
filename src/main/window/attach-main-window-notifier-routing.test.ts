@@ -30,6 +30,8 @@ vi.mock('../ipc/repos', () => ({
   setRepoRemoteClientNotifier: vi.fn()
 }))
 vi.mock('../ipc/worktrees', () => ({ registerWorktreeHandlers: vi.fn() }))
+// Why: upstream's SSH startup (sign-in wait, #98d8257b02d) reads store methods this routing double lacks.
+vi.mock('../ipc/ssh/ssh', () => ({ registerSshHandlers: vi.fn() }))
 vi.mock('../ipc/worktree-change-invalidators', () => ({ runWorktreeChangeInvalidators: vi.fn() }))
 vi.mock('../ipc/pty/provider/registry', () => ({ getLocalPtyProvider: vi.fn() }))
 vi.mock('../ipc/pty/register-handlers', () => ({ registerPtyHandlers: vi.fn() }))

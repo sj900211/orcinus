@@ -1,6 +1,10 @@
+import type { SmartTier } from '../../../src/shared/sidebar-list/sort-stamps'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { AgentWorkingMode } from '../../../src/shared/agent-status-types'
-import type { RuntimeWorktreeAgentRow } from '../../../src/shared/runtime-types'
+import type {
+  RuntimeWorktreeAgentRow,
+  RuntimeWorktreePsSummary
+} from '../../../src/shared/runtime-types'
 import type { ProjectSectionRepo } from '../../../src/shared/project-section-grouping'
 import type { WorkspaceRowFilters } from '../../../src/shared/workspace-view/workspace-row-filters'
 
@@ -26,6 +30,10 @@ export type Worktree = {
   sortOrder?: number
   manualOrder?: number
   lastActivityAt?: number
+  smartTier?: SmartTier
+  smartAt?: number
+  /** The host sorts by its own stamps; see src/shared/sidebar-list/stamp-order.ts. */
+  sortedByStamps?: true
   createdAt?: number
   // Why: on-disk worktree directory path. Needed by NewWorktreeModal so the
   // marine-creature fallback dedupes against filesystem basenames.
@@ -38,6 +46,7 @@ export type Worktree = {
   /** Workspace options facts the host stamps (RuntimeWorktreePsSummary); older hosts send none. */
   defaultBranch?: boolean
   automationCreated?: true
+  automationName?: string
   cliCreated?: true
   detachedHead?: true
   worktreeInstanceId?: string
@@ -55,11 +64,13 @@ export type Worktree = {
   lastOutputAt?: number
   isPinned: boolean
   isActive?: boolean
-  linkedPR: { number: number; state: string } | null
+  linkedPR: RuntimeWorktreePsSummary['linkedPR']
   linkedIssue?: number | null
   linkedLinearIssue?: string | null
   linkedGitLabMR?: number | null
   linkedGitLabIssue?: number | null
+  /** Every linked issue and review; hosts before the attachment list omit it. Unchecked wire data. */
+  linkedItems?: RuntimeWorktreePsSummary['linkedItems']
   comment?: string
   status?: 'working' | 'active' | 'permission' | 'done' | 'inactive'
   workingMode?: AgentWorkingMode

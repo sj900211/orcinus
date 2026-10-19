@@ -16,6 +16,7 @@ import {
 import { flushUnsavedCloudSessions } from '../orca-profiles/profile-cloud-session-owner'
 import type { Store } from '../persistence'
 import { closeDashboardPopout } from './dashboard-popout-window'
+import { closeWorkspaceSpaceWindow } from './workspace-space-window'
 import {
   installMainWindowCloseLifecycle,
   WINDOW_QUIT_RENDERER_ACK_TIMEOUT_MS
@@ -247,9 +248,10 @@ export function createMainWindow(
   })
 
   mainWindow.on('closed', () => {
-    // Why: the dashboard pop-out is a companion of the main window only.
+    // Why: the dashboard pop-out and disk-usage window are main-window companions only.
     if (!isWorkspaceWindow) {
       closeDashboardPopout()
+      closeWorkspaceSpaceWindow()
     }
     state.clearInitialRevealFallbackTimer()
     closeLifecycle.dispose()

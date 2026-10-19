@@ -44,6 +44,7 @@ import { TabWorkspaceLayoutMenuSection } from './TabWorkspaceLayoutMenuSection'
 import { TAB_CONTEXT_MENU_CONTENT_CLASS } from './tab-context-menu-sizing'
 import { CopyTabIdMenuItem } from './CopyTabIdMenuItem'
 import { isVirtualEditorFile } from '@/store/slices/editor/tabs/editor-tab-content-type'
+import { CloseSplitPaneMenuItem } from './CloseSplitPaneMenuItem'
 
 type EditorFileTabContextMenuProps = {
   open: boolean
@@ -69,6 +70,7 @@ type EditorFileTabContextMenuProps = {
   onCloseAll: () => void
   onCloseToRight: () => void
   onCloseToLeft: () => void
+  onCloseSplitPane?: () => void
   onOpenMarkdownPreview: (
     file: {
       filePath: string
@@ -105,6 +107,7 @@ export function EditorFileTabContextMenu({
   onCloseAll,
   onCloseToRight,
   onCloseToLeft,
+  onCloseSplitPane,
   onOpenMarkdownPreview
 }: EditorFileTabContextMenuProps): React.JSX.Element {
   // Review C8/C10: same resolver as the drag-out path — the old prop
@@ -213,6 +216,7 @@ export function EditorFileTabContextMenu({
             'Close Tabs To The Left'
           )}
         </DropdownMenuItem>
+        <CloseSplitPaneMenuItem onCloseSplitPane={onCloseSplitPane} />
         {isVirtualEditorFile(file) ? null : <DropdownMenuSeparator />}
         {canShowMarkdownPreview ? (
           <>

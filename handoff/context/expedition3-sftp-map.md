@@ -195,7 +195,7 @@
 |---|---|---|
 | ssh2 SFTP | `src/main/ssh/ssh-connection.ts:276` `sftp()` | 기존 SSH 연결 위에 SFTP 채널 멀티플렉스(새 연결 불필요) |
 | 연결 풀 | `ssh-connection-manager.ts` `getConnection(targetId)` | targetId로 모든 원격 작업 라우팅(PTY·git·browse) |
-| 원격 디렉토리 브라우징 | `src/main/ipc/ssh-browse.ts` `ssh:browseDir` | 이미 원격 파일 목록(POSIX/Windows 경로·심볼릭·`~` 해석) |
+| 원격 디렉토리 브라우징 | `src/main/ipc/ssh/ssh-browse.ts` `ssh:browseDir` | 이미 원격 파일 목록(POSIX/Windows 경로·심볼릭·`~` 해석) |
 | 업로드 | `ssh-connection.ts` `openFileUploadSession()`·`sftp-upload.ts` | 스트림·overwrite('wx'/'w')·mkdir·재귀 |
 | 다운로드 | `ssh-connection.ts:531` `downloadFile()`·`ssh-filesystem-provider-sftp.ts` `fastGet` | fastGet·readdir·stat |
 | 이중 전송 | SFTP ↔ system-ssh(tar/scp) | 시스템 SSH 폴백까지 |

@@ -1,6 +1,6 @@
 import { recordHiddenRendererPtyDataDrop } from '../../pty-hidden-delivery-gate'
 import { shouldDropHiddenRendererPtyDataForOwner } from '../pty-owner-gate'
-import type { PendingPtyData } from '../../pty-pending-data-drain-queue'
+import type { PendingPtyData } from '../../pty-pending-data-drain-contract'
 import { activeRendererPtys } from './visibility-state'
 import { listAppWindows } from '../../../window/window-affinity-router'
 import {
@@ -74,7 +74,12 @@ export function flushPendingData(session: PtyIpcSession): void {
         const drop = recordHiddenRendererPtyDataDrop(id, pending.data.length)
         warnIfDroppingHiddenBytesForVisiblePty(session, id, pending.data.length)
         if (drop.shouldEmitRestoreMarker) {
-          sendModelRestoreNeededMarker(id, 'hidden-drop', session.runtime?.getPtyOutputSequence(id))
+          sendModelRestoreNeededMarker(
+            id,
+            'hidden-drop',
+            session.runtime?.getPtyOutputSequence(id),
+            drop.hiddenDropEpisode
+          )
         }
         continue
       }

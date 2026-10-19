@@ -9,7 +9,7 @@ vi.mock('electron', () => ({
 }))
 
 import { registerWslHostHandlers } from './wsl-host-handlers'
-import { channelHandlerLookup } from './runtime-environments-ipc-test-harness'
+import { channelHandlerLookup } from './runtime-environments/runtime-environments-ipc-test-harness'
 import { setWslHostService } from '../wsl/wsl-host-service-instance'
 
 const handler = channelHandlerLookup(mocks.handle)

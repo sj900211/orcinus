@@ -38,12 +38,14 @@ export function getPtyPayloadCharCount(payload: { data: string; rawLength?: numb
 export function sendModelRestoreNeededMarker(
   id: string,
   reason: PtyModelRestoreReason,
-  markerSeq: number | undefined
+  markerSeq: number | undefined,
+  hiddenDropEpisode?: number
 ): boolean {
   return sendToPtyOwner(id, 'pty:modelRestoreNeeded', {
     id,
     reason,
-    ...(typeof markerSeq === 'number' ? { markerSeq } : {})
+    ...(typeof markerSeq === 'number' ? { markerSeq } : {}),
+    ...(typeof hiddenDropEpisode === 'number' ? { hiddenDropEpisode } : {})
   })
 }
 

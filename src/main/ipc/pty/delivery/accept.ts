@@ -56,7 +56,7 @@ export function acceptPtyDataForRenderer(
     const drop = recordHiddenRendererPtyDataDrop(payload.id, droppedChars)
     warnIfDroppingHiddenBytesForVisiblePty(session, payload.id, droppedChars)
     if (drop.shouldEmitRestoreMarker) {
-      sendModelRestoreNeededMarker(payload.id, 'hidden-drop', outputSeq)
+      sendModelRestoreNeededMarker(payload.id, 'hidden-drop', outputSeq, drop.hiddenDropEpisode)
     }
     return
   }

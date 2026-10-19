@@ -25,10 +25,8 @@ import { installRuntimeGitCommandSurface } from '../runtime-git-command-surface'
 import { installRuntimeRepositoryCommandSurface } from '../runtime-repository-command-surface'
 import { installRuntimeReviewCommandSurface } from '../runtime-review-command-surface'
 import { installRuntimeServiceCommandSurface } from '../runtime-service-command-surface'
-import {
-  RuntimeSkillCommands,
-  installRuntimeSkillCommandSurface
-} from '../runtime-skill-command-surface'
+import { RuntimeSkillCommands } from '../runtime-skill-command-surface'
+import { installRuntimeSkillCommandSurface } from '../runtime-skill-command-contract'
 import { getAppEnvironment } from '../../../shared/app-environment'
 import { RuntimeClientSettingsController } from '../runtime-client-settings'
 import { RuntimeSessionSearchSettingsController } from '../runtime-session-search-settings'
@@ -58,6 +56,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
   declare protected readonly retireAgentHookCompatibilityAuthorityFn: HostServices['retireAgentHookCompatibilityAuthorityFn']
   declare protected readonly checkHookAgentPresenceFn: HostServices['checkHookAgentPresenceFn']
   declare protected readonly reconcileAgentStatusForEndedProcessFn: HostServices['reconcileAgentStatusForEndedProcessFn']
+  declare protected readonly forgetHookAgentExitFn: HostServices['forgetHookAgentExitFn']
   declare protected readonly dropAgentStatusForRemovedWorktreeFn: HostServices['dropAgentStatusForRemovedWorktreeFn']
   declare protected readonly canRecoverPersistentLocalPtysFn: HostServices['canRecoverPersistentLocalPtysFn']
   declare protected readonly getPairedDeviceNameFn: HostServices['getPairedDeviceNameFn']
@@ -171,9 +170,6 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
     })
     installRuntimeSkillCommandSurface(runtime, this.skillCommands)
     Object.assign(this, this.edgeCommands.surface)
-    // Why: keep cache-boundary test seams live while the fetch owner holds the mutable maps.
-    void this.canonicalFetchKeyCache
-    void this.fetchLastCompletedAt
     this.clientSettings = new RuntimeClientSettingsController(store, () =>
       this.notifyReposChanged()
     )
@@ -211,6 +207,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
       deps?.retireAgentHookCompatibilityAuthority ?? null
     this.checkHookAgentPresenceFn = deps?.checkHookAgentPresence ?? null
     this.reconcileAgentStatusForEndedProcessFn = deps?.reconcileAgentStatusForEndedProcess ?? null
+    this.forgetHookAgentExitFn = deps?.forgetHookAgentExit ?? null
     this.dropAgentStatusForRemovedWorktreeFn = deps?.dropAgentStatusForRemovedWorktree ?? null
     this.canRecoverPersistentLocalPtysFn = deps?.canRecoverPersistentLocalPtys ?? (() => true)
     this.getPairedDeviceNameFn = deps?.getPairedDeviceName ?? (() => null)

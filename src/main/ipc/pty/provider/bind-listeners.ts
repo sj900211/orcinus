@@ -15,6 +15,7 @@ import { clearProviderPtyState } from './state-cleanup'
 import { providerSnapshotRequiredPtys } from '../delivery/visibility-state'
 import { sendToPtyOwner } from '../../../window/window-affinity-router'
 import type { PtyIpcSession } from '../session'
+import { publishPtyEndpointLoss } from '../../../runtime/terminal/pty-endpoint-loss-signal'
 
 export function bindProviderListeners(session: PtyIpcSession): void {
   localDataUnsub?.()
@@ -27,6 +28,8 @@ export function bindProviderListeners(session: PtyIpcSession): void {
   // just the pane whose write happened to detect the dead endpoint (STA-2373).
   setLocalWriteUnavailableUnsub(
     localProvider.onWriteUnavailable?.((payload) => {
+      // Before the window check: a headless host has no window, only remote streams.
+      publishPtyEndpointLoss(payload.id)
       sendToPtyOwner(payload.id, 'pty:writeUnavailable', { id: payload.id })
     }) ?? null
   )

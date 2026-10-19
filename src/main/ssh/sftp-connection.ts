@@ -1,6 +1,7 @@
 import type { SshTarget } from '../../shared/ssh-types'
 import type { SftpHost } from '../../shared/sftp-host-types'
-import { SshConnection, type SshConnectionCallbacks } from './ssh-connection'
+import { SshConnection } from './ssh-connection'
+import type { SshConnectionCallbacks } from './ssh-connection-utils'
 
 // Relay-free raw ssh2 connection accessor for the SFTP feature (Expedition 3).
 //

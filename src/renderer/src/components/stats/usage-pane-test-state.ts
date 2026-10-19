@@ -41,6 +41,7 @@ export function createUsagePaneStore() {
       cacheReadTokens: 300,
       cacheWriteTokens: 200,
       cacheReuseRate: null,
+      hasUnpricedModels: false,
       hasAnyClaudeData: true
     },
     codexUsageSummary: {

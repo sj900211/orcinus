@@ -299,7 +299,8 @@ function collectSourceFiles(dir: string): string[] {
 }
 
 function opensUserNamedTabs(source: string): boolean {
-  if (!/\bopenFile\(/.test(source)) {
+  // Why (fork): upstream #30399 routes terminal links through openLinkedFileInEditor -> openFileForLink.
+  if (!/\bopen(?:File|FileForLink|LinkedFileInEditor)\(/.test(source)) {
     return false
   }
   if (source.includes('FLOATING_TERMINAL_WORKTREE_ID')) {

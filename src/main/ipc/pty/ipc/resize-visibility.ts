@@ -2,6 +2,7 @@ import { getPtyIpc } from '../../pty-host-bindings'
 import { redactPtyIdForDiagnostics } from '../../../../shared/pty-delivery-diagnostics'
 import { installTerminalViewAttributesIpc } from './terminal-view-attributes-ipc'
 import {
+  consumeHiddenRendererPtyDropMemory,
   recordHiddenRendererPtyDataDrop,
   setRendererPtyDeliveryInterest
 } from '../../pty-hidden-delivery-gate'
@@ -68,6 +69,25 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     }
   })
 
+  // Why the ack and not the serve: the pane can dispose across the serialize + IPC round trip,
+  // so the drop latch stays armed until the restored bytes are actually painted (#15504).
+  ipcMain.removeAllListeners('pty:hiddenOutputRestoreApplied')
+  ipcMain.on(
+    'pty:hiddenOutputRestoreApplied',
+    (event, args: { id?: unknown; hiddenDropEpisode?: unknown }) => {
+      if (typeof args?.id !== 'string' || !args.id) {
+        return
+      }
+      // Why trust-gate: an untrusted ack could retire another window's drop latch (dungeon-4 review).
+      if (event?.sender && !isPtyEventFromTrustedAppWindow(event, mainWindow)) {
+        return
+      }
+      const episode =
+        typeof args.hiddenDropEpisode === 'number' ? args.hiddenDropEpisode : undefined
+      consumeHiddenRendererPtyDropMemory(args.id, episode)
+    }
+  )
+
   ipcMain.removeAllListeners('pty:setActiveRendererPty')
   ipcMain.on('pty:setActiveRendererPty', (_event, args: { id: string; active: boolean }) => {
     if (typeof args.id !== 'string' || !args.id) {
@@ -106,8 +126,8 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     if (typeof args.id !== 'string' || !args.id) {
       return
     }
-    // Why trust-gate: an unhide unconditionally consumes the global dropped-while-hidden latch, so an
-    // untrusted renderer could clear another window's drop memory and suppress its repaint (dungeon-4 review).
+    // Why trust-gate: an unhide spends runtime-owned marks and arms the global drop latch for retirement,
+    // so an untrusted renderer could clear another window's drop memory and suppress its repaint (dungeon-4 review).
     if (event?.sender && !isPtyEventFromTrustedAppWindow(event, mainWindow)) {
       return
     }
@@ -134,7 +154,8 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
           sendModelRestoreNeededMarker(
             args.id,
             'hidden-drop',
-            runtime?.getPtyOutputSequence(args.id)
+            runtime?.getPtyOutputSequence(args.id),
+            drop.hiddenDropEpisode
           )
         }
       }
@@ -150,7 +171,12 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     session.syncPtyBackgroundedDelivery(args.id, 'gate-unmark')
     // Why: a reload/remount may have replaced the view that latched restore-needed, so re-emit on unhide; a redundant replay is cheap/idempotent, a missed restore corrupts the pane.
     if (transition.droppedWhileHidden) {
-      sendModelRestoreNeededMarker(args.id, 'unhide', runtime?.getPtyOutputSequence(args.id))
+      sendModelRestoreNeededMarker(
+        args.id,
+        'unhide',
+        runtime?.getPtyOutputSequence(args.id),
+        transition.hiddenDropEpisode
+      )
     }
   })
 

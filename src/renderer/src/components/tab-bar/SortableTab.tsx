@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { X, Minimize2, Pin } from 'lucide-react'
 import { stripLeadingAgentTitleDecoration } from '../../../../shared/agent-title-decoration'
@@ -21,11 +21,11 @@ import {
 import { preventMiddleButtonDefault } from './middle-button-default-guard'
 import { useSortableTabRename } from './use-sortable-tab-rename'
 import { SortableTabContextMenu } from './SortableTabContextMenu'
+import { useSortableTabContextMenu } from './use-sortable-tab-context-menu'
 import { translate } from '@/i18n/i18n'
 import { TAB_LABEL_WIDTH_CLASSES } from './tab-width-rules'
 import { useTabStripSlotProps } from './use-tab-strip-slot-props'
 import { useTabStripPointerActivation } from './tab-strip-pointer-activation'
-import { TabCloseTooltip } from './TabCloseTooltip'
 import { TerminalTabLeadingIcon } from './TerminalTabLeadingIcon'
 import {
   isTerminalTabActivityLive,
@@ -58,6 +58,7 @@ export type SortableTabProps = {
   onCloseOthers: (tabId: string) => void
   onCloseToRight: (tabId: string) => void
   onCloseToLeft: (tabId: string) => void
+  onCloseSplitPane?: () => void
   onSetCustomTitle: (tabId: string, title: string | null) => void
   onSetTabColor: (tabId: string, color: string | null) => void
   onTogglePin: () => void
@@ -92,6 +93,7 @@ export default function SortableTab({
   onCloseOthers,
   onCloseToRight,
   onCloseToLeft,
+  onCloseSplitPane,
   onSetCustomTitle,
   onSetTabColor,
   onTogglePin,
@@ -139,13 +141,12 @@ export default function SortableTab({
   })
 
   // Why: no transform/transition/opacity so tabs stay anchored during drag, only the insertion bar moves (see TabBar.tsx).
-  const [menuOpening, setMenuOpening] = useState<number | null>(null)
-  const menuGeneration = useRef(0)
-  const setMenuOpen = useCallback((open: boolean) => {
-    // Every gesture retires the old opening, even when React batches close and reopen.
-    const generation = ++menuGeneration.current
-    setMenuOpening(open ? generation : null)
-  }, [])
+  const {
+    open: menuOpen,
+    openingId,
+    onOpenChange: setMenuOpen,
+    onComplete
+  } = useSortableTabContextMenu()
   const [menuPoint, setMenuPoint] = useState({ x: 0, y: 0 })
   const {
     isEditing,
@@ -173,13 +174,13 @@ export default function SortableTab({
 
   // Why: webview clicks miss the renderer pointerdown Radix uses for outside-click, so dismiss on window blur instead.
   useEffect(() => {
-    if (menuOpening === null) {
+    if (!menuOpen) {
       return
     }
     const dismiss = (): void => setMenuOpen(false)
     window.addEventListener('blur', dismiss)
     return () => window.removeEventListener('blur', dismiss)
-  }, [menuOpening, setMenuOpen])
+  }, [menuOpen, setMenuOpen])
 
   // Why: while editing, drop drag listeners so typing can't start a drag; attributes stay spread to keep dnd-kit a11y.
   const dragListeners = isEditing ? undefined : listeners
@@ -325,40 +326,38 @@ export default function SortableTab({
         </button>
       )}
       {!isEditing && !isPinned && (
-        <TabCloseTooltip>
-          <button
-            className={`relative z-10 flex items-center justify-center w-4 h-4 rounded-sm shrink-0 ${
-              isActive
-                ? 'text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:text-foreground focus-visible:bg-muted'
-                : 'text-transparent group-hover:text-muted-foreground hover:!text-foreground hover:!bg-muted focus-visible:!text-foreground focus-visible:!bg-muted'
-            }`}
-            // Why: stable accessible name lets E2E drive the real close path instead of calling the store.
-            aria-label={translate(
-              'auto.components.tab.bar.SortableTab.6df69d9388',
-              'Close tab {{value0}}',
-              { value0: tabTitle }
-            )}
-            type="button"
-            data-tab-close-button="true"
-            onPointerDown={(e) => {
-              if (e.button === 0) {
-                e.stopPropagation()
-              }
-            }}
-            onMouseDown={(e) => {
-              if (e.button === 0) {
-                e.stopPropagation()
-              }
-            }}
-            onClick={(e) => {
-              e.preventDefault()
+        <button
+          className={`relative z-10 flex items-center justify-center w-4 h-4 rounded-sm shrink-0 ${
+            isActive
+              ? 'text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:text-foreground focus-visible:bg-muted'
+              : 'text-transparent group-hover:text-muted-foreground hover:!text-foreground hover:!bg-muted focus-visible:!text-foreground focus-visible:!bg-muted'
+          }`}
+          // Why: stable accessible name lets E2E drive the real close path instead of calling the store.
+          aria-label={translate(
+            'auto.components.tab.bar.SortableTab.6df69d9388',
+            'Close tab {{value0}}',
+            { value0: tabTitle }
+          )}
+          type="button"
+          data-tab-close-button="true"
+          onPointerDown={(e) => {
+            if (e.button === 0) {
               e.stopPropagation()
-              onClose(tab.id)
-            }}
-          >
-            <X className="w-3 h-3" />
-          </button>
-        </TabCloseTooltip>
+            }
+          }}
+          onMouseDown={(e) => {
+            if (e.button === 0) {
+              e.stopPropagation()
+            }
+          }}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onClose(tab.id)
+          }}
+        >
+          <X className="w-3 h-3" />
+        </button>
       )}
     </div>
   )
@@ -374,7 +373,7 @@ export default function SortableTab({
           setMenuOpen(true)
         }}
       >
-        {isEditing || menuOpening !== null ? (
+        {isEditing || menuOpen ? (
           tabRoot
         ) : (
           <TabHoverCard
@@ -402,17 +401,13 @@ export default function SortableTab({
       </div>
 
       <SortableTabContextMenu
-        sessionSwitchOpening={menuOpening}
-        onSessionSwitchComplete={() => {
-          if (menuGeneration.current === menuOpening) {
-            setMenuOpen(false)
-          }
-        }}
+        sessionSwitchOpening={openingId}
+        onSessionSwitchComplete={onComplete}
         tab={tab}
         unifiedTabId={unifiedTabId}
         groupId={groupId}
         isActive={isActive}
-        open={menuOpening !== null}
+        open={menuOpen}
         point={menuPoint}
         tabCount={tabCount}
         hasTabsToRight={hasTabsToRight}
@@ -424,6 +419,7 @@ export default function SortableTab({
         onCloseOthers={onCloseOthers}
         onCloseToRight={onCloseToRight}
         onCloseToLeft={onCloseToLeft}
+        onCloseSplitPane={onCloseSplitPane}
         onRenameOpen={handleRenameOpen}
         onSetTabColor={onSetTabColor}
         onTogglePin={onTogglePin}

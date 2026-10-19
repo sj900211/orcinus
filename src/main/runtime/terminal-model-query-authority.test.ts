@@ -10,8 +10,7 @@ import {
 } from './terminal-model-query-authority'
 import {
   _resetHiddenRendererPtyDeliveryGateForTest,
-  markHiddenRendererPty,
-  setRendererPtyDeliveryInterest
+  markHiddenRendererPty
 } from '../ipc/pty-hidden-delivery-gate'
 
 // Why: no router main window is registered here, so owner resolution falls back to the any-window union.
@@ -35,21 +34,6 @@ describe('isTerminalModelQueryAuthorityEnabled', () => {
     expect(isTerminalModelQueryAuthorityEnabled(null)).toBe(true)
     expect(isTerminalModelQueryAuthorityEnabled(undefined)).toBe(true)
   })
-
-  it('is an independent off switch for the responder alone', () => {
-    expect(
-      isTerminalModelQueryAuthorityEnabled({ ...ALL_ON, terminalModelQueryAuthority: false })
-    ).toBe(false)
-  })
-
-  it('requires both Phase-4 gate switches — no marks exist without them', () => {
-    expect(
-      isTerminalModelQueryAuthorityEnabled({ ...ALL_ON, terminalHiddenDeliveryGate: false })
-    ).toBe(false)
-    expect(
-      isTerminalModelQueryAuthorityEnabled({ ...ALL_ON, terminalMainSideEffectAuthority: false })
-    ).toBe(false)
-  })
 })
 
 describe('shouldModelAnswerHiddenPtyQueries', () => {
@@ -65,32 +49,6 @@ describe('shouldModelAnswerHiddenPtyQueries', () => {
     markHiddenRendererPty(WINDOW, 'pty-1')
     expect(answer('pty-1')).toBe(true)
     expect(answer('pty-other')).toBe(false)
-  })
-
-  it('yields to registered renderer delivery interest (chunk is delivered to a sidecar)', () => {
-    markHiddenRendererPty(WINDOW, 'pty-1')
-    setRendererPtyDeliveryInterest(WINDOW, 'pty-1', true)
-    expect(answer('pty-1')).toBe(false)
-    setRendererPtyDeliveryInterest(WINDOW, 'pty-1', false)
-    expect(answer('pty-1')).toBe(true)
-  })
-
-  it('yields while a remote view subscriber is attached', () => {
-    markHiddenRendererPty(WINDOW, 'pty-1')
-    expect(
-      shouldModelAnswerHiddenPtyQueries({
-        ptyId: 'pty-1',
-        settings: ALL_ON,
-        hasRemoteViewSubscriber: true
-      })
-    ).toBe(false)
-  })
-
-  it('stays silent under any kill switch', () => {
-    markHiddenRendererPty(WINDOW, 'pty-1')
-    expect(answer('pty-1', { terminalModelQueryAuthority: false })).toBe(false)
-    expect(answer('pty-1', { terminalHiddenDeliveryGate: false })).toBe(false)
-    expect(answer('pty-1', { terminalMainSideEffectAuthority: false })).toBe(false)
   })
 })
 

@@ -6,9 +6,10 @@ import type { EditorTabSelection } from '@/store/slices/editor/types/open-file'
 import type { AppState } from '@/store/types'
 
 // Open-interception gate (dungeon 5, spec 2 / decisions D8+D17): consulted as
-// the FIRST statement of the openFile store action — the single convergence
-// point of every open path. Returns the intercepted file id (the satellite's
-// path spelling) to the caller, or null to open normally.
+// the FIRST statement of the editor slice's shared open path, behind both
+// `openFile` and `openFileForLink`; a new open entry point must route through it.
+// Returns the intercepted file id (the satellite's path spelling) to the caller,
+// or null to open normally.
 //
 // Why these preconditions: mode 'edit' alone over-matches — SFTP previews and
 // read-only logs are mode 'edit' too, and an open that would resolve to a

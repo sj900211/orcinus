@@ -14,17 +14,22 @@ export function transitionHiddenRendererPtyDeliveryState(
   reportingWebContentsId: number,
   id: string,
   hidden: boolean
-): { droppable: boolean; droppedWhileHidden: boolean; policyChanged: boolean } {
+): {
+  droppable: boolean
+  droppedWhileHidden: boolean
+  hiddenDropEpisode?: number
+  policyChanged: boolean
+} {
   const settings = session.getSettings?.()
   const wasDroppable = shouldDropHiddenRendererPtyDataForOwner(id, settings)
-  let droppedWhileHidden = false
+  let unmarked: ReturnType<typeof unmarkHiddenRendererPty> = { droppedWhileHidden: false }
   if (hidden) {
     markHiddenRendererPty(reportingWebContentsId, id)
   } else {
-    droppedWhileHidden = unmarkHiddenRendererPty(reportingWebContentsId, id).droppedWhileHidden
+    unmarked = unmarkHiddenRendererPty(reportingWebContentsId, id)
   }
   const droppable = shouldDropHiddenRendererPtyDataForOwner(id, settings)
-  return { droppable, droppedWhileHidden, policyChanged: wasDroppable !== droppable }
+  return { droppable, ...unmarked, policyChanged: wasDroppable !== droppable }
 }
 
 // Why owner attribution: spawn-time marks must land where delivery decisions read them, not on the requesting window.
