@@ -96,7 +96,9 @@ describe('a window spawn for a pane main took back while it waited', () => {
     vi.spyOn(store, 'getWorkspaceSessionHostIds').mockReturnValue([LOCAL_EXECUTION_HOST_ID])
     vi.spyOn(store, 'getWorkspaceSession').mockImplementation(() => current.value)
     handlers.clear()
-    registerPtyHandlers(mainWindow, undefined, undefined, undefined, undefined, store)
+    // SAFETY: the fork narrows this parameter to BrowserWindow so delivery can resolve a pty's owner
+    // window; registration only reads the stand-in's window surface, which PtyIpcTestMainWindow has.
+    registerPtyHandlers(mainWindow as never, undefined, undefined, undefined, undefined, store)
     spawnMock.mockClear()
 
     await expect(
