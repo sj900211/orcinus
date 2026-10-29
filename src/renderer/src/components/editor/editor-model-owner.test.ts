@@ -6,7 +6,7 @@ import type {
 } from '@/lib/worktree-operation-route'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import { detachedEditorBufferId } from '@/store/slices/editor/buffers/editor-buffer-views'
-import { getEditorModelOwnerKey } from './editor-model-owner'
+import { getEditorModelOwnerKey, resolveEditorModelOwner } from './editor-model-owner'
 import { toEditorModelUri } from './editor-model-uri'
 
 function file(overrides: Partial<OpenFile> = {}): OpenFile {
@@ -178,5 +178,39 @@ describe('editor model ownership', () => {
       detachedEditorBufferId('file'),
       getEditorModelOwnerKey(remote, localState)
     ])
+  })
+
+  // Why: the fork rule is that an SFTP preview never resolves to a local file. Upstream keys the
+  // editor buffer record on this owner, so a remote path that keys as `local` shares a record —
+  // draft, isDirty and disk signature — with a local tab of the same path (stage-13 critic N1).
+  it('separates an SFTP preview from a local tab of the same path', () => {
+    const local = file({ filePath: '/repo/app.ts', relativePath: 'app.ts' })
+    const preview = file({
+      id: 'preview',
+      filePath: '/repo/app.ts',
+      relativePath: '/repo/app.ts',
+      runtimeEnvironmentId: null,
+      readOnly: true,
+      isPreview: true,
+      sftpTargetId: 'host-a'
+    })
+    expect(getEditorModelOwnerKey(preview, localState)).not.toBe(
+      getEditorModelOwnerKey(local, localState)
+    )
+    expect(resolveEditorModelOwner(preview, localState).hostId).toBe('ssh:host-a')
+  })
+
+  // Why ahead of captured provenance: the captured route names the worktree that owns the tab, not
+  // the host the bytes live on, so provenance must not pull an SFTP file back to the local key.
+  it('keeps the SFTP host even when the tab carries captured local provenance', () => {
+    const preview = file({
+      id: 'preview-captured',
+      filePath: '/repo/app.ts',
+      relativePath: '/repo/app.ts',
+      runtimeEnvironmentId: null,
+      sftpTargetId: 'host-a',
+      operationProvenance: captured({ executionHostId: 'local', runtimeEnvironmentId: null })
+    })
+    expect(resolveEditorModelOwner(preview, localState).hostId).toBe('ssh:host-a')
   })
 })

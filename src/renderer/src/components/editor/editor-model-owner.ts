@@ -12,7 +12,11 @@ export type EditorModelOwner = { environmentId: string | null; hostId: string | 
 export function resolveEditorModelOwner(
   file: Pick<
     OpenFile,
-    'worktreeId' | 'runtimeEnvironmentId' | 'externalSshTargetId' | 'operationProvenance'
+    | 'worktreeId'
+    | 'runtimeEnvironmentId'
+    | 'externalSshTargetId'
+    | 'sftpTargetId'
+    | 'operationProvenance'
   >,
   state: WorktreeOperationRouteState
 ): EditorModelOwner {
@@ -29,17 +33,23 @@ export function resolveEditorModelOwner(
     : file.runtimeEnvironmentId !== undefined
       ? file.runtimeEnvironmentId?.trim() || null
       : (route?.runtimeEnvironmentId ?? null)
-  const hostId = captured
-    ? captured.executionHostId
-    : file.externalSshTargetId
-      ? toSshExecutionHostId(file.externalSshTargetId)
-      : route &&
-          (file.runtimeEnvironmentId === undefined ||
-            (file.runtimeEnvironmentId || null) === route.runtimeEnvironmentId)
-        ? route.executionHostId
-        : environmentId
-          ? toRuntimeExecutionHostId(environmentId)
-          : null
+  // Why first, ahead of captured provenance: an SFTP file lives on its target by definition, and the
+  // captured route describes the worktree that owns the tab, not where the bytes are. Without this the
+  // remote path keys as `local` and a same-path local tab shares its buffer record — draft, isDirty and
+  // disk signature — which is the fork rule that an SFTP preview never resolves to a local file.
+  const hostId = file.sftpTargetId
+    ? toSshExecutionHostId(file.sftpTargetId)
+    : captured
+      ? captured.executionHostId
+      : file.externalSshTargetId
+        ? toSshExecutionHostId(file.externalSshTargetId)
+        : route &&
+            (file.runtimeEnvironmentId === undefined ||
+              (file.runtimeEnvironmentId || null) === route.runtimeEnvironmentId)
+          ? route.executionHostId
+          : environmentId
+            ? toRuntimeExecutionHostId(environmentId)
+            : null
   return { environmentId, hostId }
 }
 
