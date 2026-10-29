@@ -55,8 +55,8 @@ async function captureMovedEditorFilePayload({
     filePath: current.filePath,
     relativePath: current.relativePath,
     language,
-    // Why together-or-not-at-all: the destination arms its disk-baseline
-    // verification gate only when BOTH exist (hydrate-editor-session contract).
+    // Why together-or-not-at-all: the destination seeds the record with both, so the
+    // first guarded save compares against the carried baseline.
     ...(draft !== undefined
       ? {
           dirtyDraftContent: draft,

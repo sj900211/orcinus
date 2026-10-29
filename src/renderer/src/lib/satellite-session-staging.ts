@@ -1,5 +1,5 @@
 import type { SatelliteMovedFile } from '../../../shared/satellite-window-payloads'
-import { flushPendingEditorChange } from '@/components/editor/editor-pending-flush'
+import { flushPendingEditorBuffer } from '@/components/editor/editor-pending-flush'
 import { useAppStore } from '@/store'
 
 // Continuous satellite session staging (spec revision 5-7): main persists the
@@ -20,7 +20,7 @@ export function buildSatelliteSessionFiles(): SatelliteMovedFile[] {
   // same guarantee via quiesce.)
   for (const file of useAppStore.getState().openFiles) {
     if (file.mode === 'edit' && file.isDirty) {
-      flushPendingEditorChange(file.id)
+      flushPendingEditorBuffer(useAppStore.getState(), file.id)
     }
   }
   const state = useAppStore.getState()

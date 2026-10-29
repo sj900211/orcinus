@@ -1,5 +1,6 @@
 import type { AppState } from '@/store/types'
 import { useAppStore } from '@/store'
+import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { timeRendererStartupStep } from './startup-diagnostics'
@@ -19,7 +20,8 @@ export function collectProjectWorkspaceKeys(
     return [projectKey]
   }
   // Why a Set: multi-host catalogs can list the same worktree id under one repoId.
-  return [...new Set((state.worktreesByRepo[projectKey] ?? []).map((worktree) => worktree.id))]
+  const worktrees = selectWorktreesByRepo(state)[projectKey] ?? []
+  return [...new Set(worktrees.map((worktree) => worktree.id))]
 }
 
 /** Reconnect scope for a project-window boot: the project's workspace keys plus the

@@ -19,6 +19,8 @@ import {
 import { mainDeliveryBreadcrumbs } from '../delivery/debug'
 import { sendModelRestoreNeededMarker } from '../delivery/payload'
 import { isPtyEventFromTrustedAppWindow } from './write-input'
+import { acknowledgePaintedColdRestore } from './painted-cold-restore-ack'
+import type { PaintedRestoreAck } from '../../../../shared/painted-restore-ack'
 import type { PtyIpcSession } from '../session'
 
 export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
@@ -62,11 +64,10 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
 
   // Why: fire-and-forget — clears the DaemonPtyAdapter's sticky cold-restore cache after the renderer consumed it; no-op for non-daemon providers.
   ipcMain.removeAllListeners('pty:ackColdRestore')
-  ipcMain.on('pty:ackColdRestore', (_event, args: { id: string }) => {
-    const provider = tryGetProviderForPty(args.id)
-    if (provider && 'ackColdRestore' in provider && typeof provider.ackColdRestore === 'function') {
-      provider.ackColdRestore(args.id)
-    }
+  ipcMain.on('pty:ackColdRestore', (_event, args: Partial<PaintedRestoreAck> | undefined) => {
+    acknowledgePaintedColdRestore(args, (pane, ptyId) =>
+      Boolean(runtime?.isRestoredPaneBoundTo(pane, ptyId))
+    )
   })
 
   // Why the ack and not the serve: the pane can dispose across the serialize + IPC round trip,

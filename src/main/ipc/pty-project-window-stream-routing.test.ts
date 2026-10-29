@@ -6,6 +6,7 @@ import { deletePtyOwnership } from './pty/provider/ownership-state'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { registerProjectWindow, unregisterProjectWindow } from '../window/project-window-registry'
 import { addTrustedUIRendererWebContentsId, removeTrustedUIRendererWebContentsId } from './ui'
+import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))
@@ -152,12 +153,35 @@ describe('registerPtyHandlers (project-window stream routing)', () => {
       expect(workspaceWindow.webContents.send).toHaveBeenCalledWith('pty:exit', {
         id: result.id,
         code: 0,
-        incarnationId: expect.any(String)
+        incarnationId: expect.any(String),
+        hostId: 'local'
       })
       expect(mainWindow.webContents.send).not.toHaveBeenCalledWith('pty:exit', expect.anything())
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // Fork: the commit-time hidden mark follows the spawn's worktree, before the PTY records one.
+  it('marks a hidden spawn on its worktree owner window, not the main window', async () => {
+    const runtime = createRuntimeStub(new Map())
+    const workspaceWindow = createWorkspaceWindow()
+    registerWorkspace(workspaceWindow)
+    spawnMock.mockReturnValue(createMockProc().proc)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the suite's window and runtime stand-ins carry every member registration reads.
+    registerPtyHandlers(mainWindow as never, runtime as never)
+
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the pty:spawn handler resolves the spawn result, which carries the PTY id.
+    const result = (await handlers.get('pty:spawn')!(null, {
+      cols: 80,
+      rows: 24,
+      cwd: '/tmp',
+      worktreeId: WORKTREE_ID,
+      initiallyHidden: true
+    })) as { id: string }
+
+    expect(isHiddenRendererPty(WORKSPACE_WEB_CONTENTS_ID, result.id)).toBe(true)
+    expect(isHiddenRendererPty(mainWindow.webContents.id, result.id)).toBe(false)
   })
 
   it('holds workspace-owned output until that window reports its dispatcher ready', async () => {

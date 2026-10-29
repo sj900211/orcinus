@@ -264,6 +264,8 @@ const DOCUMENT_FOLDER_ACCESS_BUILDERS = [
 ]
 
 const USER_NAMED_TAB_OPENERS = [
+  // Why: upstream #32182's empty-group action opens a picked floating document (through the listed opener).
+  'components/WorkspaceEmptyState.tsx',
   'components/browser-pane/navigate/navigate-browser-page-url.ts',
   'components/editor/editor-dropped-file-open.ts',
   'components/editor/markdown-preview-link-actions.ts',

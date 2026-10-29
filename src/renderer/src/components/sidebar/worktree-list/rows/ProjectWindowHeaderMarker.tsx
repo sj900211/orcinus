@@ -2,6 +2,7 @@ import React from 'react'
 import { AppWindow } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
+import { raiseOtherWindowForWorkspaceKey } from '@/lib/other-window-activation-guard'
 import { useAppStore } from '@/store'
 
 /**
@@ -35,4 +36,9 @@ export function ProjectWindowHeaderMarker({
       </TooltipContent>
     </Tooltip>
   )
+}
+
+/** A windowed project's header click raises its owning window; true means the click is handled. */
+export function raiseProjectWindow(projectKey: string | undefined): boolean {
+  return projectKey !== undefined && raiseOtherWindowForWorkspaceKey(projectKey)
 }

@@ -1,8 +1,7 @@
 import { rectHasVisibleAreaOnAnyDisplay } from './window-bounds-validation'
 import { randomUUID } from 'node:crypto'
-import { BrowserWindow, nativeTheme } from 'electron'
+import { app, BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'node:path'
-import { is } from '@electron-toolkit/utils'
 import { installPrivilegedWindowNavigationPolicy } from './privileged-window-navigation'
 import { addTrustedUIRendererWebContentsId, removeTrustedUIRendererWebContentsId } from '../ipc/ui'
 import {
@@ -48,7 +47,7 @@ function loadSatelliteWindow(
   }).toString()
   // Why the catch: closing the window mid-load rejects with ERR_ABORTED —
   // expected teardown, not an unhandled rejection.
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
     window.loadURL(`${process.env.ELECTRON_RENDERER_URL}/editor.html?${search}`).catch(() => {})
   } else {
     window.loadFile(join(__dirname, '../renderer/editor.html'), { search }).catch(() => {})

@@ -1,5 +1,4 @@
-import { BrowserWindow, nativeTheme, powerMonitor, screen } from 'electron'
-import { is } from '@electron-toolkit/utils'
+import { app, BrowserWindow, nativeTheme, powerMonitor, screen } from 'electron'
 import { join } from 'node:path'
 import { getAppIconPath } from '../app-icon'
 import { browserManager } from '../browser/browser-manager'
@@ -49,7 +48,7 @@ export function loadMainWindow(
 ): void {
   const search = opts?.search
   const load =
-    is.dev && process.env.ELECTRON_RENDERER_URL
+    !app.isPackaged && process.env.ELECTRON_RENDERER_URL
       ? mainWindow.loadURL(
           search
             ? `${process.env.ELECTRON_RENDERER_URL}?${search}`

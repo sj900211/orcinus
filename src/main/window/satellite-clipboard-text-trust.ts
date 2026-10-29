@@ -1,4 +1,5 @@
 import type { WebContents } from 'electron'
+import { isDashboardPopoutRenderer } from './dashboard-popout-window'
 
 // Why a separate additional set (satellite editor windows): like the dashboard
 // popout, a satellite needs TEXT clipboard only - its authority must not extend
@@ -13,6 +14,10 @@ export function removeTrustedClipboardTextWebContentsId(webContentsId: number): 
   additionalTrustedClipboardTextWebContentsIds.delete(webContentsId)
 }
 
-export function isTrustedClipboardTextSatellite(sender: WebContents): boolean {
-  return additionalTrustedClipboardTextWebContentsIds.has(sender.id)
+// Why here (not clipboard-ipc-handlers.ts): that file sits at its max-lines cap.
+/** Text-only clipboard senders: the exact dashboard popout and satellite editor windows. */
+export function isClipboardTextOnlyRenderer(sender: WebContents): boolean {
+  return (
+    isDashboardPopoutRenderer(sender) || additionalTrustedClipboardTextWebContentsIds.has(sender.id)
+  )
 }

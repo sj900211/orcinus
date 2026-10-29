@@ -3,9 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('electron', async () =>
   (await import('./createMainWindow-test-harness')).electronModuleMock()
 )
-vi.mock('@electron-toolkit/utils', async () =>
-  (await import('./createMainWindow-test-harness')).electronToolkitUtilsMock()
-)
 vi.mock('./macos-tahoe-release', async () =>
   (await import('./createMainWindow-test-harness')).macosTahoeReleaseMock()
 )
@@ -39,10 +36,10 @@ import {
 } from '../../shared/browser-client-host-id-argument'
 import { resetExpectedTeardownStateForTest } from '../crash-reporting/expected-teardown-state'
 import {
+  appMock,
   attachGuestPoliciesMock,
   attachRouteGuestMock,
   browserWindowMock,
-  isMock,
   macosTahoeMock,
   openExternalMock,
   powerMonitorOnMock,
@@ -207,7 +204,7 @@ describe('createMainWindow', () => {
     )
 
     try {
-      isMock.dev = true
+      appMock.isPackaged = false
       vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
       loadMainWindow(win, undefined, { search: 'orca-worktree=wt-1' })
       expect(browserWindowInstance.loadURL).toHaveBeenCalledWith(
@@ -215,7 +212,7 @@ describe('createMainWindow', () => {
       )
     } finally {
       vi.unstubAllEnvs()
-      isMock.dev = false
+      appMock.isPackaged = true
     }
   })
 

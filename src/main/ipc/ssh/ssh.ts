@@ -37,6 +37,7 @@ import { createSshConnectionCallbacks } from './ssh-connection-state-callbacks'
 import { resetSshCredentialDeclinesForTests } from '../../ssh/ssh-credential-decline'
 import { resetSshUserDisconnectsForTests } from '../../ssh/ssh-user-disconnect'
 import { registerSshConnectionHandlers } from './ssh-connection-handlers'
+import { registerPlainSshTerminalHandlers } from './plain-ssh-terminal-handlers'
 import {
   registerPowerMonitorReconnect,
   unregisterPowerMonitorReconnect
@@ -58,6 +59,7 @@ import { registerSshShutdownAuxiliaryDrain, resetSshShutdownDrain } from './ssh-
 import { registerSshTargetCrudHandlers } from './ssh-target-crud-handlers'
 import { targetLifecycleInFlight } from './ssh-target-lifecycle-queue'
 import { disposeOrcadManagedTunnels } from '../../managed-server/lifecycle/orcad-managed-tunnel'
+import { retainUnretainedOrcadMigrationSources } from '../../ssh/orcad-migration-source-retention'
 import { reconcileManagedOrcadSshTargets } from '../../ssh/orcad-retained-source'
 import { installOrcadMigrationScrollbackRetention } from '../../ssh/orcad-migration-scrollback-retention-wiring'
 import { getAppEnvironment } from '../../../shared/app-environment'
@@ -108,6 +110,7 @@ export function registerSshHandlers(
   setSshTargetRegistryStore(new SshConnectionStore(store))
   setPersistedStore(store)
   reconcileManagedOrcadSshTargets(getAppEnvironment().getPath('userData'), store)
+  void retainUnretainedOrcadMigrationSources(getAppEnvironment().getPath('userData'), store)
   installOrcadMigrationScrollbackRetention(getAppEnvironment().getPath('userData'), store)
   installManagedOrcadStartStatus()
 
@@ -176,6 +179,7 @@ export function registerSshHandlers(
   registerSshTargetCrudHandlers()
   registerSshConnectionHandlers()
   registerSshPortForwardHandlers()
+  registerPlainSshTerminalHandlers()
   // COMPAT(legacy-relay-bridge): terminals an older Orca's relay still runs.
   registerLegacyRelayBridgeIpc({
     store,

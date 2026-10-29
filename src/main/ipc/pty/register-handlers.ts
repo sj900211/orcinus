@@ -31,7 +31,6 @@ import { installPtyRuntimeController } from './runtime/controller'
 import { installPtySnapshotIpcHandlers } from './ipc/snapshot'
 import {
   assertWorkspaceAcceptsNewPty as assertWorkspaceAcceptsNewPtyImpl,
-  localStartupCwdDirectoryExists,
   resolvePtySpawnStartupCwd as resolvePtySpawnStartupCwdImpl
 } from './host-env/spawn-cwd'
 import {
@@ -138,6 +137,7 @@ export function registerPtyHandlers(
   ipcMain.removeHandler('pty:spawn')
   ipcMain.removeHandler('pty:moveLeafToNewTab')
   ipcMain.removeHandler('pty:kill')
+  ipcMain.removeHandler('pty:killFenced')
   ipcMain.removeHandler('pty:listSessions')
   ipcMain.removeHandler('pty:hasPty')
   ipcMain.removeHandler('pty:hasChildProcesses')
@@ -244,7 +244,10 @@ export function registerPtyHandlers(
   ): ReturnType<typeof prepareCodexResumeHome> =>
     prepareCodexResumeHome(options?.prepareCodexSessionResume, args)
   const adoptStablePaneBound = (args: Parameters<typeof adoptStablePane>[2]) =>
-    adoptStablePane(runtime, store, args)
+    adoptStablePane(runtime, store, {
+      ...args,
+      onAdopted: (result) => session.sendPtySpawnedToRenderer(result.id)
+    })
 
   // Why: route through getProviderForPty() so CLI commands work for remote PTYs too; localProvider would silently fail for them.
   installPtyRuntimeController({
@@ -300,7 +303,6 @@ export function registerPtyHandlers(
     adoptStablePane: adoptStablePaneBound,
     assertWorkspaceAcceptsNewPty,
     resolvePtySpawnStartupCwd,
-    localStartupCwdDirectoryExists,
     prepareCodexResumeHome: prepareCodexResumeHomeBound,
     noCodexResumeLaunch,
     resolveCodexResumeLaunch,

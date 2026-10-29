@@ -3,6 +3,7 @@ import { useAppStore } from '@/store'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { pickSpaceWindowState, spaceWindowStateChanged } from './space-window-state'
 import { getWindowBootContext } from '../../startup/window-boot-context'
+import { revealWorkspaceSpaceChange } from '../status-bar/workspace-space-open-change'
 
 export function SpaceWindowStatePublisher(): null {
   useEffect(() => {
@@ -46,7 +47,11 @@ export function SpaceWindowStatePublisher(): null {
         timer = null
       }
     })
-    const offReveal = api.onRevealWorktree?.((worktreeId, executionHostId) => {
+    const offReveal = api.onRevealWorktree?.((worktreeId, executionHostId, change) => {
+      if (change) {
+        void revealWorkspaceSpaceChange(worktreeId, executionHostId, change)
+        return
+      }
       activateAndRevealWorktree(worktreeId, { navigationIntent: 'user-open', executionHostId })
     })
     const offRefresh = api.onWorktreeRefreshRequested?.(() => {

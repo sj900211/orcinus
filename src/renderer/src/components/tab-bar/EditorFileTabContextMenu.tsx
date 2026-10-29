@@ -5,8 +5,6 @@ import {
   ExternalLink,
   Eye,
   ListX,
-  PanelLeftClose,
-  PanelRightClose,
   Pencil,
   Pin,
   PinOff,
@@ -91,8 +89,6 @@ export function EditorFileTabContextMenu({
   groupId,
   isPinned,
   isRenaming,
-  hasTabsToRight,
-  hasTabsToLeft,
   tabCount,
   canRename,
   canShowMarkdownPreview,
@@ -105,8 +101,6 @@ export function EditorFileTabContextMenu({
   onClose,
   onCloseOthers,
   onCloseAll,
-  onCloseToRight,
-  onCloseToLeft,
   onCloseSplitPane,
   onOpenMarkdownPreview
 }: EditorFileTabContextMenuProps): React.JSX.Element {
@@ -201,20 +195,6 @@ export function EditorFileTabContextMenu({
           {closeAllShortcut ? (
             <DropdownMenuShortcut>{closeAllShortcut}</DropdownMenuShortcut>
           ) : null}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onCloseToRight} disabled={!hasTabsToRight}>
-          <PanelRightClose className="size-3.5" />
-          {translate(
-            'auto.components.tab.bar.EditorFileTabContextMenu.e5ff31ccaf',
-            'Close All Tabs To The Right'
-          )}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onCloseToLeft} disabled={!hasTabsToLeft}>
-          <PanelLeftClose className="size-3.5" />
-          {translate(
-            'components.tab.bar.EditorFileTabContextMenu.closeTabsToLeft',
-            'Close All Tabs To The Left'
-          )}
         </DropdownMenuItem>
         <CloseSplitPaneMenuItem onCloseSplitPane={onCloseSplitPane} />
         {isVirtualEditorFile(file) ? null : <DropdownMenuSeparator />}

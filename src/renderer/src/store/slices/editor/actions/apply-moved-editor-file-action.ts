@@ -5,6 +5,8 @@ import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
 import type { MarkdownViewMode } from '../types/open-file'
 import { editorSelectionCache, scrollTopCache, setWithLRU } from '@/lib/scroll-cache'
+import { writeEditorBuffer } from '../buffers/editor-buffer-record'
+import { editorBufferSiblingViewIds } from '../buffers/editor-buffer-views'
 
 const MOVED_MARKDOWN_VIEW_MODES: readonly string[] = [
   'source',
@@ -14,9 +16,8 @@ const MOVED_MARKDOWN_VIEW_MODES: readonly string[] = [
 
 // TRUE-move restore (dungeon 5, decision D7): a satellite receives a moved
 // file with the state the parent's closeFile destroyed. Template =
-// hydrate-editor-session's dirty restore — the draft, dirty flag, disk
-// signature and the pendingDiskBaselineVerification gate land in ONE set()
-// so no frame ever shows the tab dirty without autosave suspended.
+// hydrate-editor-session's dirty restore — the draft, dirty flag and disk
+// signature land in ONE set(), written through the file's buffer record.
 export function createApplyMovedEditorFileAction(
   set: EditorSet,
   get: EditorGet
@@ -67,10 +68,6 @@ export function createApplyMovedEditorFileAction(
         return fileId
       }
       const hasDraft = file.dirtyDraftContent !== undefined
-      // Why together-or-not-at-all: arming the verification gate without a
-      // signature permanently kills autosave (the conflict scan's queue gate
-      // never picks the file up, so nothing ever clears the suspension).
-      const armVerification = hasDraft && file.lastKnownDiskSignature !== undefined
       const markdownViewMode =
         file.markdownViewMode !== undefined &&
         MOVED_MARKDOWN_VIEW_MODES.includes(file.markdownViewMode)
@@ -78,20 +75,24 @@ export function createApplyMovedEditorFileAction(
           : undefined
       set((s) => ({
         ...(hasDraft
-          ? { editorDrafts: { ...s.editorDrafts, [fileId]: file.dirtyDraftContent as string } }
+          ? {
+              // Why: views only mirror the record, and a mirror-only write fails its invariant.
+              ...writeEditorBuffer(s, fileId, {
+                isDirty: true,
+                lastKnownDiskSignature: file.lastKnownDiskSignature
+              }),
+              // Why every view: views of one record share one draft.
+              editorDrafts: {
+                ...s.editorDrafts,
+                ...Object.fromEntries(
+                  [fileId, ...editorBufferSiblingViewIds(s, fileId)].map((id) => [
+                    id,
+                    file.dirtyDraftContent as string
+                  ])
+                )
+              }
+            }
           : {}),
-        openFiles: hasDraft
-          ? s.openFiles.map((candidate) =>
-              candidate.id === fileId
-                ? {
-                    ...candidate,
-                    isDirty: true,
-                    lastKnownDiskSignature: file.lastKnownDiskSignature,
-                    pendingDiskBaselineVerification: armVerification ? true : undefined
-                  }
-                : candidate
-            )
-          : s.openFiles,
         ...(file.cursorLine !== undefined
           ? { editorCursorLine: { ...s.editorCursorLine, [fileId]: file.cursorLine } }
           : {}),

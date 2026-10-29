@@ -1,3 +1,5 @@
+import { ptyIncarnationById } from '../provider/ownership-state'
+import { resolvePtyExecutionHost } from '../provider/registry'
 import {
   interactiveOutputCharsByPty,
   lastInputAtByPty,
@@ -156,6 +158,7 @@ function finalizePtyExitForRenderer(
     session.runtime?.intentionalPtyStops?.claimExit(payload.id, payload.incarnationId) ?? []
   sendToPtyOwner(payload.id, 'pty:exit', {
     ...payload,
+    hostId: resolvePtyExecutionHost(payload.id),
     ...(intentionalStops.includes('reversible') ? { preserveRendererBinding: true } : {}),
     ...(intentionalStops.includes('replaced') ? { replacedByRestart: true } : {})
   })
@@ -185,5 +188,9 @@ export function sendPtyExitToRenderer(
 }
 
 export function sendPtySpawnedToRenderer(_session: PtyIpcSession, id: string): void {
-  sendToPtyOwner(id, 'pty:spawned', { id })
+  sendToPtyOwner(id, 'pty:spawned', {
+    id,
+    incarnationId: ptyIncarnationById.get(id),
+    hostId: resolvePtyExecutionHost(id)
+  })
 }
