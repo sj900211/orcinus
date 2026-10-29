@@ -7,6 +7,5 @@ lookup:src/main/persistence/loading-store/terminal-binding-recovery.ts#getConnec
 lookup:src/main/persistence/scheduling-automations/automation-definition-operations.ts#createAutomation
 lookup:src/main/persistence/scheduling-automations/automation-definition-operations.ts#updateAutomation
 lookup:src/main/persistence/tracking-repos/project-host-operations.ts#getRepo
-# Fork satellite editor window session persistence: keyed by satellite/worktree id, predates this upstream ratchet (stage-13 sync).
 SatelliteWindowSessionPersistence.removeSatelliteWindowSession
 SatelliteWindowSessionPersistence.removeSatelliteWindowSessionsForWorktree

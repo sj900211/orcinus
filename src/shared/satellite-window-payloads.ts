@@ -43,8 +43,8 @@ export type SatelliteEditorSelection = {
  *  state closeFile destroys in the parent. All extras optional — a clean move
  *  carries none, and the satellite treats unknown view-mode strings as absent.
  *  dirtyDraftContent + lastKnownDiskSignature travel TOGETHER or not at all:
- *  the satellite only arms its disk-baseline verification gate when both exist
- *  (hydrate-editor-session contract — flag without signature kills autosave). */
+ *  the destination seeds the record with both, so the first guarded save
+ *  compares against the carried baseline. */
 export type SatelliteMovedFile = SatelliteBootFile & {
   dirtyDraftContent?: string
   lastKnownDiskSignature?: string

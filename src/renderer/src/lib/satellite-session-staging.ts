@@ -30,8 +30,8 @@ export function buildSatelliteSessionFiles(): SatelliteMovedFile[] {
       filePath: file.filePath,
       relativePath: file.relativePath,
       language: file.language,
-      // Why together-or-not-at-all: restore arms the disk-baseline
-      // verification gate only when both exist (hydrate-session contract).
+      // Why together-or-not-at-all: the destination seeds the record with both, so the
+      // first guarded save compares against the carried baseline.
       ...(file.isDirty && state.editorDrafts[file.id] !== undefined
         ? {
             dirtyDraftContent: state.editorDrafts[file.id],
