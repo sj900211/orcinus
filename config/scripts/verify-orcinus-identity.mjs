@@ -5,8 +5,9 @@
 // orcinus-ci AND the upstream auto-sync gate so a merge that reintroduces upstream
 // identity is caught before it can ship.
 //
-// Scope of the negative scan is deliberately narrow: only the literal upstream
-// release-feed URL, and only in src/main + src/shared production code. A blanket
+// Scope of the negative scan is deliberately narrow: only the upstream release-feed
+// URL (literal, or regex-escaped as in TAG_HREF_RE and the asset-download matcher),
+// and only in src/main + src/shared production code. A blanket
 // ban on "orca"/"stablyai" would be wrong — the Linux .deb name (orca-ide) and the
 // WM_CLASS (orca) are contractually legitimate, and tests legitimately reference
 // the upstream URL as fixtures.
@@ -46,7 +47,8 @@ expect(
 
 // 3. updater feed-URL scan over src/main + src/shared production code
 const POSITIVE = 'github.com/sj900211/orcinus/releases'
-const NEGATIVE = 'github.com/stablyai/orca/releases'
+// The escaped form also covers `github\.com\/stablyai\/orca\/releases` inside a regex literal.
+const NEGATIVES = ['github.com/stablyai/orca/releases', 'stablyai\\/orca\\/releases']
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.mts', '.cts', '.mjs', '.cjs', '.js'])
 const isTestFile = (name) =>
   /\.(test|spec)\.[cm]?[jt]sx?$/.test(name) ||
@@ -74,7 +76,7 @@ for (const scope of ['main', 'shared']) {
   for (const file of walk(join(ROOT, 'src', scope))) {
     const text = readFileSync(file, 'utf8')
     positiveHits += (text.match(positiveRe) || []).length
-    if (text.includes(NEGATIVE)) {
+    if (NEGATIVES.some((negative) => text.includes(negative))) {
       negativeHits.push(file.slice(ROOT.length + 1).replaceAll('\\', '/'))
     }
   }
