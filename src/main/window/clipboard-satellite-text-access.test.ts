@@ -57,6 +57,7 @@ describe('satellite editor clipboard access', () => {
     clipboardReadText.mockReturnValue('satellite clipboard text')
     removeTrustedClipboardTextWebContentsId(42)
     setTrustedClipboardRendererWebContentsId(17)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: registration only stores the window for image/file handlers; these text cases never read it.
     registerClipboardHandlers({} as never)
   })
 
