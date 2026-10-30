@@ -94,7 +94,6 @@ describe('daemon-host profile isolation under a shared LOCALAPPDATA', () => {
     expect(dirname(rootA)).toBe(join(localAppData, 'Orcinus', 'daemon-host-profiles'))
     expect(dirname(dirname(buildA))).toBe(rootA)
     expect(dirname(dirname(buildB))).toBe(rootB)
-    // The same profile spelled differently must not fork a second mirror.
     useProfile(`${join(tempDir, 'PROFILE-A')}\\`)
     expect(getDaemonHostRootDir()).toBe(rootA)
   })

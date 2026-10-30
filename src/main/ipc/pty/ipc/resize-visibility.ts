@@ -27,14 +27,14 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
   const ipcMain = getPtyIpc()
   const { runtime, mainWindow } = session
 
-  // Why: resize is fire-and-forget — ipcMain.on (not .handle) halves IPC traffic by skipping the empty acknowledgement reply.
+  // Fire-and-forget resize avoids an empty acknowledgement round trip.
   ipcMain.removeAllListeners('pty:resize')
   ipcMain.on('pty:resize', (_event, args: { id: string; cols: number; rows: number }) => {
-    // Why: after a desktop-fit override change the renderer's safeFit cascade re-measures ALL panes (background ones at full width), so suppress every pty:resize in this window to avoid corrupting PTY dimensions.
+    // Fit overrides remeasure all panes; suppress the cascade so background full-width measurements cannot resize PTYs.
     if (runtime?.isResizeSuppressed()) {
       return
     }
-    // Why: presence-lock defense-in-depth — while a phone or remote-desktop viewer drives the width, host-side resizes must not reach the PTY or its alt-screen grid garbles; load-bearing because the renderer mirror lags one IPC hop. See docs/mobile-presence-lock.md.
+    // Enforce viewer-owned geometry in main too; renderer presence state lags by one IPC hop (docs/mobile-presence-lock.md).
     const mobileOwnsResize = runtime?.getDriver(args.id).kind === 'mobile'
     const remoteDesktopOwnsResize = runtime?.isRemoteDesktopResizeDriven?.(args.id) === true
     if (mobileOwnsResize || remoteDesktopOwnsResize) {
@@ -56,13 +56,13 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     runtime?.onExternalPtyResize(args.id, args.cols, args.rows)
   })
 
-  // Why: pty:reportGeometry is a measurement-only sibling of pty:resize — it refreshes the restore-target cache (never resizes) so mobile-fit hold learns real desktop dims even while resize is blocked. See docs/mobile-fit-hold.md.
+  // Measurement-only reports update desktop restore geometry while viewer-owned resizing is blocked (docs/mobile-fit-hold.md).
   ipcMain.removeAllListeners('pty:reportGeometry')
   ipcMain.on('pty:reportGeometry', (_event, args: { id: string; cols: number; rows: number }) => {
     runtime?.recordRendererGeometry(args.id, args.cols, args.rows)
   })
 
-  // Why: fire-and-forget — clears the DaemonPtyAdapter's sticky cold-restore cache after the renderer consumed it; no-op for non-daemon providers.
+  // Painted-restore acknowledgement clears daemon cold-restore cache without a response.
   ipcMain.removeAllListeners('pty:ackColdRestore')
   ipcMain.on('pty:ackColdRestore', (_event, args: Partial<PaintedRestoreAck> | undefined) => {
     acknowledgePaintedColdRestore(args, (pane, ptyId) =>
@@ -70,8 +70,7 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     )
   })
 
-  // Why the ack and not the serve: the pane can dispose across the serialize + IPC round trip,
-  // so the drop latch stays armed until the restored bytes are actually painted (#15504).
+  // Snapshot requests may outlive their pane; retire drop memory only after painted restore (#15504).
   ipcMain.removeAllListeners('pty:hiddenOutputRestoreApplied')
   ipcMain.on(
     'pty:hiddenOutputRestoreApplied',
@@ -94,7 +93,7 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     if (typeof args.id !== 'string' || !args.id) {
       return
     }
-    // Why: renderer scheduling hint only — active panes just get first chance at the bounded output reserve; reads/state/notifications continue for inactive terminals.
+    // Active panes get scheduling priority; inactive ingestion, state and notifications continue.
     if (args.active) {
       if (activeRendererPtys.has(args.id)) {
         return
@@ -111,7 +110,7 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     if (typeof args.id !== 'string' || !args.id) {
       return
     }
-    // Why: data produced while no renderer can see this PTY must keep that origin through batching, even if the user switches back before the flush lands.
+    // Preserve hidden-at-production origin through batching even if visibility changes before flush.
     rendererVisibilityKnownPtys.add(args.id)
     if (args.visible) {
       visibleRendererPtys.add(args.id)
@@ -144,7 +143,7 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     )
     if (args.hidden === true) {
       closeStartupQueryAuthorityForPty(args.id)
-      // Why: drop bytes queued for a newly hidden PTY instead of holding them under ACK starvation; reveal restores from the snapshot.
+      // Newly hidden queued bytes can drop despite ACK starvation; reveal restores their model snapshot.
       const pending = session.pendingData.get(args.id)
       if (pending && transition.droppable) {
         session.pendingData.delete(args.id)
@@ -170,7 +169,7 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
       invalidatePendingPtyDrainPolicy(args.id)
     }
     session.syncPtyBackgroundedDelivery(args.id, 'gate-unmark')
-    // Why: a reload/remount may have replaced the view that latched restore-needed, so re-emit on unhide; a redundant replay is cheap/idempotent, a missed restore corrupts the pane.
+    // Reload/remount can replace the marker consumer; repeat on reveal rather than lose recovery.
     if (transition.droppedWhileHidden) {
       sendModelRestoreNeededMarker(
         args.id,
@@ -195,7 +194,7 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     }
     // Why fall back to main: senderless events (tests, legacy relays) attribute to the main window.
     const reportingWebContentsId = event?.sender?.id ?? session.mainFlowState.webContentsId
-    // Why: any delivery interest suppresses the hidden-delivery gate (raw-byte consumers keep receiving while hidden); not synced to the daemon pacer so interest churn can't un-pace a flood.
+    // Raw-byte interests bypass hidden gating without changing daemon pacing during interest churn.
     const settings = session.getSettings?.()
     const wasDroppable = shouldDropHiddenRendererPtyDataForOwner(args.id, settings)
     setRendererPtyDeliveryInterest(reportingWebContentsId, args.id, args.interested === true)
@@ -213,7 +212,7 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
 
   ipcMain.removeAllListeners('pty:clearBuffer')
   ipcMain.on('pty:clearBuffer', (_event, args: { id: string }) => {
-    // Why: clear PTY-side state (ConPTY/daemon/SSH buffer) so the next prompt repaint doesn't land at a stale cursor row.
+    // Clear provider-side state so prompt repaint cannot reuse a stale cursor row.
     tryGetProviderForPty(args.id)
       ?.clearBuffer(args.id)
       .catch(() => {})
@@ -222,7 +221,7 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
 
   ipcMain.removeAllListeners('pty:resetInputModes')
   ipcMain.on('pty:resetInputModes', (_event, args: { id: string }) => {
-    // Why: an older daemon or relay rejects the request; its model keeps the modes until reattach.
+    // Older daemon/relay rejection leaves its model modes until reattach.
     tryGetProviderForPty(args.id)
       ?.resetInputModes(args.id)
       .catch(() => {})

@@ -114,7 +114,7 @@ export function sendPtyDataToRenderer(
     return false
   }
   if (session.rendererDeliveryRestoreNeededPtys.has(id)) {
-    // Why keep the latch on failure: the marker must eventually reach the owner or the pane repaints from a gapped stream.
+    // Failed sends must leave restore pending until the marker reaches the owner window.
     if (
       sendModelRestoreNeededMarker(id, 'delivery-heal', session.runtime?.getPtyOutputSequence(id))
     ) {

@@ -21,7 +21,7 @@ export function settleSerializeRequest(
 
 export function installPtySerializeBufferIpc(session: PtyIpcSession): void {
   const ipcMain = getPtyIpc()
-  // Why: one persistent listener with a request-ID dispatch table instead of one per call, so concurrent serialize requests don't trip Node's MaxListeners=10 warning.
+  // One persistent listener dispatches by request ID so concurrent serialization cannot exceed listener limits.
   ipcMain.on(
     'pty:serializeBuffer:response',
     (
@@ -38,7 +38,7 @@ export function installPtySerializeBufferIpc(session: PtyIpcSession): void {
         } | null
       }
     ) => {
-      // Why: the snapshot seeds terminal restore state, so only trusted app windows (main or a workspace window that streams the pane) may settle it.
+      // Only trusted app windows (main or a workspace window streaming the pane) may seed terminal restore state.
       if (
         !isPtyEventFromTrustedAppWindow(event, session.mainWindow) ||
         typeof args?.requestId !== 'string'
@@ -70,8 +70,7 @@ export function installPtySerializeBufferIpc(session: PtyIpcSession): void {
         if (typeof snapshot.lastTitle === 'string' && snapshot.lastTitle.length > 0) {
           result.lastTitle = snapshot.lastTitle
         }
-        // Why gated on seq: without a boundary the flags cannot be reconciled
-        // against live bytes, so they prove nothing.
+        // Kitty flags require their sequence boundary to reconcile against live bytes.
         const kittyKeyboardFlags = parseTerminalKittyKeyboardFlags(snapshot.kittyKeyboardFlags)
         if (result.seq !== undefined && kittyKeyboardFlags !== undefined) {
           result.kittyKeyboardFlags = kittyKeyboardFlags

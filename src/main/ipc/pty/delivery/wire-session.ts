@@ -115,7 +115,7 @@ export function wirePtyIpcSession(session: PtyIpcSession): void {
     // Why main-scoped: a main-window reload resets only main-owned delivery; workspace windows carry their own lifecycle listeners.
     resetWindowScopedDeliveryStateForLifecycle(session, session.mainFlowState.webContentsId)
   })
-  // Why the bridge: let a later re-registration cancel this closure's timers before wiring its own.
+  // Re-registration must be able to cancel this closure's readiness watchdogs and resync probes.
   setClearRendererDispatcherReadyWatchdog(() => {
     for (const state of session.windowFlowStates.values()) {
       clearDispatcherReadyWatchdog(state)
