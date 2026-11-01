@@ -1,6 +1,6 @@
-import { recordHiddenRendererPtyDataDrop } from '../../pty-hidden-delivery-gate'
+import { recordHiddenRendererPtyDataDrop } from './pty-hidden-delivery-gate'
 import { shouldDropHiddenRendererPtyDataForOwner } from '../pty-owner-gate'
-import type { PendingPtyData } from '../../pty-pending-data-drain-contract'
+import type { PendingPtyData } from './pty-pending-data-drain-contract'
 import { activeRendererPtys } from './visibility-state'
 import { listAppWindows } from '../../../window/window-affinity-router'
 import {

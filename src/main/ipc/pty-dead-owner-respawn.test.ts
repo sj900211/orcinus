@@ -7,7 +7,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { setLocalPtyProvider } from './pty/provider/registry'
 // Why any-window (fork): hidden marks are keyed per window, so a bare pty id needs the any-window query.
-import { isHiddenRendererPtyInAnyWindow } from './pty-hidden-delivery-gate'
+import { isHiddenRendererPtyInAnyWindow } from './pty/delivery/pty-hidden-delivery-gate'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))

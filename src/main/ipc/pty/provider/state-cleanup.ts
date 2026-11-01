@@ -6,7 +6,7 @@ import { piTitlebarExtensionService } from '../../../pi/titlebar-extension-servi
 import { agentHookServer } from '../../../agent-hooks/server'
 import { clearMigrationUnsupportedPty } from '../../../agent-hooks/migration-unsupported-pty-state'
 import { clearNativeWindowsConptyPty } from '../../../runtime/terminal-model-query-authority'
-import { clearHiddenRendererPtyDeliveryState } from '../../pty-hidden-delivery-gate'
+import { clearHiddenRendererPtyDeliveryState } from '../delivery/pty-hidden-delivery-gate'
 import { isHiddenRendererPtyForOwner } from '../pty-owner-gate'
 import { agentSessionOwners } from '../pane/agent-session-owners'
 import { paneKeyPtyId, paneKeyTeardownListeners, ptyPaneKey } from '../pane/key-state'

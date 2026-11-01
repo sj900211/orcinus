@@ -11,7 +11,7 @@ import {
 import {
   _resetHiddenRendererPtyDeliveryGateForTest,
   markHiddenRendererPty
-} from '../ipc/pty-hidden-delivery-gate'
+} from '../ipc/pty/delivery/pty-hidden-delivery-gate'
 
 // Why: no router main window is registered here, so owner resolution falls back to the any-window union.
 const WINDOW = 7

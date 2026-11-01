@@ -1,4 +1,4 @@
-import { recordHiddenRendererPtyDataDrop } from '../../pty-hidden-delivery-gate'
+import { recordHiddenRendererPtyDataDrop } from './pty-hidden-delivery-gate'
 import { shouldDropHiddenRendererPtyDataForOwner } from '../pty-owner-gate'
 import {
   rendererVisibilityKnownPtys,

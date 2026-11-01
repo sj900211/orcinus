@@ -4,7 +4,7 @@ import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 // Fork note (Orcinus): the window-scoped isHiddenRendererPty needs a webContentsId;
 // these cases spawn pane-less background PTYs that belong to no window, so the
 // union-across-windows query is the right one here.
-import { isHiddenRendererPtyInAnyWindow } from './pty-hidden-delivery-gate'
+import { isHiddenRendererPtyInAnyWindow } from './pty/delivery/pty-hidden-delivery-gate'
 import { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { attachViewAfterHiddenStart } from './pty/pane/attach-only-view'

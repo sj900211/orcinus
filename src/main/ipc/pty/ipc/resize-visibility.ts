@@ -5,7 +5,7 @@ import {
   consumeHiddenRendererPtyDropMemory,
   recordHiddenRendererPtyDataDrop,
   setRendererPtyDeliveryInterest
-} from '../../pty-hidden-delivery-gate'
+} from '../delivery/pty-hidden-delivery-gate'
 import { shouldDropHiddenRendererPtyDataForOwner } from '../pty-owner-gate'
 import { tryGetProviderForPty, closeStartupQueryAuthorityForPty } from '../provider/registry'
 import {

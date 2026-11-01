@@ -1,4 +1,4 @@
-import { markHiddenRendererPty, unmarkHiddenRendererPty } from '../../pty-hidden-delivery-gate'
+import { markHiddenRendererPty, unmarkHiddenRendererPty } from './pty-hidden-delivery-gate'
 import { shouldDropHiddenRendererPtyDataForOwner } from '../pty-owner-gate'
 import {
   resolvePtyOwnerWindow,

@@ -1,6 +1,6 @@
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
 import { resolvePtyOwnerWindow } from '../../../window/window-affinity-router'
-import { resetRendererScopedHiddenPtyDeliveryState } from '../../pty-hidden-delivery-gate'
+import { resetRendererScopedHiddenPtyDeliveryState } from './pty-hidden-delivery-gate'
 import { PTY_DISPATCHER_READY_WATCHDOG_MS } from './constants'
 import type { PtyIpcSession, RendererPtyDeliveryAccounting } from '../session'
 

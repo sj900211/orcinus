@@ -14,7 +14,7 @@ import {
   isHiddenPtyDeliveryGateEnabled,
   shouldDropHiddenRendererPtyData,
   shouldDropHiddenRendererPtyDataInAnyWindow
-} from '../ipc/pty-hidden-delivery-gate'
+} from '../ipc/pty/delivery/pty-hidden-delivery-gate'
 import { resolvePtyOwnerWindow } from '../window/window-affinity-router'
 
 export type TerminalModelQueryAuthoritySettings = Pick<

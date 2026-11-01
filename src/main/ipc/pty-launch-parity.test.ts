@@ -42,7 +42,7 @@ import {
   type HostLaunchCase
 } from './pty-launch-parity-host.test-cases'
 // Why: the fork keys hidden marks per window, so the parity check asks whether any window marked it.
-import { isHiddenRendererPtyInAnyWindow } from './pty-hidden-delivery-gate'
+import { isHiddenRendererPtyInAnyWindow } from './pty/delivery/pty-hidden-delivery-gate'
 import { ptySizes } from './pty/delivery/visibility-state'
 import { agentSessionOwners } from './pty/pane/agent-session-owners'
 import {

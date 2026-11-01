@@ -11,7 +11,7 @@ import {
   setRendererPtyDeliveryInterest,
   shouldDropHiddenRendererPtyData,
   unmarkHiddenRendererPty
-} from '../pty-hidden-delivery-gate'
+} from './delivery/pty-hidden-delivery-gate'
 
 function ownerWebContentsId(ptyId: string): number | null {
   const window = resolvePtyOwnerWindow(ptyId)

@@ -6,7 +6,7 @@ import { deletePtyOwnership } from './pty/provider/ownership-state'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { registerProjectWindow, unregisterProjectWindow } from '../window/project-window-registry'
 import { addTrustedUIRendererWebContentsId, removeTrustedUIRendererWebContentsId } from './ui'
-import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
+import { isHiddenRendererPty } from './pty/delivery/pty-hidden-delivery-gate'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))
